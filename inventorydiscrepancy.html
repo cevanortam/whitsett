@@ -1,0 +1,1455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inventory Discrepancy Report — Whitsett, NC</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&family=Barlow+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --navy: #00204E;
+    --navy-mid: #003057;
+    --navy-light: #004080;
+    --red: #C8102E;
+    --red-hover: #a50d25;
+    --white: #FFFFFF;
+    --off-white: #F4F6F9;
+    --gray-100: #EEF1F5;
+    --gray-200: #DDE2EA;
+    --gray-400: #9AA5B4;
+    --gray-600: #5A6472;
+    --gray-800: #2D3748;
+    --text: #1A2332;
+    --overage: #0070C0;
+    --overage-bg: #EBF4FF;
+    --shortage: #C8102E;
+    --shortage-bg: #FEF0F2;
+    --damaged: #D97706;
+    --damaged-bg: #FFFBEB;
+    --packaging: #7C3AED;
+    --packaging-bg: #F5F3FF;
+    --seal: #065F46;
+    --seal-bg: #ECFDF5;
+    --shadow-sm: 0 1px 3px rgba(0,0,20,0.08), 0 1px 2px rgba(0,0,20,0.04);
+    --shadow-md: 0 4px 12px rgba(0,0,20,0.10), 0 2px 4px rgba(0,0,20,0.06);
+    --shadow-lg: 0 12px 32px rgba(0,0,20,0.14);
+    --radius: 6px;
+    --radius-lg: 10px;
+    --transition: 0.18s ease;
+  }
+
+  html, body {
+    font-family: 'Barlow', sans-serif;
+    background: var(--off-white);
+    color: var(--text);
+    min-height: 100vh;
+    font-size: 14px;
+  }
+
+  /* ── HEADER ── */
+  .site-header {
+    background: var(--navy);
+    padding: 0 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 60px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+  }
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .header-logo {
+    height: 26px;
+    filter: brightness(0) invert(1);
+    opacity: 0.95;
+  }
+  .header-divider {
+    width: 1px;
+    height: 24px;
+    background: rgba(255,255,255,0.25);
+  }
+  .header-title {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 17px;
+    font-weight: 600;
+    color: #fff;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+  .header-subtitle {
+    font-size: 11px;
+    color: rgba(255,255,255,0.55);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-top: 1px;
+  }
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .btn-new {
+    background: var(--red);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    padding: 8px 18px;
+    font-family: 'Barlow', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    letter-spacing: 0.01em;
+    transition: background var(--transition), box-shadow var(--transition);
+  }
+  .btn-new:hover { background: var(--red-hover); box-shadow: 0 2px 8px rgba(200,16,46,0.35); }
+  .btn-new svg { flex-shrink: 0; }
+
+  /* ── MAIN LAYOUT ── */
+  .main { max-width: 1400px; margin: 0 auto; padding: 24px 28px 48px; }
+
+  /* ── KPI STRIP ── */
+  .kpi-strip {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+  .kpi-card {
+    background: var(--white);
+    border-radius: var(--radius-lg);
+    padding: 16px 18px;
+    box-shadow: var(--shadow-sm);
+    border-top: 3px solid transparent;
+    cursor: pointer;
+    transition: box-shadow var(--transition), transform var(--transition);
+    position: relative;
+    overflow: hidden;
+  }
+  .kpi-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+  .kpi-card.active { box-shadow: var(--shadow-md); }
+  .kpi-card.active::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius-lg);
+    border: 2px solid var(--kpi-color);
+    pointer-events: none;
+  }
+  .kpi-card[data-cat="all"] { --kpi-color: var(--navy); border-top-color: var(--navy); }
+  .kpi-card[data-cat="Inventory Overage"] { --kpi-color: var(--overage); border-top-color: var(--overage); }
+  .kpi-card[data-cat="Inventory Shortage"] { --kpi-color: var(--shortage); border-top-color: var(--shortage); }
+  .kpi-card[data-cat="Damaged Inventory"] { --kpi-color: var(--damaged); border-top-color: var(--damaged); }
+  .kpi-card[data-cat="Improper Packaging"] { --kpi-color: var(--packaging); border-top-color: var(--packaging); }
+
+  .kpi-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--gray-600);
+    margin-bottom: 6px;
+  }
+  .kpi-value {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 36px;
+    font-weight: 700;
+    color: var(--kpi-color);
+    line-height: 1;
+  }
+  .kpi-sub {
+    font-size: 11px;
+    color: var(--gray-400);
+    margin-top: 4px;
+  }
+
+  /* ── CHARTS ROW ── */
+  .charts-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .chart-card {
+    background: var(--white);
+    border-radius: var(--radius-lg);
+    padding: 20px 22px;
+    box-shadow: var(--shadow-sm);
+  }
+  .chart-title {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--gray-600);
+    margin-bottom: 14px;
+  }
+  .bar-chart { display: flex; flex-direction: column; gap: 9px; }
+  .bar-row { display: flex; align-items: center; gap: 10px; }
+  .bar-label { font-size: 12px; color: var(--gray-600); width: 150px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar-track { flex: 1; background: var(--gray-100); border-radius: 3px; height: 22px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 3px; display: flex; align-items: center; padding-left: 8px; transition: width 0.5s cubic-bezier(.4,0,.2,1); min-width: 28px; }
+  .bar-count { font-size: 11px; font-weight: 600; color: #fff; }
+
+  /* Donut chart */
+  .donut-wrap { display: flex; align-items: center; gap: 24px; }
+  .donut-svg { flex-shrink: 0; }
+  .donut-legend { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .legend-name { font-size: 12px; color: var(--gray-600); flex: 1; }
+  .legend-pct { font-size: 12px; font-weight: 600; color: var(--text); }
+
+  /* ── TOOLBAR ── */
+  .toolbar {
+    background: var(--white);
+    border-radius: var(--radius-lg);
+    padding: 14px 18px;
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .search-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 200px;
+  }
+  .search-wrap svg {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--gray-400);
+    pointer-events: none;
+  }
+  .search-input {
+    width: 100%;
+    padding: 8px 12px 8px 34px;
+    border: 1.5px solid var(--gray-200);
+    border-radius: var(--radius);
+    font-family: 'Barlow', sans-serif;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--off-white);
+    transition: border-color var(--transition);
+    outline: none;
+  }
+  .search-input:focus { border-color: var(--navy-light); background: #fff; }
+
+  .filter-select {
+    padding: 8px 12px;
+    border: 1.5px solid var(--gray-200);
+    border-radius: var(--radius);
+    font-family: 'Barlow', sans-serif;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--off-white);
+    cursor: pointer;
+    outline: none;
+    transition: border-color var(--transition);
+  }
+  .filter-select:focus { border-color: var(--navy-light); background: #fff; }
+
+  .record-count {
+    font-size: 12px;
+    color: var(--gray-400);
+    white-space: nowrap;
+    margin-left: auto;
+  }
+  .record-count strong { color: var(--text); }
+
+  /* ── TABLE ── */
+  .table-wrap {
+    background: var(--white);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead { background: var(--navy); position: sticky; top: 0; }
+  thead th {
+    padding: 11px 14px;
+    text-align: left;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(255,255,255,0.75);
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    transition: color var(--transition);
+  }
+  thead th:hover { color: #fff; }
+  thead th .sort-icon { margin-left: 4px; opacity: 0.4; font-size: 9px; }
+  thead th.sorted .sort-icon { opacity: 1; }
+
+  tbody tr {
+    border-bottom: 1px solid var(--gray-100);
+    cursor: pointer;
+    transition: background var(--transition);
+  }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--gray-100); }
+
+  td { padding: 10px 14px; vertical-align: top; }
+  .td-id { font-family: 'Barlow Condensed', sans-serif; font-weight: 600; color: var(--gray-400); font-size: 12px; }
+  .td-reporter { font-weight: 500; }
+  .td-date { white-space: nowrap; color: var(--gray-600); font-size: 12px; }
+  .td-sku { font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 13px; }
+  .td-qty { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+  .td-notes { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gray-600); font-size: 12px; }
+
+  .cat-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    font-family: 'Barlow Condensed', sans-serif;
+    letter-spacing: 0.04em;
+  }
+  .cat-badge.overage { background: var(--overage-bg); color: var(--overage); }
+  .cat-badge.shortage { background: var(--shortage-bg); color: var(--shortage); }
+  .cat-badge.damaged { background: var(--damaged-bg); color: var(--damaged); }
+  .cat-badge.packaging { background: var(--packaging-bg); color: var(--packaging); }
+  .cat-badge.seal { background: var(--seal-bg); color: var(--seal); }
+  .cat-badge.unknown { background: var(--gray-100); color: var(--gray-600); }
+
+  .type-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    font-family: 'Barlow Condensed', sans-serif;
+    letter-spacing: 0.04em;
+  }
+  .type-badge.receiving { background: #EBF4FF; color: #0070C0; }
+  .type-badge.existing { background: #F0FFF4; color: #1B6B3A; }
+  .type-badge.picking { background: #FFF8EB; color: #B45309; }
+  .type-badge.audit { background: #F5F3FF; color: #5B21B6; }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--gray-400);
+  }
+  .empty-state svg { margin-bottom: 12px; }
+  .empty-state p { font-size: 14px; }
+
+  /* ── PAGINATION ── */
+  .pagination {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    padding: 14px 18px;
+    border-top: 1px solid var(--gray-100);
+    background: var(--white);
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  }
+  .page-btn {
+    width: 30px;
+    height: 30px;
+    border: 1.5px solid var(--gray-200);
+    border-radius: var(--radius);
+    background: #fff;
+    font-family: 'Barlow', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition);
+  }
+  .page-btn:hover { border-color: var(--navy); color: var(--navy); }
+  .page-btn.active { background: var(--navy); border-color: var(--navy); color: #fff; }
+  .page-btn:disabled { opacity: 0.35; cursor: default; }
+
+  /* ── MODAL OVERLAY ── */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,20,50,0.55);
+    backdrop-filter: blur(3px);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s ease;
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+
+  .modal {
+    background: var(--white);
+    border-radius: var(--radius-lg);
+    width: 100%;
+    max-width: 680px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: var(--shadow-lg);
+    transform: translateY(12px);
+    transition: transform 0.22s ease;
+  }
+  .modal-overlay.open .modal { transform: translateY(0); }
+
+  .modal-header {
+    background: var(--navy);
+    padding: 18px 24px;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+  .modal-title {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .modal-sub {
+    font-size: 12px;
+    color: rgba(255,255,255,0.55);
+    margin-top: 2px;
+  }
+  .modal-close {
+    background: rgba(255,255,255,0.12);
+    border: none;
+    color: #fff;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background var(--transition);
+  }
+  .modal-close:hover { background: rgba(255,255,255,0.22); }
+
+  .modal-body { padding: 24px; }
+  .modal-body.detail-view { padding: 0; }
+
+  /* Form */
+  .form-section {
+    margin-bottom: 22px;
+  }
+  .form-section-title {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--gray-400);
+    margin-bottom: 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--gray-100);
+  }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .form-grid.full { grid-template-columns: 1fr; }
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  .form-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--gray-600);
+  }
+  .form-label span.required { color: var(--red); }
+  .form-input, .form-select, .form-textarea {
+    padding: 9px 12px;
+    border: 1.5px solid var(--gray-200);
+    border-radius: var(--radius);
+    font-family: 'Barlow', sans-serif;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--off-white);
+    transition: border-color var(--transition), background var(--transition);
+    outline: none;
+    width: 100%;
+  }
+  .form-input:focus, .form-select:focus, .form-textarea:focus {
+    border-color: var(--navy-light);
+    background: #fff;
+  }
+  .form-input.error, .form-select.error { border-color: var(--red); }
+  .form-error { font-size: 11px; color: var(--red); }
+  .form-textarea { resize: vertical; min-height: 80px; }
+  .form-hint { font-size: 11px; color: var(--gray-400); }
+
+  .form-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding-top: 8px;
+    margin-top: 8px;
+    border-top: 1px solid var(--gray-100);
+  }
+  .btn-cancel {
+    padding: 9px 20px;
+    border: 1.5px solid var(--gray-200);
+    border-radius: var(--radius);
+    background: #fff;
+    font-family: 'Barlow', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--gray-600);
+    cursor: pointer;
+    transition: all var(--transition);
+  }
+  .btn-cancel:hover { border-color: var(--gray-400); color: var(--text); }
+  .btn-submit {
+    padding: 9px 24px;
+    border: none;
+    border-radius: var(--radius);
+    background: var(--navy);
+    font-family: 'Barlow', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    cursor: pointer;
+    transition: background var(--transition);
+  }
+  .btn-submit:hover { background: var(--navy-light); }
+  .btn-submit:disabled { opacity: 0.5; cursor: default; }
+
+  /* Detail view */
+  .detail-section {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--gray-100);
+  }
+  .detail-section:last-child { border-bottom: none; }
+  .detail-section-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--gray-400);
+    margin-bottom: 10px;
+  }
+  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .detail-field {}
+  .detail-field-label { font-size: 11px; color: var(--gray-400); margin-bottom: 2px; }
+  .detail-field-value { font-size: 13px; font-weight: 500; color: var(--text); word-break: break-word; }
+  .detail-field-value.empty { color: var(--gray-400); font-style: italic; font-weight: 400; }
+  .detail-notes {
+    background: var(--off-white);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    font-size: 13px;
+    color: var(--text);
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--navy);
+    color: #fff;
+    padding: 12px 20px;
+    border-radius: var(--radius-lg);
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow: var(--shadow-lg);
+    z-index: 2000;
+    transform: translateY(60px);
+    opacity: 0;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.success { background: #065F46; }
+  .toast.error { background: var(--red); }
+
+  @media (max-width: 900px) {
+    .kpi-strip { grid-template-columns: repeat(3, 1fr); }
+    .charts-row { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 600px) {
+    .kpi-strip { grid-template-columns: 1fr 1fr; }
+    .form-grid { grid-template-columns: 1fr; }
+    .detail-grid { grid-template-columns: 1fr; }
+    .main { padding: 16px 14px 40px; }
+  }
+
+  /* Conditional fields */
+  .conditional-group { display: contents; }
+  .field-hidden { display: none; }
+
+  /* Loading spinner */
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* GAS status chip */
+  .sync-status {
+    font-size: 11px;
+    color: rgba(255,255,255,0.5);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .sync-dot { width: 6px; height: 6px; border-radius: 50%; background: #4ADE80; }
+  .sync-dot.syncing { animation: pulse 1s ease-in-out infinite; }
+  .sync-dot.error { background: #FCA5A5; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="site-header">
+  <div class="header-left">
+    <svg class="header-logo" viewBox="0 0 120 30" xmlns="http://www.w3.org/2000/svg" style="height:22px">
+      <text x="0" y="22" font-family="Barlow Condensed,sans-serif" font-size="24" font-weight="700" fill="white">CEVA</text>
+      <text x="62" y="22" font-family="Barlow,sans-serif" font-size="11" font-weight="400" fill="white">LOGISTICS</text>
+    </svg>
+    <div class="header-divider"></div>
+    <div>
+      <div class="header-title">Inventory Discrepancy Report</div>
+      <div class="header-subtitle">Whitsett, NC — Lenovo</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="sync-status" id="syncStatus">
+      <div class="sync-dot" id="syncDot"></div>
+      <span id="syncText">Ready</span>
+    </div>
+    <button class="btn-new" onclick="openNewEntry()">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      New Entry
+    </button>
+  </div>
+</header>
+
+<!-- MAIN -->
+<main class="main">
+
+  <!-- KPI STRIP -->
+  <div class="kpi-strip" id="kpiStrip">
+    <div class="kpi-card active" data-cat="all" onclick="filterByKpi(this)">
+      <div class="kpi-label">Total Reports</div>
+      <div class="kpi-value" id="kpiTotal">—</div>
+      <div class="kpi-sub" id="kpiTotalSub">All categories</div>
+    </div>
+    <div class="kpi-card" data-cat="Inventory Shortage" onclick="filterByKpi(this)">
+      <div class="kpi-label">Shortage</div>
+      <div class="kpi-value" id="kpiShortage">—</div>
+      <div class="kpi-sub">Click to filter</div>
+    </div>
+    <div class="kpi-card" data-cat="Inventory Overage" onclick="filterByKpi(this)">
+      <div class="kpi-label">Overage</div>
+      <div class="kpi-value" id="kpiOverage">—</div>
+      <div class="kpi-sub">Click to filter</div>
+    </div>
+    <div class="kpi-card" data-cat="Improper Packaging" onclick="filterByKpi(this)">
+      <div class="kpi-label">Packaging</div>
+      <div class="kpi-value" id="kpiPackaging">—</div>
+      <div class="kpi-sub">Click to filter</div>
+    </div>
+    <div class="kpi-card" data-cat="Damaged Inventory" onclick="filterByKpi(this)">
+      <div class="kpi-label">Damaged</div>
+      <div class="kpi-value" id="kpiDamaged">—</div>
+      <div class="kpi-sub">Click to filter</div>
+    </div>
+  </div>
+
+  <!-- CHARTS ROW -->
+  <div class="charts-row">
+    <div class="chart-card">
+      <div class="chart-title">Reports by Issue Type</div>
+      <div class="bar-chart" id="typeChart"></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Category Breakdown</div>
+      <div class="donut-wrap">
+        <svg class="donut-svg" id="donutSvg" width="130" height="130" viewBox="0 0 130 130"></svg>
+        <div class="donut-legend" id="donutLegend"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOOLBAR -->
+  <div class="toolbar">
+    <div class="search-wrap">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input class="search-input" id="searchInput" type="text" placeholder="Search by reporter, SKU, notes, location…" oninput="applyFilters()">
+    </div>
+    <select class="filter-select" id="filterType" onchange="applyFilters()">
+      <option value="">All Issue Types</option>
+      <option value="This is a receiving issue.">Receiving Issue</option>
+      <option value="This issue is with existing inventory.">Existing Inventory</option>
+      <option value="This issue was found during picking.">Found During Picking</option>
+      <option value="This issue was found during an audit.">Found During Audit</option>
+    </select>
+    <select class="filter-select" id="filterCat" onchange="applyFilters()">
+      <option value="">All Categories</option>
+      <option value="Inventory Shortage">Inventory Shortage</option>
+      <option value="Inventory Overage">Inventory Overage</option>
+      <option value="Improper Packaging">Improper Packaging</option>
+      <option value="Damaged Inventory">Damaged Inventory</option>
+      <option value="Broken Seal (Open Carton)">Broken Seal</option>
+    </select>
+    <div class="record-count" id="recordCount"></div>
+  </div>
+
+  <!-- TABLE -->
+  <div class="table-wrap">
+    <div class="table-scroll">
+      <table id="mainTable">
+        <thead>
+          <tr>
+            <th onclick="sortBy('id')" title="Sort by ID">#<span class="sort-icon" id="sort-id">↕</span></th>
+            <th onclick="sortBy('reporter')" title="Sort by Reporter">Reporter<span class="sort-icon" id="sort-reporter">↕</span></th>
+            <th onclick="sortBy('date')" title="Sort by Date">Date<span class="sort-icon" id="sort-date">↕</span></th>
+            <th>Issue Type</th>
+            <th onclick="sortBy('sku')" title="Sort by SKU">SKU<span class="sort-icon" id="sort-sku">↕</span></th>
+            <th onclick="sortBy('quantity')" title="Sort by Qty">Qty<span class="sort-icon" id="sort-quantity">↕</span></th>
+            <th>Category</th>
+            <th>Pull ID</th>
+            <th>Location</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+    <div class="pagination" id="paginationBar"></div>
+  </div>
+</main>
+
+<!-- FORM MODAL -->
+<div class="modal-overlay" id="formModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="formModalTitle">New Inventory Discrepancy</div>
+        <div class="modal-sub">Whitsett, NC — Lenovo</div>
+      </div>
+      <button class="modal-close" onclick="closeModal('formModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <form id="entryForm" onsubmit="submitForm(event)" novalidate>
+
+        <div class="form-section">
+          <div class="form-section-title">Reporter Info</div>
+          <div class="form-grid">
+            <div class="form-group" style="grid-column:1/-1">
+              <label class="form-label">Who is reporting this inventory issue? <span class="required">*</span></label>
+              <input class="form-input" id="f_reporter" type="text" placeholder="Your name" autocomplete="off">
+              <span class="form-error" id="err_reporter"></span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">When was this issue found? <span class="required">*</span></label>
+              <input class="form-input" id="f_date" type="date">
+              <span class="form-error" id="err_date"></span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Is this a receiving issue or an existing inventory issue? <span class="required">*</span></label>
+              <select class="form-select" id="f_issueType" onchange="handleTypeChange()">
+                <option value="">— Select —</option>
+                <option value="This is a receiving issue.">This is a receiving issue</option>
+                <option value="This issue is with existing inventory.">This issue is with existing inventory</option>
+                <option value="This issue was found during picking.">This issue was found during picking</option>
+                <option value="This issue was found during an audit.">This issue was found during an audit</option>
+              </select>
+              <span class="form-error" id="err_issueType"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-section" id="section_receiving" style="display:none">
+          <div class="form-section-title">Receiving Details</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">What is the Purchase Order Number?</label>
+              <input class="form-input" id="f_poNumber" type="text" placeholder="e.g. 2000007208">
+            </div>
+            <div class="form-group">
+              <label class="form-label">What is the Inbound Delivery Number?</label>
+              <input class="form-input" id="f_inboundDelivery" type="text" placeholder="e.g. 7000003830">
+            </div>
+          </div>
+        </div>
+
+        <div class="form-section" id="section_picking" style="display:none">
+          <div class="form-section-title">Picking Details</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Who was the picker?</label>
+              <input class="form-input" id="f_picker" type="text" placeholder="Picker's name">
+            </div>
+            <div class="form-group">
+              <label class="form-label">What is the Pull ID?</label>
+              <input class="form-input" id="f_pullId" type="text" placeholder="e.g. 522">
+            </div>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="form-section-title">Inventory Details</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">What location was the inventory issue located?</label>
+              <input class="form-input" id="f_location" type="text" placeholder="e.g. 50-01-A1, QA Staging">
+            </div>
+            <div class="form-group">
+              <label class="form-label">What is the Warehouse Task Number?</label>
+              <input class="form-input" id="f_warehouseTask" type="text" placeholder="e.g. 2000013537">
+            </div>
+            <div class="form-group">
+              <label class="form-label">What is the SKU for the affected material? <span class="required">*</span></label>
+              <input class="form-input" id="f_sku" type="text" placeholder="e.g. SM17B82945" autocomplete="off">
+              <span class="form-error" id="err_sku"></span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">What is the affected quantity? <span class="required">*</span></label>
+              <input class="form-input" id="f_quantity" type="text" placeholder="e.g. -6, +12, 150">
+              <span class="form-error" id="err_quantity"></span>
+            </div>
+            <div class="form-group" style="grid-column:1/-1">
+              <label class="form-label">What category does this issue relate to? <span class="required">*</span></label>
+              <select class="form-select" id="f_category">
+                <option value="">— Select —</option>
+                <option value="Inventory Overage">Inventory Overage</option>
+                <option value="Inventory Shortage">Inventory Shortage</option>
+                <option value="Damaged Inventory">Damaged Inventory</option>
+                <option value="Improper Packaging">Improper Packaging</option>
+                <option value="Broken Seal (Open Carton)">Broken Seal (Open Carton)</option>
+              </select>
+              <span class="form-error" id="err_category"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="form-section-title">Additional Notes</div>
+          <div class="form-grid full">
+            <div class="form-group">
+              <label class="form-label">Please include any notes on this inventory escalation.</label>
+              <textarea class="form-textarea" id="f_notes" rows="4" placeholder="Describe what happened, who was involved, what was corrected…"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-footer">
+          <button type="button" class="btn-cancel" onclick="closeModal('formModal')">Cancel</button>
+          <button type="submit" class="btn-submit" id="submitBtn">Submit Report</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- DETAIL MODAL -->
+<div class="modal-overlay" id="detailModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="detailTitle">Report Detail</div>
+        <div class="modal-sub" id="detailSub"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal('detailModal')">✕</button>
+    </div>
+    <div class="modal-body detail-view" id="detailBody"></div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════
+//  CONFIGURATION — fill in your Google Apps Script
+//  Web App URL below after deploying the GAS script
+// ═══════════════════════════════════════════════
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbziqWH_h2sEm8Re8VHqJSkpftIwcWYbYjx-6Ogy6FavBSl2Yhyix3clsgYWNJgkwfnxDA/exec';
+
+// ───────────── SEED DATA ─────────────
+const SEED_DATA = [{"id":1,"reporter":"Dustin TEST SUBMISSION","date":"2026-02-10","issueType":"This is a receiving issue.","poNumber":"67676767","inboundDelivery":"8675309","picker":"","pullId":"","location":"","warehouseTask":"","sku":"3.14159","quantity":"69","category":"","notes":"This is a test submission."},{"id":2,"reporter":"Dustin TEST EXISTING INVENTORY","date":"2026-02-09","issueType":"This issue is with existing inventory.","poNumber":"","inboundDelivery":"","picker":"","pullId":"","location":"50-01-A1","warehouseTask":"","sku":"8675309","quantity":"150","category":"","notes":"Testing existing inventory submission."},{"id":3,"reporter":"Jayvonne oneal","date":"2026-04-13","issueType":"This issue is with existing inventory.","poNumber":"","inboundDelivery":"","picker":"","pullId":"","location":"QA","warehouseTask":"","sku":"Sf17c7044","quantity":"174","category":"Inventory Overage","notes":"Incorrect counting"},{"id":4,"reporter":"Gary Medley","date":"2026-04-15","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"LW","pullId":"","location":"Finished Goods","warehouseTask":"","sku":"SM17A33144","quantity":"6","category":"Damaged Inventory","notes":"Finished parts had pull id tags on them and should not have pull id stickers on them. It was escalated to operations and the general manager."},{"id":5,"reporter":"Mekdes","date":"2026-04-15","issueType":"This issue is with existing inventory.","poNumber":"","inboundDelivery":"","picker":"","pullId":"","location":"QA staging","warehouseTask":"","sku":"5533","quantity":"186","category":"Inventory Overage","notes":"Duplicated pick from first shift"},{"id":6,"reporter":"Cortland Gallaway","date":"2026-04-17","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Unknown","pullId":"","location":"","warehouseTask":"","sku":"Sss7b64519","quantity":"24","category":"Damaged Inventory","notes":"Inventory not damaged but multiple SKUs were found consolidated we can not do that at all."},{"id":7,"reporter":"Corrine Huber","date":"2026-04-22","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"LW","pullId":"","location":"The was an overage in the picking and not verified before moving next door","warehouseTask":"","sku":"SH47B39011","quantity":"2 pallets over","category":"Inventory Overage","notes":"Was reported to me and I went and verified that it was over and we had to send the product back over to our side"},{"id":8,"reporter":"Gary Medley","date":"2026-04-22","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Eddie","pullId":"","location":"51.22.A1","warehouseTask":"","sku":"Sm37b75603","quantity":"1280 was over by 8","category":"Inventory Overage","notes":"Normally  he picks well. Lead into an additional count"},{"id":9,"reporter":"Danielle Martin","date":"2026-04-23","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Kelyn A","pullId":"472","location":"Lenovo check","warehouseTask":"","sku":"SSS7B01861","quantity":"16","category":"Inventory Overage","notes":"Picked 96 only needed 80"},{"id":10,"reporter":"Danielle Martin","date":"2026-04-23","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Dell Baker","pullId":"472","location":"Lenovo check","warehouseTask":"","sku":"4C57B0070","quantity":"16","category":"Inventory Overage","notes":"Pull ticket on wrong product"},{"id":11,"reporter":"Danielle Martin","date":"2026-04-23","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Briana Davis","pullId":"460","location":"Lenovo check","warehouseTask":"","sku":"SM17B82945","quantity":"Over 2","category":"Inventory Overage","notes":"Over picked"},{"id":12,"reporter":"Danielle Martin","date":"2026-04-23","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Briana Davis","pullId":"460","location":"Lenovo check","warehouseTask":"","sku":"Sc17b22925","quantity":"2","category":"Inventory Shortage","notes":"Short 2"},{"id":13,"reporter":"Danielle Martin","date":"2026-04-23","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Terrika Green","pullId":"460","location":"Lenovo Check","warehouseTask":"","sku":"Ssa7b97701","quantity":"12","category":"Damaged Inventory","notes":"Product not damaged. Box doesn\u2019t get opened"},{"id":14,"reporter":"Danielle Martin","date":"2026-04-23","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Steven","pullId":"460","location":"Lenovo check","warehouseTask":"","sku":"Sp57b98367","quantity":"","category":"Damaged Inventory","notes":"Put memory chips not properly packaged with power banks"},{"id":15,"reporter":"Danielle Martin","date":"2026-04-23","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"BW","pullId":"459","location":"Lenovo check","warehouseTask":"","sku":"Sh47b39011","quantity":"1","category":"Damaged Inventory","notes":"Product not damaged not properly packaged"},{"id":16,"reporter":"Danielle Martin","date":"2026-04-23","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Zeek","pullId":"469","location":"Lenovo check","warehouseTask":"","sku":"Sm27b24842","quantity":"16","category":"Inventory Overage","notes":"Over Picked"},{"id":17,"reporter":"Danielle Martin","date":"2026-04-23","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Eddie","pullId":"469","location":"Lenovo check","warehouseTask":"N/a","sku":"Sm27b75603","quantity":"7","category":"Inventory Overage","notes":"Edi B is the picker"},{"id":18,"reporter":"Aaron w.","date":"2026-04-23","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Briana davis","pullId":"491","location":"Quality","warehouseTask":"","sku":"Sm27A90289","quantity":"Over  1,021","category":"Improper Packaging","notes":"Over picked Briana davis"},{"id":19,"reporter":"Danielle Martin","date":"2026-04-24","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Check comments","pullId":"483","location":"Lenovo Check","warehouseTask":"N\\a","sku":"STA7B69903","quantity":"8","category":"Inventory Overage","notes":"Picker is Harrison Shackelford. Wrong product"},{"id":20,"reporter":"Danielle Martin","date":"2026-04-27","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"James Raglan","pullId":"488","location":"Lenovo check","warehouseTask":"N/a","sku":"SB47A76905","quantity":"1","category":"Inventory Shortage","notes":"James raglan was picker"},{"id":21,"reporter":"Danielle Martin","date":"2026-04-27","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"James Raglan","pullId":"488","location":"Lenovo Check","warehouseTask":"","sku":"0000001KM810","quantity":"1","category":"Inventory Shortage","notes":"James Raglan is picker"},{"id":22,"reporter":"Danielle Martin","date":"2026-04-27","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"James Raglan","pullId":"477","location":"Lenovo Check","warehouseTask":"","sku":"SSG7B28176","quantity":"4","category":"Inventory Overage","notes":"James Raglan is picker"},{"id":23,"reporter":"Danielle Martin","date":"2026-04-28","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Marcus","pullId":"499","location":"Lenovo Check","warehouseTask":"","sku":"Ssa7b97701","quantity":"3","category":"Damaged Inventory","notes":"Marcus was picker. Notified inventory"},{"id":24,"reporter":"Danielle Martin","date":"2026-04-28","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Kaylyn","pullId":"522","location":"QC Area","warehouseTask":"","sku":"SM17B26002","quantity":"200","category":"Inventory Shortage","notes":"Kaylyn A is picker"},{"id":25,"reporter":"Tameka Morgan","date":"2026-04-28","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"1st shift","pullId":"522","location":"Staging area","warehouseTask":"2000007208","sku":"SPU7C19731","quantity":"19 missing","category":"Inventory Shortage","notes":"Product was retrieved and added to pull 522"},{"id":26,"reporter":"Breaonah Robinson-Oates","date":"2026-04-29","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Kaylen","pullId":"547","location":"QA","warehouseTask":"Na","sku":"Na","quantity":"Na","category":"Improper Packaging","notes":"Need to use ESD bins and stand them up"},{"id":27,"reporter":"Meka","date":"2026-04-29","issueType":"This issue was found during an audit.","poNumber":"2000007264","inboundDelivery":"7000003830","picker":"","pullId":"","location":"","warehouseTask":"","sku":"SC17B2295","quantity":"Wrong product was pulled","category":"Inventory Shortage","notes":"Correct product was retrieved"},{"id":28,"reporter":"Meka","date":"2026-04-29","issueType":"This issue was found during an audit.","poNumber":"2000007278","inboundDelivery":"7000003297","picker":"","pullId":"","location":"","warehouseTask":"","sku":"SM27A9089","quantity":"-13","category":"Inventory Shortage","notes":"Product was retrieved and added to pull"},{"id":29,"reporter":"Meka","date":"2026-04-29","issueType":"This issue was found during an audit.","poNumber":"2000007282","inboundDelivery":"7000003961","picker":"","pullId":"","location":"","warehouseTask":"","sku":"4C57B00070","quantity":"-1","category":"Inventory Shortage","notes":"Product was retrieved and added to pull"},{"id":30,"reporter":"Meka","date":"2026-04-29","issueType":"This issue was found during an audit.","poNumber":"2000007264","inboundDelivery":"7000003830","picker":"","pullId":"","location":"","warehouseTask":"","sku":"SC17B22925","quantity":"Wrong product selected for Pull 527","category":"Inventory Shortage","notes":"*Product was retrieved\n*1st shift Associate"},{"id":31,"reporter":"Meka","date":"2026-04-29","issueType":"This issue was found during an audit.","poNumber":"2000007278","inboundDelivery":"7000003297","picker":"","pullId":"","location":"","warehouseTask":"","sku":"SM27A90289","quantity":"-13 for pull ID 527","category":"Inventory Shortage","notes":"Stephan Virgil"},{"id":32,"reporter":"Meka","date":"2026-04-29","issueType":"This issue was found during an audit.","poNumber":"2000007282","inboundDelivery":"7000003961","picker":"","pullId":"","location":"","warehouseTask":"","sku":"4C57B00070","quantity":"-1 product for pull ID 527","category":"Inventory Shortage","notes":"M. Holmes"},{"id":33,"reporter":"Gary Medley","date":"2026-05-05","issueType":"This issue was found during an audit.","poNumber":"2000007915","inboundDelivery":"548","picker":"","pullId":"","location":"","warehouseTask":"","sku":"SP57B98367","quantity":"160 only pulled 9","category":"Inventory Shortage","notes":"Pull asked for 160 William Wade only pulled 9."},{"id":34,"reporter":"Gary Medley","date":"2026-05-05","issueType":"This issue was found during an audit.","poNumber":"2000007921","inboundDelivery":"549","picker":"","pullId":"","location":"","warehouseTask":"","sku":"SM37B75603","quantity":"56 needed 2056","category":"Inventory Shortage","notes":"Darnell Richards pulled wrong part. Can't read the label not legible."},{"id":35,"reporter":"Danielle Martin","date":"2026-05-11","issueType":"This issue was found during an audit.","poNumber":"Pull 602","inboundDelivery":"","picker":"","pullId":"","location":"","warehouseTask":"","sku":"SH47B39011","quantity":"Short 40","category":"Inventory Shortage","notes":"Steph Virgil picked\nAnthony Matthew Quality Checked"},{"id":36,"reporter":"Danielle Martin","date":"2026-05-11","issueType":"This issue was found during an audit.","poNumber":"Pull 602","inboundDelivery":"","picker":"","pullId":"","location":"","warehouseTask":"","sku":"SM17C01965","quantity":"Short 10","category":"Inventory Shortage","notes":"Rashad Picked it\nAnthony Matthew Quality Checked it"},{"id":37,"reporter":"Breaonah","date":"2026-05-11","issueType":"This issue was found during an audit.","poNumber":"Pull 602","inboundDelivery":"","picker":"","pullId":"","location":"","warehouseTask":"","sku":"SM27B87857","quantity":"Short 40","category":"Inventory Shortage","notes":""},{"id":38,"reporter":"Breaonah","date":"2026-05-11","issueType":"This issue was found during an audit.","poNumber":"Pull 602","inboundDelivery":"Na","picker":"","pullId":"","location":"","warehouseTask":"","sku":"SM17C01965","quantity":"Short 10","category":"Inventory Shortage","notes":"Anthony QC checked"},{"id":39,"reporter":"Breaonah","date":"2026-05-11","issueType":"This issue was found during an audit.","poNumber":"Pull 602","inboundDelivery":"Na","picker":"","pullId":"","location":"","warehouseTask":"","sku":"SH47B39011","quantity":"Short 40","category":"Inventory Shortage","notes":"Anthony QC checked"},{"id":40,"reporter":"Danielle Martin","date":"2026-05-12","issueType":"This issue was found during an audit.","poNumber":"Pull 623","inboundDelivery":"","picker":"","pullId":"","location":"","warehouseTask":"","sku":"4C57A90186","quantity":"16","category":"Improper Packaging","notes":"ESD components go into ESD containers. They were put in a blue tote.\nWatson is picker."},{"id":41,"reporter":"Danielle Martin","date":"2026-05-12","issueType":"This issue was found during an audit.","poNumber":"Pull 623","inboundDelivery":"","picker":"","pullId":"","location":"","warehouseTask":"","sku":"SM17B82945","quantity":"1","category":"Inventory Shortage","notes":"William Wade is picker"},{"id":42,"reporter":"Meka","date":"2026-05-12","issueType":"This issue was found during an audit.","poNumber":"Pull # 642","inboundDelivery":"Pull 642","picker":"","pullId":"","location":"","warehouseTask":"","sku":"SC17B22925","quantity":"160","category":"Inventory Shortage","notes":"Product was missing from pull#642 on1st shift; product was retrieved and added to pull"},{"id":43,"reporter":"Meka","date":"2026-05-12","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Kelyn","pullId":"642","location":"Quality Check","warehouseTask":"2000009593","sku":"4B27B00072","quantity":"-112","category":"Inventory Shortage","notes":"Product quantity of 48 was pulled by associate, but pallet of 112 missing. Product was retrieved and added to pull 642."},{"id":44,"reporter":"Meka","date":"2026-05-12","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"No picker for product that was missing!","pullId":"642","location":"Quality Check","warehouseTask":"2000009596","sku":"SM27B24839","quantity":"-320","category":"Inventory Shortage","notes":"Product was not picked for pull 642"},{"id":45,"reporter":"Meka","date":"2026-05-12","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"1st shift associate","pullId":"642","location":"Quality Check","warehouseTask":"2000009606","sku":"SM27A90289","quantity":"+10","category":"Inventory Overage","notes":"Product was over picked by 10, taken back to location!"},{"id":46,"reporter":"Mekdes","date":"2026-05-13","issueType":"This issue was found during an audit.","poNumber":"2000009376","inboundDelivery":"7000003834","picker":"","pullId":"","location":"","warehouseTask":"","sku":"Sc17A98754","quantity":"224","category":"Inventory Overage","notes":"Pull ID 635 picked by Erick and Mikayha were found duplicated on date 05/12/2026."},{"id":47,"reporter":"Mekdes","date":"2026-05-12","issueType":"This issue was found during an audit.","poNumber":"2000009442","inboundDelivery":"7000004979","picker":"","pullId":"","location":"","warehouseTask":"","sku":"SM27A90288","quantity":"50","category":"Inventory Shortage","notes":"Pull ID- 635\nPicker-Marlin \nDate-05/12/2026\nStatus- corrected \nSift-first"},{"id":48,"reporter":"Mekdes","date":"2026-05-12","issueType":"This issue was found during an audit.","poNumber":"2000009445","inboundDelivery":"7000005221","picker":"","pullId":"","location":"","warehouseTask":"","sku":"SH47B39011","quantity":"5","category":"Inventory Overage","notes":"Pull ID - 635\nDate- 05/12/2026\nPicker- Hubert V \nShift- first\nStatus- Corrected same date."},{"id":49,"reporter":"Meka","date":"2026-05-14","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"No name","pullId":"651","location":"Staging area","warehouseTask":"2000009942","sku":"SM17A33144","quantity":"N/a","category":"Improper Packaging","notes":"31 towers were picked without names for pull 651"},{"id":50,"reporter":"Meka","date":"2026-05-14","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"No names","pullId":"650","location":"Staging area","warehouseTask":"2000009909","sku":"SM17A33144","quantity":"N/a","category":"Improper Packaging","notes":"15 towers for pull 650 were staged without names"},{"id":51,"reporter":"Meka","date":"2026-05-14","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"No names","pullId":"630","location":"Staging area","warehouseTask":"20000009393","sku":"SM17A33144","quantity":"N/a","category":"Improper Packaging","notes":"8 towers were staged for Pull 630 without names"},{"id":52,"reporter":"Meka","date":"2026-05-15","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"No name","pullId":"661","location":"Kitting","warehouseTask":"2000010081","sku":"SSA7B97701","quantity":"-2","category":"Inventory Shortage","notes":"Product was retrieved and added to Pull 661"},{"id":53,"reporter":"Meka","date":"2026-05-15","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"No name (1st shift)","pullId":"661","location":"Kitting","warehouseTask":"2000010089","sku":"SM17AC01965","quantity":"+2","category":"Inventory Overage","notes":"Product was returned back to location"},{"id":54,"reporter":"Danielle Martin","date":"2026-05-20","issueType":"This issue was found during an audit.","poNumber":"Pull 673","inboundDelivery":"","picker":"","pullId":"","location":"","warehouseTask":"","sku":"SP57B98367","quantity":"16","category":"Improper Packaging","notes":"Pull 673 picker EVELIN\nneed to be in ESD tube"},{"id":55,"reporter":"Danielle Martin","date":"2026-05-20","issueType":"This issue was found during an audit.","poNumber":"673","inboundDelivery":"N/a","picker":"","pullId":"","location":"","warehouseTask":"","sku":"SSA7B97701","quantity":"32","category":"Improper Packaging","notes":"Pull 673 picker T Morgan \nINTEL fell out into box"},{"id":56,"reporter":"Danielle Martin","date":"2026-05-20","issueType":"This issue was found during an audit.","poNumber":"N/a","inboundDelivery":"N/a","picker":"","pullId":"","location":"","warehouseTask":"","sku":"4C57B01829","quantity":"16","category":"Improper Packaging","notes":"Pull 673 picker Joshua\nNeeds to be in ESD tote"},{"id":57,"reporter":"Danielle Martin","date":"2026-05-20","issueType":"This issue was found during an audit.","poNumber":"673","inboundDelivery":"N/a","picker":"","pullId":"","location":"","warehouseTask":"","sku":"SSS7B01861","quantity":"16","category":"Improper Packaging","notes":"Pull 673 picker T Morgan\nProduct fell out of original package. Not secure"},{"id":58,"reporter":"Danielle Martin","date":"2026-05-20","issueType":"This issue was found during an audit.","poNumber":"673","inboundDelivery":"N/a","picker":"","pullId":"","location":"","warehouseTask":"","sku":"SSS7B00300","quantity":"23","category":"Improper Packaging","notes":"Pull 673 picker D Richard\u2019s\nNeeds to be in ESD tote"},{"id":59,"reporter":"Danielle Martin","date":"2026-05-20","issueType":"This issue was found during an audit.","poNumber":"673","inboundDelivery":"N/a","picker":"","pullId":"","location":"","warehouseTask":"","sku":"4B27B00072","quantity":"2","category":"Improper Packaging","notes":"Pull 673 picker D Richard\u2019s\nNeeds to be in ESD tote"},{"id":60,"reporter":"Gabriel","date":"2026-05-21","issueType":"This issue was found during an audit.","poNumber":"VT9a000002184","inboundDelivery":"87313961","picker":"","pullId":"","location":"","warehouseTask":"","sku":"SN37b05973","quantity":"99","category":"Inventory Shortage","notes":"Pick has no name. Issue occurred on 2nd shift. Product is from the cage. The rest of the product is not found."},{"id":61,"reporter":"Danielle","date":"2026-05-21","issueType":"This issue was found during an audit.","poNumber":"Pull 705","inboundDelivery":"","picker":"","pullId":"","location":"","warehouseTask":"","sku":"STA7B69903","quantity":"4","category":"Improper Packaging","notes":"Pull ID 705\nPicker: William Wade\nPicker failed to use proper tote for esd cartridges"},{"id":62,"reporter":"Danielle","date":"2026-05-21","issueType":"This issue was found during an audit.","poNumber":"Pull 705","inboundDelivery":"","picker":"","pullId":"","location":"","warehouseTask":"","sku":"4c57b01829","quantity":"16","category":"Improper Packaging","notes":"Pull ID 705\nPicker: William Wade\nPicker failed to properly package product correctly"},{"id":63,"reporter":"Mekdes","date":"2026-05-27","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Hibert","pullId":"757","location":"53-03-A1","warehouseTask":"2000011739","sku":"SF17C04470","quantity":"240","category":"Improper Packaging","notes":"He put the wrong sku(sta71369903)"},{"id":64,"reporter":"Mekdes","date":"2026-05-27","issueType":"This issue is with existing inventory.","poNumber":"","inboundDelivery":"","picker":"","pullId":"","location":"51-01-A1","warehouseTask":"2000011736","sku":"4TA7B15437","quantity":"160","category":"Improper Packaging","notes":"Eric pull ID 757- no order number and only last 4 digits of sku number."},{"id":65,"reporter":"Meka","date":"2026-05-28","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Joshua Nicholson","pullId":"787","location":"Staging area","warehouseTask":"","sku":"SSA7B97701","quantity":"+12","category":"Inventory Overage","notes":"Product was put back; count corrected!"},{"id":66,"reporter":"Meka","date":"2026-05-28","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Joshua Nicholson","pullId":"787","location":"Staging Area","warehouseTask":"2000012170","sku":"4C57A90186","quantity":"-1","category":"Inventory Shortage","notes":"Product retrieved, amount corrected!"},{"id":67,"reporter":"Meka","date":"2026-05-28","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Harrison Shackleford","pullId":"792","location":"Staging Area","warehouseTask":"2000012143","sku":"SC17A33139","quantity":"+4","category":"Inventory Overage","notes":"Amount corrected!"},{"id":68,"reporter":"Meka","date":"2026-05-28","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Harrison Shackelford","pullId":"792","location":"Staging Area","warehouseTask":"2000012143","sku":"SB47B46098","quantity":"-3","category":"Inventory Shortage","notes":"Product was retrieved; amount corrected!"},{"id":69,"reporter":"Meka","date":"2026-05-28","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Eric C.","pullId":"779","location":"Lenovo Staging Area","warehouseTask":"2000011936","sku":"SM17B26002","quantity":"+24","category":"Inventory Overage","notes":"Amount corrected!"},{"id":70,"reporter":"Meka","date":"2026-05-28","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"1st shift(no name on labels!)","pullId":"779","location":"Lenovo staging area","warehouseTask":"2000011935","sku":"0000001KM81","quantity":"-1","category":"Inventory Shortage","notes":"Product retrieved; amount corrected!"},{"id":71,"reporter":"Meka","date":"2026-05-28","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Initials \u201cK.A\u201d(1st shift)","pullId":"783","location":"QA Staging area","warehouseTask":"2000912058","sku":"SM27B41345","quantity":"-1","category":"Inventory Shortage","notes":"Product retrieved, amount corrected!"},{"id":72,"reporter":"Meka","date":"2026-05-28","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Ezekiel Neal","pullId":"733","location":"Production Line(Lenovo working area)","warehouseTask":"2000011338","sku":"SB47A76905","quantity":"+2 and wrong product","category":"Inventory Overage","notes":"Correct product was picked and taken to Lenovo production area!"},{"id":73,"reporter":"Breaonah","date":"2026-05-29","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Zeek","pullId":"80:","location":"QA","warehouseTask":"","sku":"Ssg7c20433","quantity":"No labels","category":"Improper Packaging","notes":"No labels pull 803"},{"id":74,"reporter":"Danielle","date":"2026-06-01","issueType":"This issue was found during an audit.","poNumber":"Pull 789","inboundDelivery":"N/a","picker":"","pullId":"","location":"","warehouseTask":"","sku":"Sc17b93692","quantity":"80","category":"Inventory Shortage","notes":"Pull 789 picked by Shannon Martin.\nIncorrect product number"},{"id":75,"reporter":"Danielle martin","date":"2026-06-01","issueType":"This issue was found during an audit.","poNumber":"789","inboundDelivery":"N/a","picker":"","pullId":"","location":"","warehouseTask":"","sku":"SM27B82944","quantity":"80","category":"Inventory Shortage","notes":"Pull 789 picked by William Wade\nShort 80 out of 160"},{"id":76,"reporter":"Mekdes","date":"2026-05-29","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Devin","pullId":"823","location":"52-20-A1","warehouseTask":"2000012505","sku":"Sf17c17409","quantity":"192","category":"Inventory Shortage","notes":"Short 2 boxes."},{"id":77,"reporter":"Mekdes","date":"2026-05-29","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Devin","pullId":"831","location":"53-20-d1","warehouseTask":"2000012447","sku":"Sc17a33133","quantity":"5","category":"Inventory Shortage","notes":"Shortage by 5 and corrected."},{"id":78,"reporter":"Meka","date":"2026-06-03","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Shannon Martin","pullId":"840","location":"QC Staging Area","warehouseTask":"2000012852","sku":"SC17A3341","quantity":"-36","category":"Inventory Shortage","notes":"Product was retrieved, count corrected!"},{"id":79,"reporter":"Meka","date":"2026-06-03","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Devin Hutchins","pullId":"840","location":"QC Staging area","warehouseTask":"2000012858","sku":"SC17A33138","quantity":"+14","category":"Inventory Overage","notes":"Product returned; count corrected!"},{"id":80,"reporter":"Mekdes","date":"2026-06-03","issueType":"This issue was found during an audit.","poNumber":"2000012887","inboundDelivery":"","picker":"","pullId":"","location":"","warehouseTask":"","sku":"Sf17c17409","quantity":"1800","category":"Improper Packaging","notes":"Has no lable  Eric"},{"id":81,"reporter":"Mekdes","date":"2026-06-03","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Eric","pullId":"836","location":"52-12-a1","warehouseTask":"2000012873","sku":"4ta7b02107","quantity":"80","category":"Inventory Overage","notes":"Quantity over by 80 while it should be 240 and corrected."},{"id":82,"reporter":"Mekdes","date":"2026-06-03","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Keylin","pullId":"836","location":"Cage","warehouseTask":"2000012875","sku":"Sta7b08587","quantity":"99","category":"Inventory Shortage","notes":"Pick the wrong sku and corrected by QA"},{"id":83,"reporter":"Mekdes","date":"2026-06-03","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Keylin","pullId":"836","location":"52-07-a1","warehouseTask":"2000012875","sku":"Sm17c21514","quantity":"64","category":"Inventory Shortage","notes":"Short by 64 corrected by QA"},{"id":84,"reporter":"Mekdes","date":"2026-06-03","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Morers","pullId":"836","location":"53-30-d1","warehouseTask":"2000012864","sku":"Sc17c26166","quantity":"30","category":"Inventory Shortage","notes":"Short by 30 corrected by QA"},{"id":85,"reporter":"Danielle Martin","date":"2026-06-04","issueType":"This issue was found during an audit.","poNumber":"Pull 836","inboundDelivery":"N/a","picker":"","pullId":"","location":"","warehouseTask":"","sku":"SP57B38693","quantity":"80","category":"Inventory Shortage","notes":"Quality checked and wrote down short 80 and never corrected it. Edi was picker PULL 836"},{"id":86,"reporter":"Mekdes","date":"2026-06-05","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Marthin","pullId":"850","location":"50-01-A1","warehouseTask":"2000013083","sku":"Sp57b38693","quantity":"213","category":"Improper Packaging","notes":"The boxes were not  labeled. 26 boxes are labeled by QA."},{"id":87,"reporter":"Mekdes","date":"2026-06-05","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"First shift","pullId":"850","location":"52-12-A1","warehouseTask":"2000013094","sku":"4TA7B02107","quantity":"180","category":"Inventory Shortage","notes":"The item is missed. Not picked by first shift. And corrected by 2ed shift QA."},{"id":88,"reporter":"Mekdes","date":"2026-06-05","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"First shift (no name on it)","pullId":"850","location":"54-21-A1","warehouseTask":"2000013082","sku":"4TA7A93752","quantity":"180","category":"Improper Packaging","notes":"13 boxes were not labeled."},{"id":89,"reporter":"Meka","date":"2026-06-05","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Steven Shoffner","pullId":"861","location":"QA Staging Area","warehouseTask":"2000013151","sku":"SM17B82945","quantity":"-1","category":"Inventory Shortage","notes":"Product was retrieved, count corrected!"},{"id":90,"reporter":"Meka","date":"2026-06-05","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Devin Hutchins","pullId":"861","location":"QA staging area","warehouseTask":"2000013166","sku":"4C57A87817","quantity":"+16","category":"Inventory Overage","notes":"Product was taken back to location; count corrected!"},{"id":91,"reporter":"Mekdes","date":"2026-06-05","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Eric","pullId":"850","location":"52-04-a1","warehouseTask":"2000013094","sku":"4B27B01933","quantity":"129","category":"Inventory Shortage","notes":"Wrong sku and  300 quantity."},{"id":92,"reporter":"Mekdes","date":"2026-06-05","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"First shift","pullId":"850","location":"53-06-a1","warehouseTask":"2000013098","sku":"4c57a87817","quantity":"63","category":"Inventory Shortage","notes":"Items were not picked."},{"id":93,"reporter":"Breaonah","date":"2026-06-09","issueType":"This issue was found during an audit.","poNumber":"Na","inboundDelivery":"Na","picker":"","pullId":"","location":"","warehouseTask":"","sku":"Cage items","quantity":"Over pulls and no name","category":"Inventory Overage","notes":"Over pull on items and no name. Katlyn"},{"id":94,"reporter":"Meka","date":"2026-06-08","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Marlon L.","pullId":"846","location":"Lenovo Staging area","warehouseTask":"2000013056","sku":"SHD7B92519","quantity":"-821","category":"Inventory Shortage","notes":"Lenovo Lead found missing product from Pull 846; after confirming error product was added and count corrected!"},{"id":95,"reporter":"Meka","date":"2026-06-09","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"K.A","pullId":"878","location":"Lenovo staging area","warehouseTask":"2000013337","sku":"SB4726018","quantity":"+6 screws","category":"Inventory Overage","notes":"Too many screws were placed with the product; count corrected!"},{"id":96,"reporter":"Meka","date":"2026-06-09","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Hakeem W.","pullId":"885","location":"QA staging area","warehouseTask":"2000013521","sku":"SC17C26167","quantity":"+2","category":"Inventory Overage","notes":"Product count was corrected; over pick taken back to location!"},{"id":97,"reporter":"Meka","date":"2026-06-09","issueType":"This issue was found during picking.","poNumber":"","inboundDelivery":"","picker":"Darnell R.","pullId":"885","location":"QA staging area","warehouseTask":"2000013537","sku":"SM17B87183","quantity":"-6","category":"Inventory Shortage","notes":"Product was missing 6 items; count corrected!"}];
+
+// ───────────── STATE ─────────────
+let allRecords = [];
+let filtered = [];
+let sortField = 'id';
+let sortDir = 'desc';
+let currentPage = 1;
+const PAGE_SIZE = 25;
+let activeCatFilter = '';
+let gasConnected = false;
+
+// ───────────── INIT ─────────────
+document.addEventListener('DOMContentLoaded', () => {
+  loadData();
+  // Set today as default date
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('f_date').value = today;
+  // Detect GAS connectivity
+  if (GAS_URL) {
+    checkGasConnection();
+  } else {
+    setSyncStatus('No backend configured', 'warn');
+  }
+});
+
+function loadData() {
+  // Load from localStorage if available, otherwise use seed
+  const stored = localStorage.getItem('ceva_wh_inv_records');
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed) && parsed.length >= SEED_DATA.length) {
+        allRecords = parsed;
+      } else {
+        // Merge: stored + any seed records not in stored
+        const storedIds = new Set(parsed.map(r => r.id));
+        const merged = [...parsed];
+        SEED_DATA.forEach(r => { if (!storedIds.has(r.id)) merged.push(r); });
+        merged.sort((a,b) => a.id - b.id);
+        allRecords = merged;
+      }
+    } catch(e) { allRecords = [...SEED_DATA]; }
+  } else {
+    allRecords = [...SEED_DATA];
+    saveLocal();
+  }
+  applyFilters();
+  renderCharts();
+  renderKpis();
+}
+
+function saveLocal() {
+  localStorage.setItem('ceva_wh_inv_records', JSON.stringify(allRecords));
+}
+
+function getNextId() {
+  return allRecords.length > 0 ? Math.max(...allRecords.map(r => r.id)) + 1 : 1;
+}
+
+// ───────────── FILTERS & SORT ─────────────
+function applyFilters() {
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  const typeF = document.getElementById('filterType').value;
+  const catF = document.getElementById('filterCat').value || activeCatFilter;
+
+  filtered = allRecords.filter(r => {
+    const matchQ = !q || [r.reporter,r.sku,r.notes,r.location,r.pullId,r.warehouseTask,r.picker,r.poNumber]
+      .some(v => v && v.toLowerCase().includes(q));
+    const matchType = !typeF || r.issueType === typeF;
+    const matchCat = !catF || r.category === catF;
+    return matchQ && matchType && matchCat;
+  });
+
+  sortFiltered();
+  currentPage = 1;
+  renderTable();
+  updateRecordCount();
+}
+
+function sortFiltered() {
+  filtered.sort((a, b) => {
+    let av = a[sortField] ?? '', bv = b[sortField] ?? '';
+    if (sortField === 'id') { av = +av; bv = +bv; }
+    if (sortField === 'date') { av = new Date(av); bv = new Date(bv); }
+    if (av < bv) return sortDir === 'asc' ? -1 : 1;
+    if (av > bv) return sortDir === 'asc' ? 1 : -1;
+    return 0;
+  });
+}
+
+function sortBy(field) {
+  if (sortField === field) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+  else { sortField = field; sortDir = 'desc'; }
+  document.querySelectorAll('thead th').forEach(th => th.classList.remove('sorted'));
+  const sortEl = document.getElementById('sort-' + field);
+  if (sortEl) {
+    sortEl.closest('th').classList.add('sorted');
+    sortEl.textContent = sortDir === 'asc' ? '↑' : '↓';
+  }
+  sortFiltered();
+  renderTable();
+}
+
+function filterByKpi(el) {
+  document.querySelectorAll('.kpi-card').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  const cat = el.dataset.cat;
+  activeCatFilter = cat === 'all' ? '' : cat;
+  // Clear the dropdown too
+  document.getElementById('filterCat').value = '';
+  applyFilters();
+}
+
+function updateRecordCount() {
+  const el = document.getElementById('recordCount');
+  const total = allRecords.length;
+  const showing = filtered.length;
+  el.innerHTML = showing === total
+    ? `Showing all <strong>${total}</strong> records`
+    : `Showing <strong>${showing}</strong> of <strong>${total}</strong> records`;
+}
+
+// ───────────── TABLE RENDER ─────────────
+function renderTable() {
+  const tbody = document.getElementById('tableBody');
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const page = filtered.slice(start, start + PAGE_SIZE);
+
+  if (page.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="10">
+      <div class="empty-state">
+        <svg width="40" height="40" fill="none" stroke="#9AA5B4" stroke-width="1.5" viewBox="0 0 24 24">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+        </svg>
+        <p>No records match the current filters.</p>
+      </div>
+    </td></tr>`;
+    renderPagination();
+    return;
+  }
+
+  tbody.innerHTML = page.map(r => `
+    <tr onclick="openDetail(${r.id})">
+      <td class="td-id">#${r.id}</td>
+      <td class="td-reporter">${esc(r.reporter) || '<span style="color:var(--gray-400)">—</span>'}</td>
+      <td class="td-date">${formatDate(r.date)}</td>
+      <td>${typeChip(r.issueType)}</td>
+      <td class="td-sku">${esc(r.sku) || '—'}</td>
+      <td class="td-qty">${esc(r.quantity) || '—'}</td>
+      <td>${catChip(r.category)}</td>
+      <td>${esc(r.pullId) || '<span style="color:var(--gray-400)">—</span>'}</td>
+      <td>${esc(r.location) || '<span style="color:var(--gray-400)">—</span>'}</td>
+      <td class="td-notes">${esc(r.notes) || '<span style="color:var(--gray-400)">—</span>'}</td>
+    </tr>`).join('');
+
+  renderPagination();
+}
+
+function renderPagination() {
+  const bar = document.getElementById('paginationBar');
+  const total = filtered.length;
+  const pages = Math.ceil(total / PAGE_SIZE);
+  if (pages <= 1) { bar.innerHTML = ''; return; }
+
+  let html = '';
+  html += `<button class="page-btn" onclick="goPage(${currentPage-1})" ${currentPage===1?'disabled':''}>‹</button>`;
+  for (let p = 1; p <= pages; p++) {
+    if (p === 1 || p === pages || Math.abs(p - currentPage) <= 2) {
+      html += `<button class="page-btn ${p===currentPage?'active':''}" onclick="goPage(${p})">${p}</button>`;
+    } else if (Math.abs(p - currentPage) === 3) {
+      html += `<span style="color:var(--gray-400);font-size:12px;padding:0 2px">…</span>`;
+    }
+  }
+  html += `<button class="page-btn" onclick="goPage(${currentPage+1})" ${currentPage===pages?'disabled':''}>›</button>`;
+  bar.innerHTML = html;
+}
+
+function goPage(p) {
+  const pages = Math.ceil(filtered.length / PAGE_SIZE);
+  if (p < 1 || p > pages) return;
+  currentPage = p;
+  renderTable();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ───────────── KPI RENDER ─────────────
+function renderKpis() {
+  const cats = {};
+  allRecords.forEach(r => {
+    cats[r.category] = (cats[r.category] || 0) + 1;
+  });
+  document.getElementById('kpiTotal').textContent = allRecords.length;
+  document.getElementById('kpiTotalSub').textContent = 'All categories';
+  document.getElementById('kpiShortage').textContent = cats['Inventory Shortage'] || 0;
+  document.getElementById('kpiOverage').textContent = cats['Inventory Overage'] || 0;
+  document.getElementById('kpiPackaging').textContent = cats['Improper Packaging'] || 0;
+  document.getElementById('kpiDamaged').textContent = cats['Damaged Inventory'] || 0;
+}
+
+// ───────────── CHARTS ─────────────
+function renderCharts() {
+  renderTypeChart();
+  renderDonut();
+}
+
+function renderTypeChart() {
+  const counts = {};
+  allRecords.forEach(r => {
+    const k = r.issueType || 'Unknown';
+    counts[k] = (counts[k] || 0) + 1;
+  });
+  const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]);
+  const max = sorted[0]?.[1] || 1;
+  const colors = {
+    'This is a receiving issue.': '#0070C0',
+    'This issue is with existing inventory.': '#1B6B3A',
+    'This issue was found during picking.': '#B45309',
+    'This issue was found during an audit.': '#5B21B6',
+  };
+  const labels = {
+    'This is a receiving issue.': 'Receiving Issue',
+    'This issue is with existing inventory.': 'Existing Inventory',
+    'This issue was found during picking.': 'Found During Picking',
+    'This issue was found during an audit.': 'Found During Audit',
+  };
+  const container = document.getElementById('typeChart');
+  container.innerHTML = sorted.map(([key, count]) => `
+    <div class="bar-row">
+      <div class="bar-label" title="${esc(key)}">${labels[key] || esc(key)}</div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:${(count/max*100)}%;background:${colors[key]||'#9AA5B4'}">
+          <span class="bar-count">${count}</span>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function renderDonut() {
+  const cats = {};
+  allRecords.forEach(r => {
+    const k = r.category || 'Uncategorized';
+    cats[k] = (cats[k] || 0) + 1;
+  });
+  const colors = {
+    'Inventory Shortage': '#C8102E',
+    'Inventory Overage': '#0070C0',
+    'Improper Packaging': '#7C3AED',
+    'Damaged Inventory': '#D97706',
+    'Broken Seal (Open Carton)': '#065F46',
+    'Uncategorized': '#9AA5B4',
+  };
+  const total = Object.values(cats).reduce((s,v)=>s+v, 0);
+  const sorted = Object.entries(cats).sort((a,b)=>b[1]-a[1]);
+
+  // SVG donut
+  const cx = 65, cy = 65, r = 50, stroke = 22;
+  const circumference = 2 * Math.PI * r;
+  let offset = 0;
+  let paths = '';
+  sorted.forEach(([key, count]) => {
+    const pct = count / total;
+    const dash = pct * circumference;
+    const gap = circumference - dash;
+    paths += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none"
+      stroke="${colors[key]||'#9AA5B4'}" stroke-width="${stroke}"
+      stroke-dasharray="${dash} ${gap}"
+      stroke-dashoffset="${-offset + circumference/4}"
+      style="transition: stroke-dasharray 0.5s ease"/>`;
+    offset += dash;
+  });
+  const svg = document.getElementById('donutSvg');
+  svg.innerHTML = paths + `
+    <text x="${cx}" y="${cy-6}" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-size="22" font-weight="700" fill="#1A2332">${total}</text>
+    <text x="${cx}" y="${cy+12}" text-anchor="middle" font-family="Barlow,sans-serif" font-size="10" fill="#9AA5B4">TOTAL</text>`;
+
+  // Legend
+  const legend = document.getElementById('donutLegend');
+  legend.innerHTML = sorted.map(([key, count]) => `
+    <div class="legend-item">
+      <div class="legend-dot" style="background:${colors[key]||'#9AA5B4'}"></div>
+      <div class="legend-name">${key}</div>
+      <div class="legend-pct">${count} <span style="color:var(--gray-400);font-weight:400">(${Math.round(count/total*100)}%)</span></div>
+    </div>`).join('');
+}
+
+// ───────────── DETAIL MODAL ─────────────
+function openDetail(id) {
+  const r = allRecords.find(x => x.id === id);
+  if (!r) return;
+
+  document.getElementById('detailTitle').textContent = `Report #${r.id}`;
+  document.getElementById('detailSub').textContent = `${formatDate(r.date)} · ${r.reporter || 'Unknown Reporter'}`;
+
+  const val = (v) => v ? `<div class="detail-field-value">${esc(v)}</div>` : `<div class="detail-field-value empty">—</div>`;
+
+  let html = `
+    <div class="detail-section">
+      <div class="detail-section-label">Overview</div>
+      <div class="detail-grid">
+        <div class="detail-field"><div class="detail-field-label">Reporter</div>${val(r.reporter)}</div>
+        <div class="detail-field"><div class="detail-field-label">Date Found</div>${val(formatDate(r.date))}</div>
+        <div class="detail-field"><div class="detail-field-label">Issue Type</div><div class="detail-field-value">${typeChip(r.issueType)}</div></div>
+        <div class="detail-field"><div class="detail-field-label">Category</div><div class="detail-field-value">${catChip(r.category)}</div></div>
+      </div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-section-label">Inventory Info</div>
+      <div class="detail-grid">
+        <div class="detail-field"><div class="detail-field-label">SKU</div>${val(r.sku)}</div>
+        <div class="detail-field"><div class="detail-field-label">Affected Quantity</div>${val(r.quantity)}</div>
+        <div class="detail-field"><div class="detail-field-label">Location</div>${val(r.location)}</div>
+        <div class="detail-field"><div class="detail-field-label">Warehouse Task #</div>${val(r.warehouseTask)}</div>
+      </div>
+    </div>`;
+
+  if (r.poNumber || r.inboundDelivery) {
+    html += `
+    <div class="detail-section">
+      <div class="detail-section-label">Receiving Details</div>
+      <div class="detail-grid">
+        <div class="detail-field"><div class="detail-field-label">Purchase Order #</div>${val(r.poNumber)}</div>
+        <div class="detail-field"><div class="detail-field-label">Inbound Delivery #</div>${val(r.inboundDelivery)}</div>
+      </div>
+    </div>`;
+  }
+
+  if (r.picker || r.pullId) {
+    html += `
+    <div class="detail-section">
+      <div class="detail-section-label">Picking Details</div>
+      <div class="detail-grid">
+        <div class="detail-field"><div class="detail-field-label">Picker</div>${val(r.picker)}</div>
+        <div class="detail-field"><div class="detail-field-label">Pull ID</div>${val(r.pullId)}</div>
+      </div>
+    </div>`;
+  }
+
+  html += `
+    <div class="detail-section">
+      <div class="detail-section-label">Notes</div>
+      <div class="detail-notes">${r.notes ? esc(r.notes) : '<span style="color:var(--gray-400);font-style:italic">No notes provided.</span>'}</div>
+    </div>`;
+
+  document.getElementById('detailBody').innerHTML = html;
+  openModal('detailModal');
+}
+
+// ───────────── FORM LOGIC ─────────────
+function handleTypeChange() {
+  const val = document.getElementById('f_issueType').value;
+  const showReceiving = val === 'This is a receiving issue.' || val === 'This issue was found during an audit.';
+  const showPicking = val === 'This issue was found during picking.';
+  document.getElementById('section_receiving').style.display = showReceiving ? 'block' : 'none';
+  document.getElementById('section_picking').style.display = showPicking ? 'block' : 'none';
+}
+
+function openNewEntry() {
+  document.getElementById('entryForm').reset();
+  document.getElementById('f_date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('section_receiving').style.display = 'none';
+  document.getElementById('section_picking').style.display = 'none';
+  clearErrors();
+  document.getElementById('formModalTitle').textContent = 'New Inventory Discrepancy';
+  openModal('formModal');
+}
+
+function clearErrors() {
+  ['reporter','date','issueType','sku','quantity','category'].forEach(f => {
+    const el = document.getElementById('err_' + f);
+    if (el) el.textContent = '';
+    const inp = document.getElementById('f_' + f);
+    if (inp) inp.classList.remove('error');
+  });
+}
+
+function validateForm() {
+  clearErrors();
+  let valid = true;
+  const required = [
+    ['f_reporter', 'err_reporter', 'Reporter name is required.'],
+    ['f_date', 'err_date', 'Date is required.'],
+    ['f_issueType', 'err_issueType', 'Issue type is required.'],
+    ['f_sku', 'err_sku', 'SKU is required.'],
+    ['f_quantity', 'err_quantity', 'Affected quantity is required.'],
+    ['f_category', 'err_category', 'Category is required.'],
+  ];
+  required.forEach(([fid, eid, msg]) => {
+    const el = document.getElementById(fid);
+    if (!el.value.trim()) {
+      document.getElementById(eid).textContent = msg;
+      el.classList.add('error');
+      valid = false;
+    }
+  });
+  return valid;
+}
+
+async function submitForm(e) {
+  e.preventDefault();
+  if (!validateForm()) return;
+
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Submitting…';
+
+  const record = {
+    id: getNextId(),
+    reporter: document.getElementById('f_reporter').value.trim(),
+    date: document.getElementById('f_date').value,
+    issueType: document.getElementById('f_issueType').value,
+    poNumber: document.getElementById('f_poNumber').value.trim(),
+    inboundDelivery: document.getElementById('f_inboundDelivery').value.trim(),
+    picker: document.getElementById('f_picker').value.trim(),
+    pullId: document.getElementById('f_pullId').value.trim(),
+    location: document.getElementById('f_location').value.trim(),
+    warehouseTask: document.getElementById('f_warehouseTask').value.trim(),
+    sku: document.getElementById('f_sku').value.trim(),
+    quantity: document.getElementById('f_quantity').value.trim(),
+    category: document.getElementById('f_category').value,
+    notes: document.getElementById('f_notes').value.trim(),
+  };
+
+  // Save locally first
+  allRecords.push(record);
+  saveLocal();
+  applyFilters();
+  renderCharts();
+  renderKpis();
+  closeModal('formModal');
+  showToast('Report #' + record.id + ' submitted successfully.', 'success');
+
+  // If GAS URL configured, also send to sheet
+  if (GAS_URL) {
+    await sendToGas(record);
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = 'Submit Report';
+}
+
+// ───────────── GOOGLE APPS SCRIPT INTEGRATION ─────────────
+async function sendToGas(record) {
+  setSyncStatus('Syncing…', 'syncing');
+  try {
+    const payload = encodeURIComponent(JSON.stringify({ action: 'append', record }));
+    const resp = await fetch(`${GAS_URL}?payload=${payload}`, { redirect: 'follow' });
+    const data = await resp.json();
+    if (data.status === 'ok') {
+      setSyncStatus('Synced', 'ok');
+    } else {
+      setSyncStatus('Sync error', 'error');
+      console.warn('GAS error:', data);
+    }
+  } catch(err) {
+    setSyncStatus('Offline — saved locally', 'error');
+    console.warn('GAS fetch failed:', err);
+  }
+}
+
+async function checkGasConnection() {
+  setSyncStatus('Connecting…', 'syncing');
+  try {
+    const resp = await fetch(`${GAS_URL}?payload=${encodeURIComponent(JSON.stringify({action:'ping'}))}`, { redirect: 'follow' });
+    const data = await resp.json();
+    if (data.status === 'ok') setSyncStatus('Connected', 'ok');
+    else setSyncStatus('GAS error', 'error');
+  } catch(e) {
+    setSyncStatus('Not connected', 'error');
+  }
+}
+
+function setSyncStatus(text, state) {
+  document.getElementById('syncText').textContent = text;
+  const dot = document.getElementById('syncDot');
+  dot.className = 'sync-dot';
+  if (state === 'syncing') dot.classList.add('syncing');
+  if (state === 'error') dot.classList.add('error');
+}
+
+// ───────────── MODAL ─────────────
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+  document.body.style.overflow = '';
+}
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeModal(overlay.id);
+  });
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    ['formModal','detailModal'].forEach(id => closeModal(id));
+  }
+});
+
+// ───────────── TOAST ─────────────
+let toastTimer;
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  clearTimeout(toastTimer);
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+// ───────────── HELPERS ─────────────
+function esc(s) {
+  if (!s && s !== 0) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function formatDate(d) {
+  if (!d) return '—';
+  try {
+    const [y,m,day] = d.split('-');
+    return `${m}/${day}/${y}`;
+  } catch(e) { return d; }
+}
+
+function catChip(cat) {
+  const map = {
+    'Inventory Overage': ['overage','Overage'],
+    'Inventory Shortage': ['shortage','Shortage'],
+    'Damaged Inventory': ['damaged','Damaged'],
+    'Improper Packaging': ['packaging','Packaging'],
+    'Broken Seal (Open Carton)': ['seal','Broken Seal'],
+  };
+  const [cls, label] = map[cat] || ['unknown', cat || 'Uncategorized'];
+  return `<span class="cat-badge ${cls}">${label}</span>`;
+}
+
+function typeChip(type) {
+  const map = {
+    'This is a receiving issue.': ['receiving','Receiving'],
+    'This issue is with existing inventory.': ['existing','Existing Inv.'],
+    'This issue was found during picking.': ['picking','Picking'],
+    'This issue was found during an audit.': ['audit','Audit'],
+  };
+  const [cls, label] = map[type] || ['','Unknown'];
+  return `<span class="type-badge ${cls}">${label}</span>`;
+}
+</script>
+</body>
+</html>

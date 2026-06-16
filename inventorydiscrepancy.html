@@ -938,12 +938,13 @@ async function loadData() {
       const merged = [...parsed];
       SEED_DATA.forEach(r => { if (!storedIds.has(r.id)) merged.push(r); });
       merged.sort((a,b) => a.id - b.id);
-      allRecords = merged;
+      allRecords = sanitizeDates(merged); // fix any cached malformed dates
     } catch(e) { allRecords = [...SEED_DATA]; }
   } else {
     allRecords = [...SEED_DATA];
     saveLocal();
   }
+  saveLocal(); // persist sanitized dates back to cache
   applyFilters();
   renderCharts();
   renderKpis();
@@ -957,7 +958,7 @@ async function loadData() {
       if (data.status === 'ok' && Array.isArray(data.records) && data.records.length) {
         const localIds = new Set(allRecords.map(r => r.id));
         let changed = false;
-        data.records.forEach(r => {
+        sanitizeDates(data.records).forEach(r => {
           if (!localIds.has(r.id)) { allRecords.push(r); changed = true; }
         });
         if (changed) {
@@ -970,6 +971,27 @@ async function loadData() {
       }
     } catch(e) { /* GAS unreachable — stay with local data */ }
   }
+}
+
+function sanitizeDates(records) {
+  // Fix any malformed date strings cached before the GAS fix.
+  records.forEach(r => {
+    if (r.date) {
+      const iso = String(r.date).match(/(\d{4})-(\d{2})-(\d{2})/);
+      if (iso) {
+        r.date = iso[1] + '-' + iso[2] + '-' + iso[3];
+      } else {
+        const dt = new Date(r.date);
+        if (!isNaN(dt)) {
+          const y = dt.getFullYear();
+          const m = String(dt.getMonth() + 1).padStart(2, '0');
+          const d = String(dt.getDate()).padStart(2, '0');
+          r.date = y + '-' + m + '-' + d;
+        }
+      }
+    }
+  });
+  return records;
 }
 
 function saveLocal() {
@@ -1439,9 +1461,19 @@ function esc(s) {
 function formatDate(d) {
   if (!d) return '—';
   try {
-    const [y,m,day] = d.split('-');
-    return `${m}/${day}/${y}`;
-  } catch(e) { return d; }
+    // Try clean YYYY-MM-DD first
+    const iso = String(d).match(/(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) return `${iso[2]}/${iso[3]}/${iso[1]}`;
+    // Fallback: parse as Date object and extract parts
+    const dt = new Date(d);
+    if (!isNaN(dt)) {
+      const m = String(dt.getMonth() + 1).padStart(2, '0');
+      const day = String(dt.getDate()).padStart(2, '0');
+      const y = dt.getFullYear();
+      return `${m}/${day}/${y}`;
+    }
+    return '—';
+  } catch(e) { return '—'; }
 }
 
 function catChip(cat) {

@@ -949,20 +949,28 @@ async function loadData() {
   renderCharts();
   renderKpis();
 
-  // Step 2: Fetch live records from GAS and merge in anything not already local
+  // Step 2: Fetch live records from GAS — GAS is authoritative.
+  // Any record in GAS replaces the local copy (handles ID conflicts with seed data).
+  // Records only in localStorage (submitted offline) are kept.
   if (GAS_URL) {
     try {
       const payload = encodeURIComponent(JSON.stringify({ action: 'getAll' }));
       const resp = await fetch(`${GAS_URL}?payload=${payload}`, { redirect: 'follow' });
       const data = await resp.json();
       if (data.status === 'ok' && Array.isArray(data.records) && data.records.length) {
-        const localIds = new Set(allRecords.map(r => r.id));
-        let changed = false;
-        sanitizeDates(data.records).forEach(r => {
-          if (!localIds.has(r.id)) { allRecords.push(r); changed = true; }
-        });
-        if (changed) {
-          allRecords.sort((a,b) => a.id - b.id);
+        const gasRecords = sanitizeDates(data.records);
+        const gasIds = new Set(gasRecords.map(r => r.id));
+        // Keep local-only records (e.g. submitted while offline), discard local
+        // copies of anything GAS has (GAS version wins to resolve ID conflicts)
+        const localOnly = allRecords.filter(r => !gasIds.has(r.id));
+        const merged = [...gasRecords, ...localOnly];
+        merged.sort((a,b) => a.id - b.id);
+        const prevCount = allRecords.length;
+        allRecords = merged;
+        if (allRecords.length !== prevCount || gasRecords.length > 0) {
+          // Persist the highest GAS ID so getNextId() can't collide even before next sync
+          const gasMax = Math.max(...gasRecords.map(r => r.id));
+          localStorage.setItem('ceva_wh_max_id', String(gasMax));
           saveLocal();
           applyFilters();
           renderCharts();
@@ -999,7 +1007,10 @@ function saveLocal() {
 }
 
 function getNextId() {
-  return allRecords.length > 0 ? Math.max(...allRecords.map(r => r.id)) + 1 : 1;
+  // Use the highest ID across all known records (local + GAS) to prevent collisions
+  const localMax = allRecords.length > 0 ? Math.max(...allRecords.map(r => r.id)) : 0;
+  const storedMax = parseInt(localStorage.getItem('ceva_wh_max_id') || '0', 10);
+  return Math.max(localMax, storedMax) + 1;
 }
 
 // ───────────── FILTERS & SORT ─────────────

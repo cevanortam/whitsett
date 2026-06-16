@@ -928,22 +928,17 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-function loadData() {
-  // Load from localStorage if available, otherwise use seed
+async function loadData() {
+  // Step 1: Render immediately from localStorage (or seed) so page isn't blank
   const stored = localStorage.getItem('ceva_wh_inv_records');
   if (stored) {
     try {
       const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed) && parsed.length >= SEED_DATA.length) {
-        allRecords = parsed;
-      } else {
-        // Merge: stored + any seed records not in stored
-        const storedIds = new Set(parsed.map(r => r.id));
-        const merged = [...parsed];
-        SEED_DATA.forEach(r => { if (!storedIds.has(r.id)) merged.push(r); });
-        merged.sort((a,b) => a.id - b.id);
-        allRecords = merged;
-      }
+      const storedIds = new Set(parsed.map(r => r.id));
+      const merged = [...parsed];
+      SEED_DATA.forEach(r => { if (!storedIds.has(r.id)) merged.push(r); });
+      merged.sort((a,b) => a.id - b.id);
+      allRecords = merged;
     } catch(e) { allRecords = [...SEED_DATA]; }
   } else {
     allRecords = [...SEED_DATA];
@@ -952,6 +947,29 @@ function loadData() {
   applyFilters();
   renderCharts();
   renderKpis();
+
+  // Step 2: Fetch live records from GAS and merge in anything not already local
+  if (GAS_URL) {
+    try {
+      const payload = encodeURIComponent(JSON.stringify({ action: 'getAll' }));
+      const resp = await fetch(`${GAS_URL}?payload=${payload}`, { redirect: 'follow' });
+      const data = await resp.json();
+      if (data.status === 'ok' && Array.isArray(data.records) && data.records.length) {
+        const localIds = new Set(allRecords.map(r => r.id));
+        let changed = false;
+        data.records.forEach(r => {
+          if (!localIds.has(r.id)) { allRecords.push(r); changed = true; }
+        });
+        if (changed) {
+          allRecords.sort((a,b) => a.id - b.id);
+          saveLocal();
+          applyFilters();
+          renderCharts();
+          renderKpis();
+        }
+      }
+    } catch(e) { /* GAS unreachable — stay with local data */ }
+  }
 }
 
 function saveLocal() {

@@ -9,6 +9,25 @@
 <style>
 
 /* ================= MERIDIAN SHELL (hamburger + module switcher) ================= */
+
+/* -- Sheets sync indicator (shown while a save/load to the Google Sheet backend
+      is in flight, so a slow round trip doesn't look like the page is frozen) -- */
+.meridian-sync-indicator{
+  position:fixed; top:14px; right:18px; z-index:600;
+  display:none; align-items:center; gap:8px;
+  background:var(--panel); border:1px solid var(--border); border-radius:20px;
+  padding:7px 14px 7px 10px; box-shadow:0 8px 24px rgba(0,0,0,0.35);
+  font-family:var(--mono); font-size:11.5px; color:var(--muted); letter-spacing:0.3px;
+  pointer-events:none;
+}
+.meridian-sync-indicator.show{ display:flex; }
+.meridian-sync-spinner{
+  width:13px; height:13px; border-radius:50%; flex:none;
+  border:2px solid var(--border); border-top-color:var(--amber);
+  animation:meridian-spin 0.7s linear infinite;
+}
+@keyframes meridian-spin{ to{ transform:rotate(360deg); } }
+
 .hamburger-btn{
   background:transparent;border:1px solid var(--border);color:var(--text);
   border-radius:7px;width:34px;height:34px;flex:none;display:flex;align-items:center;justify-content:center;
@@ -572,6 +591,11 @@
 </head>
 <body>
 
+<div class="meridian-sync-indicator" id="meridianSyncIndicator">
+  <span class="meridian-sync-spinner"></span>
+  <span id="meridianSyncIndicatorText">Syncing to Sheet…</span>
+</div>
+
 <div class="meridian-nav-overlay" id="meridianNavOverlay"></div>
 <div class="meridian-nav-panel" id="meridianNavPanel">
   <div class="meridian-nav-head">Meridian</div>
@@ -1075,6 +1099,83 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 /* ====================== END XLSX LIBRARY ====================== */
 </script>
 <script>
+/* ====================== SHEETS SYNC (shared) ======================
+   Generic key/value bridge to the Apps Script backend so this dashboard's
+   local persistence (localStorage) also mirrors to a Google Sheet and
+   can be picked up on a different PC/browser. Every existing localStorage
+   key keeps working exactly as before — this only adds a background sync
+   on top of it. */
+(function(){
+  "use strict";
+  var SYNC_URL = "https://script.google.com/macros/s/AKfycbwC6e88T8u5SaEFFtPrT2SNxSz1EaJPvBlFQboVbzEU9BCIYLEXaCBHE4Q8_nCP6OIi/exec";
+
+  /* -- visual "syncing" indicator --
+     Shown while any request to the Sheet is in flight, so a slow save/load
+     (large uploads, cold Apps Script starts, etc.) reads as "working" rather
+     than frozen. Delayed slightly so quick round trips don't just flash. */
+  var inFlight = 0;
+  var showTimer = null;
+  function syncBegin(label){
+    inFlight++;
+    var el = document.getElementById("meridianSyncIndicator");
+    var textEl = document.getElementById("meridianSyncIndicatorText");
+    if(textEl) textEl.textContent = label || "Syncing to Sheet…";
+    if(el && !showTimer && !el.classList.contains("show")){
+      showTimer = setTimeout(function(){ el.classList.add("show"); showTimer = null; }, 200);
+    }
+  }
+  function syncEnd(){
+    inFlight = Math.max(0, inFlight - 1);
+    if(inFlight === 0){
+      if(showTimer){ clearTimeout(showTimer); showTimer = null; }
+      var el = document.getElementById("meridianSyncIndicator");
+      if(el) el.classList.remove("show");
+    }
+  }
+
+  function getAll(){
+    syncBegin("Loading from Sheet…");
+    return fetch(SYNC_URL + "?action=getAll")
+      .then(function(r){
+        return r.text().then(function(text){
+          if(!r.ok) throw new Error("HTTP " + r.status + ": " + text.slice(0,300));
+          var j;
+          try{ j = JSON.parse(text); }
+          catch(e){ throw new Error("Non-JSON response: " + text.slice(0,300)); }
+          if(j.status !== "ok") throw new Error("Backend error: " + j.message);
+          return j.data;
+        });
+      })
+      .catch(function(err){ console.error("[MeridianSync] getAll failed:", err.message || err); return {}; })
+      .finally(function(){ syncEnd(); });
+  }
+
+  function save(key, value){
+    syncBegin("Saving to Sheet…");
+    return fetch(SYNC_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" }, // avoids CORS preflight
+      body: JSON.stringify({ key: key, value: value })
+    })
+      .then(function(r){
+        return r.text().then(function(text){
+          if(!r.ok) throw new Error("HTTP " + r.status + ": " + text.slice(0,300));
+          var j;
+          try{ j = JSON.parse(text); }
+          catch(e){ throw new Error("Non-JSON response: " + text.slice(0,300)); }
+          if(j.status !== "ok") throw new Error("Backend error: " + j.message);
+          console.log("[MeridianSync] saved " + key + " (" + value.length + " chars)");
+          return j;
+        });
+      })
+      .catch(function(err){ console.error("[MeridianSync] save FAILED for " + key + ":", err.message || err); return null; })
+      .finally(function(){ syncEnd(); });
+  }
+
+  window.MeridianSync = { getAll: getAll, save: save };
+})();
+</script>
+<script>
 /* ====================== PUTAWAY STATION APP ====================== */
 
 (function(){
@@ -1103,6 +1204,34 @@ function loadState(){
 function persist(key, val){
   try{ localStorage.setItem(key, JSON.stringify(val)); }
   catch(e){ toast('Storage full — try clearing old data.', true); }
+  if(window.MeridianSync) window.MeridianSync.save(key, JSON.stringify(val));
+}
+
+function syncFromSheet(){
+  if(!window.MeridianSync) return;
+  window.MeridianSync.getAll().then(function(data){
+    if(!data) return;
+    var changed = false;
+    if(data[LS.odoi] != null){
+      try{ DATA.odoi = JSON.parse(data[LS.odoi]); localStorage.setItem(LS.odoi, data[LS.odoi]); changed = true; }catch(e){}
+    }
+    if(data[LS.meta] != null){
+      try{ META = Object.assign(META, JSON.parse(data[LS.meta])); localStorage.setItem(LS.meta, data[LS.meta]); changed = true; }catch(e){}
+    }
+    if(data[LS.settings] != null){
+      try{ SETTINGS = Object.assign(SETTINGS, JSON.parse(data[LS.settings])); localStorage.setItem(LS.settings, data[LS.settings]); changed = true; }catch(e){}
+    }
+    if(data[LS.plan] != null){
+      try{ SLOTTING_PLAN = JSON.parse(data[LS.plan]); localStorage.setItem(LS.plan, data[LS.plan]); changed = true; }catch(e){}
+    }
+    if(data[LS.boms] != null){
+      try{ BOM_GROUPS = JSON.parse(data[LS.boms]); localStorage.setItem(LS.boms, data[LS.boms]); changed = true; }catch(e){}
+    }
+    if(changed){
+      computeDerived();
+      refreshUI();
+    }
+  });
 }
 
 /* =======================================================================
@@ -1620,6 +1749,11 @@ function init(){
   wireOverviewTable();
   wireHeatmap();
   wireSettings();
+  refreshUI();
+  syncFromSheet();
+}
+
+function refreshUI(){
   refreshDataStatus();
   renderPlanTable();
   renderBomTable();
@@ -2248,6 +2382,7 @@ document.addEventListener('input', e=>{
      localStorage is unavailable. */
   const LS_REGISTRY_KEY = "pickTicketStation:printedRegistry";
   const LS_COLUMNS_KEY = "pickTicketStation:columnOrder";
+  const LS_ROWS_KEY = "pickTicketStation:rows";
 
   function loadPrintedRegistry(){
     try{
@@ -2258,6 +2393,7 @@ document.addEventListener('input', e=>{
   function savePrintedRegistry(){
     try{ localStorage.setItem(LS_REGISTRY_KEY, JSON.stringify(printedRegistry)); }
     catch(e){ /* storage unavailable — continue without persistence */ }
+    if(window.MeridianSync) window.MeridianSync.save(LS_REGISTRY_KEY, JSON.stringify(printedRegistry));
   }
   function printKey(r){
     return (r.warehouseOrder||"").trim() + "::" + (r.warehouseTask||"").trim();
@@ -2284,6 +2420,7 @@ document.addEventListener('input', e=>{
   function saveColumnOrder(){
     try{ localStorage.setItem(LS_COLUMNS_KEY, JSON.stringify(columnOrder)); }
     catch(e){ /* storage unavailable — continue without persistence */ }
+    if(window.MeridianSync) window.MeridianSync.save(LS_COLUMNS_KEY, JSON.stringify(columnOrder));
   }
 
   const LS_PASSWORD_KEY = "pickTicketStation:overridePassword";
@@ -2294,13 +2431,81 @@ document.addEventListener('input', e=>{
     }catch(e){ return CONFIG.defaultPassword; }
   }
   function setOverridePassword(pw){
-    try{ localStorage.setItem(LS_PASSWORD_KEY, pw); return true; }
+    try{ localStorage.setItem(LS_PASSWORD_KEY, pw); }
     catch(e){ return false; }
+    if(window.MeridianSync) window.MeridianSync.save(LS_PASSWORD_KEY, pw);
+    return true;
+  }
+
+  /* ============== persistence of the imported ticket list itself ==============
+     Unlike the registry/columns/password above, the row list was previously
+     never saved anywhere (by original design — re-imported fresh each visit).
+     This mirrors it too, so the in-progress work queue survives a reload or
+     a switch to a different PC. */
+  function persistRows(){
+    let serialized;
+    try{ serialized = JSON.stringify(rows); }catch(e){ return; }
+    try{ localStorage.setItem(LS_ROWS_KEY, serialized); }
+    catch(e){ /* storage unavailable — continue without local persistence */ }
+    if(window.MeridianSync) window.MeridianSync.save(LS_ROWS_KEY, serialized);
+  }
+  function hydrateRow(r){
+    r.createdOn = r.createdOn ? new Date(r.createdOn) : null;
+    r.createdAt = r.createdAt ? new Date(r.createdAt) : null;
+    r.printedAt = r.printedAt ? new Date(r.printedAt) : null;
+    return r;
   }
 
   const printedRegistry = loadPrintedRegistry();
   const DEFAULT_COLUMN_ORDER = ["printed","pullId","created","warehouseOrder","warehouseTask","location","sku","description","qty","handlingUnit"];
   let columnOrder = loadColumnOrder();
+
+  function syncFromSheet(){
+    if(!window.MeridianSync) return;
+    window.MeridianSync.getAll().then(function(data){
+      if(!data) return;
+      var changed = false;
+      if(data[LS_REGISTRY_KEY] != null){
+        try{
+          const remoteRegistry = JSON.parse(data[LS_REGISTRY_KEY]);
+          Object.keys(printedRegistry).forEach(function(k){ delete printedRegistry[k]; });
+          Object.assign(printedRegistry, remoteRegistry);
+          localStorage.setItem(LS_REGISTRY_KEY, data[LS_REGISTRY_KEY]);
+          changed = true;
+        }catch(e){}
+      }
+      if(data[LS_COLUMNS_KEY] != null){
+        try{
+          const remoteOrder = JSON.parse(data[LS_COLUMNS_KEY]);
+          if(Array.isArray(remoteOrder) && remoteOrder.length === DEFAULT_COLUMN_ORDER.length && remoteOrder.every(function(k){ return DEFAULT_COLUMN_ORDER.includes(k); })){
+            columnOrder = remoteOrder;
+            localStorage.setItem(LS_COLUMNS_KEY, data[LS_COLUMNS_KEY]);
+            changed = true;
+          }
+        }catch(e){}
+      }
+      if(data[LS_PASSWORD_KEY] != null){
+        localStorage.setItem(LS_PASSWORD_KEY, data[LS_PASSWORD_KEY]);
+      }
+      if(data[LS_ROWS_KEY] != null && !rows.length){
+        try{
+          const remoteRows = JSON.parse(data[LS_ROWS_KEY]).map(hydrateRow);
+          if(remoteRows.length){
+            rows = remoteRows;
+            remoteRows.forEach(function(r){
+              const n = parseInt(String(r.id).replace(/^r/,""), 10);
+              if(!isNaN(n) && n >= idCounter) idCounter = n + 1;
+            });
+            localStorage.setItem(LS_ROWS_KEY, data[LS_ROWS_KEY]);
+            const pill = document.getElementById("dataSourcePillPT");
+            if(pill){ pill.textContent = "Restored from Sheet"; pill.classList.add("ok"); }
+            changed = true;
+          }
+        }catch(e){}
+      }
+      if(changed) render();
+    });
+  }
 
   let rows = [];
   let idCounter = 1;
@@ -2458,6 +2663,7 @@ document.addEventListener('input', e=>{
         fileStatusText.innerHTML = `<b>${esc(file.name)}</b><br>${parsed.length} tasks loaded`;
         dataSourcePill.textContent = file.name.length>28 ? file.name.slice(0,25)+"…" : file.name;
         dataSourcePill.classList.add("ok");
+        persistRows();
         render();
       }catch(err){
         fileStatus.classList.add("show","err");
@@ -2492,6 +2698,7 @@ document.addEventListener('input', e=>{
     dataSourcePill.textContent = "Sample data";
     dataSourcePill.classList.remove("ok");
     fileStatus.classList.remove("show");
+    persistRows();
     render();
   });
 
@@ -2500,6 +2707,7 @@ document.addEventListener('input', e=>{
     dataSourcePill.textContent = "No data loaded";
     dataSourcePill.classList.remove("ok");
     fileStatus.classList.remove("show");
+    persistRows();
     render();
   });
 
@@ -2673,6 +2881,7 @@ document.addEventListener('input', e=>{
         row.printed = !row.printed;
         row.printedAt = row.printed ? new Date() : null;
         if(row.printed) markPrintedInRegistry(row); else unmarkPrintedInRegistry(row);
+        persistRows();
         render();
       });
     });
@@ -2806,6 +3015,7 @@ document.addEventListener('input', e=>{
     });
     row.selected = true;
     rows.unshift(row);
+    persistRows();
     closeModal("entryModal");
     render();
   });
@@ -2912,6 +3122,7 @@ document.addEventListener('input', e=>{
       r.selected = false;
     });
     pendingPrintRows = [];
+    persistRows();
     closeModal("printConfirmModal");
     render();
   });
@@ -2923,6 +3134,7 @@ document.addEventListener('input', e=>{
   });
 
   render();
+  syncFromSheet();
 })();
 
 </script>

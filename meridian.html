@@ -10,7 +10,7 @@
 
 /* ================= MERIDIAN SHELL (hamburger + module switcher) ================= */
 
-/* -- Sheets sync indicator (shown while a save/load to the Google Sheet backend
+/* -- Sync indicator (shown while a save/load to the Firebase backend
       is in flight, so a slow round trip doesn't look like the page is frozen) -- */
 .meridian-sync-indicator{
   position:fixed; top:14px; right:18px; z-index:600;
@@ -600,7 +600,7 @@
 
 <div class="meridian-sync-indicator" id="meridianSyncIndicator">
   <span class="meridian-sync-spinner"></span>
-  <span id="meridianSyncIndicatorText">Syncing to Sheet…</span>
+  <span id="meridianSyncIndicatorText">Syncing to database…</span>
 </div>
 
 <div class="meridian-nav-overlay" id="meridianNavOverlay"></div>
@@ -1106,27 +1106,44 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 /* ====================== END XLSX LIBRARY ====================== */
 </script>
 <script>
-/* ====================== SHEETS SYNC (shared) ======================
-   Generic key/value bridge to the Apps Script backend so this dashboard's
-   local persistence (localStorage) also mirrors to a Google Sheet and
-   can be picked up on a different PC/browser. Every existing localStorage
-   key keeps working exactly as before — this only adds a background sync
-   on top of it. */
+/* ====================== FIREBASE SYNC (shared) ======================
+   Generic key/value bridge to Firebase Realtime Database so this
+   dashboard's local persistence (localStorage) also mirrors to the
+   cloud and can be picked up on a different PC/browser. Every existing
+   localStorage key keeps working exactly as before — this only swaps
+   what it mirrors to (previously a Google Sheet via Apps Script). */
 (function(){
   "use strict";
-  var SYNC_URL = "https://script.google.com/macros/s/AKfycbwC6e88T8u5SaEFFtPrT2SNxSz1EaJPvBlFQboVbzEU9BCIYLEXaCBHE4Q8_nCP6OIi/exec";
+
+  /* Firebase Realtime Database backend (replaces the old Google Sheet /
+     Apps Script bridge). All app data lives as flat key/value pairs
+     under one root node, using the exact same keys that used to be
+     used for localStorage and for the Sheet — so every other function
+     in this file (getAll/save consumers) needed zero changes. */
+  var FIREBASE_CONFIG = {
+    apiKey: "AIzaSyD5XWZCW5nj8jibjbQNndzXo0uBAZnUz7U",
+    authDomain: "meridian-6b010.firebaseapp.com",
+    databaseURL: "https://meridian-6b010-default-rtdb.firebaseio.com",
+    projectId: "meridian-6b010",
+    storageBucket: "meridian-6b010.firebasestorage.app",
+    messagingSenderId: "944428729274",
+    appId: "1:944428729274:web:523ef267d85c0c93505383",
+    measurementId: "G-E5C49DP145"
+  };
+  var DB_ROOT = "meridian";
+  var DB_URL = FIREBASE_CONFIG.databaseURL.replace(/\/$/, "") + "/" + DB_ROOT;
 
   /* -- visual "syncing" indicator --
-     Shown while any request to the Sheet is in flight, so a slow save/load
-     (large uploads, cold Apps Script starts, etc.) reads as "working" rather
-     than frozen. Delayed slightly so quick round trips don't just flash. */
+     Shown while any request to the database is in flight, so a slow
+     save/load reads as "working" rather than frozen. Delayed slightly
+     so quick round trips don't just flash. */
   var inFlight = 0;
   var showTimer = null;
   function syncBegin(label){
     inFlight++;
     var el = document.getElementById("meridianSyncIndicator");
     var textEl = document.getElementById("meridianSyncIndicatorText");
-    if(textEl) textEl.textContent = label || "Syncing to Sheet…";
+    if(textEl) textEl.textContent = label || "Syncing to database…";
     if(el && !showTimer && !el.classList.contains("show")){
       showTimer = setTimeout(function(){ el.classList.add("show"); showTimer = null; }, 200);
     }
@@ -1141,16 +1158,15 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   }
 
   function getAll(){
-    syncBegin("Loading from Sheet…");
-    return fetch(SYNC_URL + "?action=getAll")
+    syncBegin("Loading from database…");
+    return fetch(DB_URL + ".json")
       .then(function(r){
         return r.text().then(function(text){
           if(!r.ok) throw new Error("HTTP " + r.status + ": " + text.slice(0,300));
           var j;
           try{ j = JSON.parse(text); }
           catch(e){ throw new Error("Non-JSON response: " + text.slice(0,300)); }
-          if(j.status !== "ok") throw new Error("Backend error: " + j.message);
-          return j.data;
+          return j || {};
         });
       })
       .catch(function(err){ console.error("[MeridianSync] getAll failed:", err.message || err); return {}; })
@@ -1158,21 +1174,17 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   }
 
   function save(key, value){
-    syncBegin("Saving to Sheet…");
-    return fetch(SYNC_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" }, // avoids CORS preflight
-      body: JSON.stringify({ key: key, value: value })
+    syncBegin("Saving to database…");
+    return fetch(DB_URL + "/" + encodeURIComponent(key) + ".json", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(value)
     })
       .then(function(r){
         return r.text().then(function(text){
           if(!r.ok) throw new Error("HTTP " + r.status + ": " + text.slice(0,300));
-          var j;
-          try{ j = JSON.parse(text); }
-          catch(e){ throw new Error("Non-JSON response: " + text.slice(0,300)); }
-          if(j.status !== "ok") throw new Error("Backend error: " + j.message);
           console.log("[MeridianSync] saved " + key + " (" + value.length + " chars)");
-          return j;
+          return { status: "ok" };
         });
       })
       .catch(function(err){ console.error("[MeridianSync] save FAILED for " + key + ":", err.message || err); return null; })

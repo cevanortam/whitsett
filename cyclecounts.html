@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cycle Count Tracker | CEVA Whitsett</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- Firebase (compat SDK, no build tools needed) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<style>
+  :root{
+    --navy:#003057;
+    --navy-dark:#00204E;
+    --red:#C8102E;
+    --gray-bg:#EEF1F5;
+    --card-bg:#FFFFFF;
+    --border:#DCE1E8;
+    --text:#1B2430;
+    --muted:#6B7686;
+    --amber:#B8860B;
+    --amber-bg:#FFF6E5;
+    --green:#1E7B45;
+    --green-bg:#E8F5EC;
+    --red-bg:#FDEAEC;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    font-family:'Barlow', sans-serif;
+    background:var(--gray-bg);
+    color:var(--text);
+    min-height:100vh;
+  }
+  header{
+    background:linear-gradient(135deg, var(--navy) 0%, var(--navy-dark) 100%);
+    color:#fff;
+    padding:18px 28px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:12px;
+    box-shadow:0 2px 8px rgba(0,0,0,0.15);
+  }
+  .header-left{display:flex; align-items:center; gap:14px;}
+  .logo-mark{
+    height:34px;
+    width:auto;
+    display:block;
+    flex-shrink:0;
+  }
+  .header-title h1{
+    font-family:'Barlow Condensed', sans-serif;
+    font-weight:700;
+    font-size:22px;
+    letter-spacing:0.3px;
+    line-height:1.1;
+  }
+  .header-title span{
+    font-size:12px;
+    color:#B9C7DA;
+    letter-spacing:0.5px;
+    text-transform:uppercase;
+  }
+  .btn{
+    font-family:'Barlow', sans-serif;
+    font-weight:600;
+    font-size:14px;
+    border:none;
+    border-radius:6px;
+    padding:10px 18px;
+    cursor:pointer;
+    transition:filter 0.15s, transform 0.1s;
+  }
+  .btn:active{transform:scale(0.97);}
+  .btn-primary{background:var(--red); color:#fff;}
+  .btn-primary:hover{filter:brightness(1.1);}
+  .btn-secondary{background:rgba(255,255,255,0.12); color:#fff; border:1px solid rgba(255,255,255,0.3);}
+  .btn-secondary:hover{background:rgba(255,255,255,0.22);}
+  .btn-outline{background:transparent; color:var(--navy); border:1px solid var(--border);}
+  .btn-outline:hover{background:var(--gray-bg);}
+
+  main{padding:24px 28px 60px;}
+
+  .stats-row{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));
+    gap:14px;
+    margin-bottom:24px;
+  }
+  .stat-card{
+    background:var(--card-bg);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:16px 18px;
+    border-top:4px solid var(--navy);
+  }
+  .stat-card.pending{border-top-color:var(--amber);}
+  .stat-card.complete{border-top-color:var(--green);}
+  .stat-card.discrepancy{border-top-color:var(--red);}
+  .stat-num{font-family:'Barlow Condensed', sans-serif; font-size:32px; font-weight:700; color:var(--navy);}
+  .stat-label{font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:0.4px; font-weight:600; margin-top:2px;}
+
+  .toolbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:12px;
+    margin-bottom:18px;
+  }
+  .search-box{
+    flex:1;
+    min-width:220px;
+    max-width:360px;
+    position:relative;
+  }
+  .search-box input{
+    width:100%;
+    padding:9px 12px 9px 34px;
+    border:1px solid var(--border);
+    border-radius:6px;
+    font-family:'Barlow', sans-serif;
+    font-size:14px;
+    background:#fff url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="%236B7686"><path d="M6.5 11a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9zm7.78 2.28-3.29-3.3a6 6 0 1 0-1.1 1.1l3.3 3.29a.78.78 0 0 0 1.1-1.1z"/></svg>') no-repeat 10px center;
+  }
+  .toolbar-actions{display:flex; gap:10px; flex-wrap:wrap;}
+
+  .board{
+    display:grid;
+    grid-template-columns:repeat(3, 1fr);
+    gap:18px;
+  }
+  @media (max-width:1000px){ .board{grid-template-columns:1fr;} }
+
+  .column{
+    background:rgba(255,255,255,0.4);
+    border-radius:10px;
+    padding:4px;
+  }
+  .column-header{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:10px 8px;
+    font-family:'Barlow Condensed', sans-serif;
+    font-weight:700;
+    font-size:16px;
+    text-transform:uppercase;
+    letter-spacing:0.4px;
+  }
+  .column-header .dot{width:10px; height:10px; border-radius:50%;}
+  .column.pending .dot{background:var(--amber);}
+  .column.complete .dot{background:var(--green);}
+  .column.discrepancy .dot{background:var(--red);}
+  .column-count{
+    margin-left:auto;
+    background:rgba(0,0,0,0.06);
+    border-radius:20px;
+    padding:2px 10px;
+    font-size:13px;
+    font-weight:600;
+    color:var(--muted);
+  }
+
+  .cards{display:flex; flex-direction:column; gap:10px; min-height:60px;}
+
+  .card{
+    background:var(--card-bg);
+    border:1px solid var(--border);
+    border-left:4px solid var(--amber);
+    border-radius:8px;
+    padding:14px 16px;
+    box-shadow:0 1px 3px rgba(0,0,0,0.04);
+    cursor:pointer;
+    transition:box-shadow 0.15s, transform 0.1s;
+  }
+  .card:hover{box-shadow:0 3px 10px rgba(0,0,0,0.08); transform:translateY(-1px);}
+  .column.complete .card{border-left-color:var(--green);}
+  .column.discrepancy .card{border-left-color:var(--red);}
+
+  .card-top{display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;}
+  .card-sku{font-family:'Barlow Condensed', sans-serif; font-weight:700; font-size:17px; color:var(--navy);}
+  .card-date{font-size:11px; color:var(--muted); font-weight:600;}
+  .card-row{display:flex; font-size:13px; margin-bottom:3px; color:var(--text);}
+  .card-row .lbl{color:var(--muted); width:88px; flex-shrink:0;}
+  .card-counts{
+    margin-top:8px;
+    padding-top:8px;
+    border-top:1px dashed var(--border);
+    display:flex;
+    gap:16px;
+    font-size:13px;
+  }
+  .card-counts b{font-family:'Barlow Condensed', sans-serif; font-size:15px;}
+  .variance-tag{
+    display:inline-block;
+    margin-top:6px;
+    font-size:11px;
+    font-weight:700;
+    padding:2px 8px;
+    border-radius:20px;
+    background:var(--red-bg);
+    color:var(--red);
+  }
+  .empty-msg{
+    text-align:center;
+    color:var(--muted);
+    font-size:13px;
+    padding:24px 10px;
+    font-style:italic;
+  }
+
+  /* Modal */
+  .overlay{
+    display:none;
+    position:fixed; inset:0;
+    background:rgba(0,32,78,0.55);
+    align-items:center; justify-content:center;
+    z-index:100;
+    padding:16px;
+  }
+  .overlay.show{display:flex;}
+  .modal{
+    background:#fff;
+    border-radius:12px;
+    width:100%;
+    max-width:460px;
+    max-height:90vh;
+    overflow-y:auto;
+    box-shadow:0 12px 40px rgba(0,0,0,0.25);
+  }
+  .modal-header{
+    background:var(--navy);
+    color:#fff;
+    padding:16px 20px;
+    border-radius:12px 12px 0 0;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .modal-header h2{font-family:'Barlow Condensed', sans-serif; font-size:19px; font-weight:700;}
+  .modal-close{background:none; border:none; color:#fff; font-size:22px; cursor:pointer; line-height:1;}
+  .modal-body{padding:20px;}
+  .field{margin-bottom:14px;}
+  .field label{
+    display:block;
+    font-size:12px;
+    font-weight:600;
+    color:var(--muted);
+    text-transform:uppercase;
+    letter-spacing:0.3px;
+    margin-bottom:5px;
+  }
+  .field input{
+    width:100%;
+    padding:9px 11px;
+    border:1px solid var(--border);
+    border-radius:6px;
+    font-family:'Barlow', sans-serif;
+    font-size:14px;
+  }
+  .field input:focus{outline:2px solid var(--navy); outline-offset:-1px;}
+  .two-col{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .modal-footer{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:14px 20px 20px;
+    gap:10px;
+  }
+  .readonly-box{
+    background:var(--gray-bg);
+    border-radius:8px;
+    padding:12px 14px;
+    margin-bottom:16px;
+    font-size:13px;
+  }
+  .readonly-box div{margin-bottom:3px;}
+  .readonly-box .lbl{color:var(--muted); display:inline-block; width:100px;}
+  .variance-preview{
+    margin-top:10px;
+    padding:10px 12px;
+    border-radius:8px;
+    font-size:13px;
+    font-weight:600;
+    display:none;
+  }
+  .variance-preview.show{display:block;}
+  .variance-preview.match{background:var(--green-bg); color:var(--green);}
+  .variance-preview.mismatch{background:var(--red-bg); color:var(--red);}
+
+  .conn-badge{
+    font-size:11px;
+    font-weight:600;
+    padding:4px 10px;
+    border-radius:20px;
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  .conn-badge .dot{width:7px; height:7px; border-radius:50%;}
+  .conn-badge.ok{background:rgba(30,123,69,0.15); color:#8fd6ac;}
+  .conn-badge.ok .dot{background:#4CD97B;}
+  .conn-badge.bad{background:rgba(200,16,46,0.2); color:#ffb3bf;}
+  .conn-badge.bad .dot{background:#ff5566;}
+
+  .setup-banner{
+    background:var(--red-bg);
+    border:1px solid var(--red);
+    color:var(--red);
+    border-radius:8px;
+    padding:14px 18px;
+    margin-bottom:20px;
+    font-size:13px;
+    line-height:1.5;
+  }
+  .setup-banner code{background:rgba(0,0,0,0.06); padding:1px 5px; border-radius:4px;}
+
+  .danger-link{
+    color:var(--red);
+    font-size:12px;
+    font-weight:600;
+    background:none;
+    border:none;
+    cursor:pointer;
+    text-decoration:underline;
+  }
+
+  .tabs{
+    display:flex;
+    gap:6px;
+    margin-bottom:20px;
+    border-bottom:1px solid var(--border);
+  }
+  .tab-btn{
+    background:none;
+    border:none;
+    padding:10px 4px;
+    margin-right:22px;
+    font-family:'Barlow Condensed', sans-serif;
+    font-weight:700;
+    font-size:15px;
+    letter-spacing:0.3px;
+    text-transform:uppercase;
+    color:var(--muted);
+    cursor:pointer;
+    border-bottom:3px solid transparent;
+    transition:color 0.15s, border-color 0.15s;
+  }
+  .tab-btn:hover{color:var(--navy);}
+  .tab-btn.active{color:var(--navy); border-bottom-color:var(--red);}
+  .view{display:none;}
+  .view.active{display:block;}
+
+  .archive-table-wrap{
+    background:var(--card-bg);
+    border:1px solid var(--border);
+    border-radius:10px;
+    overflow-x:auto;
+  }
+  table.archive-table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:13px;
+  }
+  table.archive-table th{
+    text-align:left;
+    background:var(--navy);
+    color:#fff;
+    padding:10px 14px;
+    font-family:'Barlow Condensed', sans-serif;
+    font-weight:600;
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:0.3px;
+    white-space:nowrap;
+  }
+  table.archive-table td{
+    padding:9px 14px;
+    border-bottom:1px solid var(--border);
+    white-space:nowrap;
+  }
+  table.archive-table tbody tr:hover{background:var(--gray-bg);}
+  .status-pill{
+    display:inline-block;
+    font-size:11px;
+    font-weight:700;
+    padding:2px 9px;
+    border-radius:20px;
+    text-transform:uppercase;
+  }
+  .status-pill.complete{background:var(--green-bg); color:var(--green);}
+  .status-pill.discrepancy{background:var(--red-bg); color:var(--red);}
+
+  .select-field{
+    width:100%;
+    padding:9px 11px;
+    border:1px solid var(--border);
+    border-radius:6px;
+    font-family:'Barlow', sans-serif;
+    font-size:14px;
+    background:#fff;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <img class="logo-mark" src="https://www.cevalogistics.com/_ipx/w_1200&f_webp/images-spx/x_large_picture/CEVA_WhiteRed.png" alt="CEVA Logistics">
+    <div class="header-title">
+      <h1>Cycle Count Tracker</h1>
+      <span>Whitsett, NC &nbsp;&middot;&nbsp; Manually Requested Counts</span>
+    </div>
+  </div>
+  <div style="display:flex; align-items:center; gap:12px;">
+    <span id="connBadge" class="conn-badge bad"><span class="dot"></span>Connecting...</span>
+    <button class="btn btn-primary" onclick="openInitiateModal()">+ New Cycle Count</button>
+  </div>
+</header>
+
+<main>
+
+  <div id="setupBanner" class="setup-banner" style="display:none;">
+    <strong>Firebase not configured yet.</strong> This dashboard is running with placeholder credentials, so nothing will save or sync. Replace the <code>firebaseConfig</code> object near the bottom of this file with your project's real config (from Firebase Console &rarr; Project Settings &rarr; Your apps), and make sure a Realtime Database has been created in test mode.
+  </div>
+
+  <div class="stats-row">
+    <div class="stat-card pending">
+      <div class="stat-num" id="statPending">0</div>
+      <div class="stat-label">Open / Pending</div>
+    </div>
+    <div class="stat-card complete">
+      <div class="stat-num" id="statComplete">0</div>
+      <div class="stat-label">Completed Today</div>
+    </div>
+    <div class="stat-card discrepancy">
+      <div class="stat-num" id="statDiscrepancy">0</div>
+      <div class="stat-label">Discrepancies Today</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" id="statArchive">0</div>
+      <div class="stat-label">Total Archived</div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" id="tabBtnBoard" onclick="switchTab('board')">Board</button>
+    <button class="tab-btn" id="tabBtnArchive" onclick="switchTab('archive')">Archive</button>
+  </div>
+
+  <!-- BOARD VIEW -->
+  <div class="view active" id="boardView">
+    <div class="toolbar">
+      <div class="search-box">
+        <input type="text" id="searchInput" placeholder="Search SKU, location, HU, or name..." oninput="renderBoard()">
+      </div>
+      <div class="toolbar-actions">
+        <button class="btn btn-outline" onclick="openPendingExportModal()">Export Pending</button>
+      </div>
+    </div>
+
+    <div class="board">
+      <div class="column pending">
+        <div class="column-header"><span class="dot"></span>Pending<span class="column-count" id="countPending">0</span></div>
+        <div class="cards" id="colPending"></div>
+      </div>
+      <div class="column complete">
+        <div class="column-header"><span class="dot"></span>Complete (Today)<span class="column-count" id="countComplete">0</span></div>
+        <div class="cards" id="colComplete"></div>
+      </div>
+      <div class="column discrepancy">
+        <div class="column-header"><span class="dot"></span>Discrepancy (Today)<span class="column-count" id="countDiscrepancy">0</span></div>
+        <div class="cards" id="colDiscrepancy"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ARCHIVE VIEW -->
+  <div class="view" id="archiveView">
+    <div class="toolbar">
+      <div class="search-box">
+        <input type="text" id="archiveSearchInput" placeholder="Search SKU, location, HU, or name..." oninput="renderArchive()">
+      </div>
+      <div class="toolbar-actions">
+        <button class="btn btn-outline" onclick="exportArchive()">Export Archive to Excel</button>
+      </div>
+    </div>
+    <div class="archive-table-wrap">
+      <table class="archive-table">
+        <thead>
+          <tr>
+            <th>Completed</th>
+            <th>Date Requested</th>
+            <th>Assigned To</th>
+            <th>Location</th>
+            <th>Handling Unit</th>
+            <th>SKU</th>
+            <th>Status</th>
+            <th>Count</th>
+            <th>System Count</th>
+            <th>Variance</th>
+          </tr>
+        </thead>
+        <tbody id="archiveBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<!-- Initiate Cycle Count Modal -->
+<div class="overlay" id="initiateOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>New Cycle Count</h2>
+      <button class="modal-close" onclick="closeModal('initiateOverlay')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Date</label>
+        <input type="date" id="f_date">
+      </div>
+      <div class="field">
+        <label>Cycle Count Assigned To</label>
+        <input type="text" id="f_assignedTo" placeholder="Name">
+      </div>
+      <div class="field">
+        <label>Location <span style="text-transform:none; font-weight:400;">(optional)</span></label>
+        <input type="text" id="f_location" placeholder="e.g. A-12-3">
+      </div>
+      <div class="two-col">
+        <div class="field">
+          <label>Handling Unit <span style="text-transform:none; font-weight:400;">(optional)</span></label>
+          <input type="text" id="f_hu" placeholder="HU #">
+        </div>
+        <div class="field">
+          <label>SKU</label>
+          <input type="text" id="f_sku" placeholder="SKU">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('initiateOverlay')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitInitiate()">Create Cycle Count</button>
+    </div>
+  </div>
+</div>
+
+<!-- Complete Cycle Count Modal -->
+<div class="overlay" id="completeOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Complete Cycle Count</h2>
+      <button class="modal-close" onclick="closeModal('completeOverlay')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="readonly-box" id="completeReadonly"></div>
+      <div class="two-col">
+        <div class="field">
+          <label>Count</label>
+          <input type="number" id="f_count" placeholder="0" oninput="previewVariance()">
+        </div>
+        <div class="field">
+          <label>System Count</label>
+          <input type="number" id="f_systemCount" placeholder="0" oninput="previewVariance()">
+        </div>
+      </div>
+      <div class="variance-preview" id="variancePreview"></div>
+    </div>
+    <div class="modal-footer" style="justify-content:flex-end;">
+      <button class="btn btn-primary" onclick="submitComplete()">Save Count</button>
+    </div>
+  </div>
+</div>
+
+<!-- Export Pending Modal -->
+<div class="overlay" id="pendingExportOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Export Pending Counts</h2>
+      <button class="modal-close" onclick="closeModal('pendingExportOverlay')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Assigned To</label>
+        <select class="select-field" id="pendingExportFilter">
+          <option value="">All Assigned Users</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer" style="justify-content:flex-end;">
+      <button class="btn btn-outline" onclick="closeModal('pendingExportOverlay')">Cancel</button>
+      <button class="btn btn-primary" onclick="exportPending()">Export to Excel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ============================================================
+  // FIREBASE CONFIG — replace with your project's real config
+  // (Firebase Console → Project Settings → Your apps → Web app)
+  // ============================================================
+  const firebaseConfig = {
+    apiKey: "AIzaSyBAcAK0z5N9Cw9gRtdH9WA_7v_NyKPKJMs",
+    authDomain: "whitsett-cycle-counts.firebaseapp.com",
+    databaseURL: "https://whitsett-cycle-counts-default-rtdb.firebaseio.com",
+    projectId: "whitsett-cycle-counts",
+    storageBucket: "whitsett-cycle-counts.firebasestorage.app",
+    messagingSenderId: "960015809565",
+    appId: "1:960015809565:web:6bcc50b9cb411b959c1af4"
+  };
+
+  const isPlaceholder = firebaseConfig.apiKey === "REPLACE_ME";
+  if (isPlaceholder) {
+    document.getElementById('setupBanner').style.display = 'block';
+  }
+
+  let db = null;
+  let records = {}; // id -> record
+  let currentEditId = null;
+
+  function setConnBadge(ok, label){
+    const el = document.getElementById('connBadge');
+    el.className = 'conn-badge ' + (ok ? 'ok' : 'bad');
+    el.innerHTML = '<span class="dot"></span>' + label;
+  }
+
+  if (!isPlaceholder) {
+    try {
+      firebase.initializeApp(firebaseConfig);
+      db = firebase.database();
+
+      // Live connection state
+      db.ref('.info/connected').on('value', (snap) => {
+        setConnBadge(snap.val() === true, snap.val() === true ? 'Live' : 'Offline');
+      });
+
+      db.ref('cycleCounts').on('value', (snap) => {
+        records = snap.val() || {};
+        renderBoard();
+        renderArchive();
+      }, (err) => {
+        console.error(err);
+        setConnBadge(false, 'Error');
+      });
+    } catch (e) {
+      console.error(e);
+      setConnBadge(false, 'Config Error');
+    }
+  } else {
+    setConnBadge(false, 'Not Configured');
+  }
+
+  // ---------- Helpers ----------
+  function fmtDate(d){
+    if(!d) return '';
+    const parts = d.split('-');
+    if(parts.length !== 3) return d;
+    return parts[1] + '/' + parts[2] + '/' + parts[0];
+  }
+
+  function statusOf(rec){
+    if (rec.count === undefined || rec.count === null || rec.count === '' ||
+        rec.systemCount === undefined || rec.systemCount === null || rec.systemCount === '') {
+      return 'pending';
+    }
+    return (Number(rec.count) === Number(rec.systemCount)) ? 'complete' : 'discrepancy';
+  }
+
+  function isToday(ts){
+    if (!ts) return false;
+    const d = new Date(ts);
+    const now = new Date();
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  }
+
+  // ---------- Tabs ----------
+  function switchTab(tab){
+    document.getElementById('boardView').classList.toggle('active', tab === 'board');
+    document.getElementById('archiveView').classList.toggle('active', tab === 'archive');
+    document.getElementById('tabBtnBoard').classList.toggle('active', tab === 'board');
+    document.getElementById('tabBtnArchive').classList.toggle('active', tab === 'archive');
+    location.hash = tab;
+    if (tab === 'archive') renderArchive();
+  }
+  window.addEventListener('hashchange', () => {
+    const tab = location.hash.replace('#','') || 'board';
+    switchTab(tab === 'archive' ? 'archive' : 'board');
+  });
+
+  // ---------- Rendering ----------
+  function renderBoard(){
+    const search = document.getElementById('searchInput').value.trim().toLowerCase();
+    const cols = { pending: [], complete: [], discrepancy: [] };
+    let archiveCount = 0;
+
+    Object.keys(records).forEach(id => {
+      const rec = records[id];
+      const status = statusOf(rec);
+
+      if (status !== 'pending') {
+        archiveCount++;
+        // Board only shows today's completions; older ones live in the Archive tab
+        if (!isToday(rec.completedAt)) return;
+      }
+
+      const haystack = [rec.sku, rec.location, rec.handlingUnit, rec.assignedTo].join(' ').toLowerCase();
+      if (search && !haystack.includes(search)) return;
+      cols[status].push({ id, ...rec });
+    });
+
+    // sort: newest first
+    Object.keys(cols).forEach(k => cols[k].sort((a,b) => (b.createdAt||0) - (a.createdAt||0)));
+
+    renderColumn('colPending', 'countPending', cols.pending, 'pending');
+    renderColumn('colComplete', 'countComplete', cols.complete, 'complete');
+    renderColumn('colDiscrepancy', 'countDiscrepancy', cols.discrepancy, 'discrepancy');
+
+    document.getElementById('statPending').textContent = cols.pending.length;
+    document.getElementById('statComplete').textContent = cols.complete.length;
+    document.getElementById('statDiscrepancy').textContent = cols.discrepancy.length;
+    document.getElementById('statArchive').textContent = archiveCount;
+  }
+
+  function renderArchive(){
+    const search = document.getElementById('archiveSearchInput').value.trim().toLowerCase();
+    const rows = [];
+
+    Object.keys(records).forEach(id => {
+      const rec = records[id];
+      const status = statusOf(rec);
+      if (status === 'pending') return;
+      const haystack = [rec.sku, rec.location, rec.handlingUnit, rec.assignedTo].join(' ').toLowerCase();
+      if (search && !haystack.includes(search)) return;
+      rows.push({ id, ...rec, status });
+    });
+
+    rows.sort((a,b) => (b.completedAt||0) - (a.completedAt||0));
+
+    const tbody = document.getElementById('archiveBody');
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:var(--muted); padding:20px; font-style:italic;">No completed cycle counts yet</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = rows.map(rec => {
+      const variance = Number(rec.count) - Number(rec.systemCount);
+      const completedStr = rec.completedAt ? new Date(rec.completedAt).toLocaleString() : '';
+      return `
+        <tr>
+          <td>${completedStr}</td>
+          <td>${fmtDate(rec.date)}</td>
+          <td>${escapeHtml(rec.assignedTo)}</td>
+          <td>${escapeHtml(rec.location)}</td>
+          <td>${escapeHtml(rec.handlingUnit)}</td>
+          <td>${escapeHtml(rec.sku)}</td>
+          <td><span class="status-pill ${rec.status}">${rec.status}</span></td>
+          <td>${escapeHtml(rec.count)}</td>
+          <td>${escapeHtml(rec.systemCount)}</td>
+          <td>${variance > 0 ? '+' : ''}${variance}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  function renderColumn(colId, countId, items, status){
+    const col = document.getElementById(colId);
+    document.getElementById(countId).textContent = items.length;
+
+    if (items.length === 0) {
+      col.innerHTML = '<div class="empty-msg">No cycle counts here</div>';
+      return;
+    }
+
+    col.innerHTML = items.map(rec => {
+      let countsHtml = '';
+      let varianceTag = '';
+      if (status !== 'pending') {
+        countsHtml = `<div class="card-counts">
+          <div>Count<br><b>${escapeHtml(rec.count)}</b></div>
+          <div>System<br><b>${escapeHtml(rec.systemCount)}</b></div>
+        </div>`;
+        if (status === 'discrepancy') {
+          const diff = Number(rec.count) - Number(rec.systemCount);
+          varianceTag = `<span class="variance-tag">${diff > 0 ? '+' : ''}${diff} variance</span>`;
+        }
+      }
+      return `
+        <div class="card" onclick="openCard('${rec.id}')">
+          <div class="card-top">
+            <div class="card-sku">${escapeHtml(rec.sku)}</div>
+            <div class="card-date">${fmtDate(rec.date)}</div>
+          </div>
+          <div class="card-row"><span class="lbl">Assigned To</span>${escapeHtml(rec.assignedTo)}</div>
+          ${rec.location ? `<div class="card-row"><span class="lbl">Location</span>${escapeHtml(rec.location)}</div>` : ''}
+          ${rec.handlingUnit ? `<div class="card-row"><span class="lbl">Handling Unit</span>${escapeHtml(rec.handlingUnit)}</div>` : ''}
+          ${countsHtml}
+          ${varianceTag}
+        </div>
+      `;
+    }).join('');
+  }
+
+  function escapeHtml(v){
+    if (v === undefined || v === null) return '';
+    return String(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // ---------- Initiate flow ----------
+  function openInitiateModal(){
+    document.getElementById('f_date').value = new Date().toISOString().slice(0,10);
+    document.getElementById('f_assignedTo').value = '';
+    document.getElementById('f_location').value = '';
+    document.getElementById('f_hu').value = '';
+    document.getElementById('f_sku').value = '';
+    document.getElementById('initiateOverlay').classList.add('show');
+  }
+
+  function submitInitiate(){
+    const date = document.getElementById('f_date').value;
+    const assignedTo = document.getElementById('f_assignedTo').value.trim();
+    const location = document.getElementById('f_location').value.trim();
+    const hu = document.getElementById('f_hu').value.trim();
+    const sku = document.getElementById('f_sku').value.trim();
+
+    if (!date || !assignedTo || !sku) {
+      alert('Please fill out Date, Assigned To, and SKU.');
+      return;
+    }
+    if (!db) {
+      alert('Firebase is not configured yet — see the banner at the top of the page.');
+      return;
+    }
+
+    const newRef = db.ref('cycleCounts').push();
+    newRef.set({
+      date, assignedTo, location,
+      handlingUnit: hu, sku,
+      createdAt: Date.now()
+    });
+
+    closeModal('initiateOverlay');
+  }
+
+  // ---------- Complete flow ----------
+  function openCard(id){
+    currentEditId = id;
+    const rec = records[id];
+    if (!rec) return;
+
+    document.getElementById('completeReadonly').innerHTML = `
+      <div><span class="lbl">Date</span>${fmtDate(rec.date)}</div>
+      <div><span class="lbl">Assigned To</span>${escapeHtml(rec.assignedTo)}</div>
+      ${rec.location ? `<div><span class="lbl">Location</span>${escapeHtml(rec.location)}</div>` : ''}
+      ${rec.handlingUnit ? `<div><span class="lbl">Handling Unit</span>${escapeHtml(rec.handlingUnit)}</div>` : ''}
+      <div><span class="lbl">SKU</span>${escapeHtml(rec.sku)}</div>
+    `;
+    document.getElementById('f_count').value = rec.count !== undefined ? rec.count : '';
+    document.getElementById('f_systemCount').value = rec.systemCount !== undefined ? rec.systemCount : '';
+    document.getElementById('variancePreview').className = 'variance-preview';
+    document.getElementById('completeOverlay').classList.add('show');
+    previewVariance();
+  }
+
+  function previewVariance(){
+    const c = document.getElementById('f_count').value;
+    const s = document.getElementById('f_systemCount').value;
+    const el = document.getElementById('variancePreview');
+    if (c === '' || s === '') {
+      el.className = 'variance-preview';
+      return;
+    }
+    const diff = Number(c) - Number(s);
+    if (diff === 0) {
+      el.className = 'variance-preview show match';
+      el.textContent = '✓ Count matches system — will mark as Complete.';
+    } else {
+      el.className = 'variance-preview show mismatch';
+      el.textContent = `⚠ Variance of ${diff > 0 ? '+' : ''}${diff} — will be flagged as a Discrepancy.`;
+    }
+  }
+
+  function submitComplete(){
+    const count = document.getElementById('f_count').value;
+    const systemCount = document.getElementById('f_systemCount').value;
+
+    if (count === '' || systemCount === '') {
+      alert('Please enter both Count and System Count.');
+      return;
+    }
+    if (!db || !currentEditId) return;
+
+    db.ref('cycleCounts/' + currentEditId).update({
+      count: Number(count),
+      systemCount: Number(systemCount),
+      completedAt: Date.now()
+    });
+
+    closeModal('completeOverlay');
+  }
+
+  function closeModal(id){
+    document.getElementById(id).classList.remove('show');
+    currentEditId = null;
+  }
+
+  // Close modal on overlay click
+  document.querySelectorAll('.overlay').forEach(ov => {
+    ov.addEventListener('click', (e) => { if (e.target === ov) ov.classList.remove('show'); });
+  });
+
+  // ---------- Export ----------
+  function downloadWorkbook(rows, sheetName, filenamePrefix){
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    XLSX.writeFile(wb, filenamePrefix + '_' + new Date().toISOString().slice(0,10) + '.xlsx');
+  }
+
+  function exportArchive(){
+    const rows = [['Completed','Date Requested','Assigned To','Location','Handling Unit','SKU','Status','Count','System Count','Variance']];
+    Object.keys(records).forEach(id => {
+      const rec = records[id];
+      const status = statusOf(rec);
+      if (status === 'pending') return;
+      const variance = Number(rec.count) - Number(rec.systemCount);
+      rows.push([
+        rec.completedAt ? new Date(rec.completedAt).toLocaleString() : '',
+        rec.date || '', rec.assignedTo || '', rec.location || '', rec.handlingUnit || '', rec.sku || '',
+        status, rec.count, rec.systemCount, variance
+      ]);
+    });
+    if (rows.length === 1) { alert('No completed cycle counts to export yet.'); return; }
+    downloadWorkbook(rows, 'Archive', 'cycle_count_archive');
+  }
+
+  function openPendingExportModal(){
+    const select = document.getElementById('pendingExportFilter');
+    const assignees = new Set();
+    Object.keys(records).forEach(id => {
+      const rec = records[id];
+      if (statusOf(rec) === 'pending' && rec.assignedTo) assignees.add(rec.assignedTo);
+    });
+    select.innerHTML = '<option value="">All Assigned Users</option>' +
+      [...assignees].sort().map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
+    document.getElementById('pendingExportOverlay').classList.add('show');
+  }
+
+  function exportPending(){
+    const filter = document.getElementById('pendingExportFilter').value;
+    const rows = [['Date','Assigned To','Location','Handling Unit','SKU']];
+    Object.keys(records).forEach(id => {
+      const rec = records[id];
+      if (statusOf(rec) !== 'pending') return;
+      if (filter && rec.assignedTo !== filter) return;
+      rows.push([rec.date || '', rec.assignedTo || '', rec.location || '', rec.handlingUnit || '', rec.sku || '']);
+    });
+    if (rows.length === 1) { alert('No pending cycle counts match that filter.'); return; }
+    const prefix = 'cycle_count_pending' + (filter ? '_' + filter.replace(/\s+/g,'_') : '');
+    downloadWorkbook(rows, 'Pending', prefix);
+    closeModal('pendingExportOverlay');
+  }
+
+  // Initialize tab from URL hash, if present
+  (function initTab(){
+    const tab = location.hash.replace('#','');
+    if (tab === 'archive') switchTab('archive');
+  })();
+
+  renderBoard();
+</script>
+
+</body>
+</html>

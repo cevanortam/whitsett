@@ -183,7 +183,17 @@
   .column.discrepancy .card{border-left-color:var(--red);}
 
   .card-top{display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;}
-  .card-sku{font-family:'Barlow Condensed', sans-serif; font-weight:700; font-size:17px; color:var(--navy);}
+  .card-sku{font-family:'Barlow Condensed', sans-serif; font-weight:700; font-size:17px; color:var(--navy); display:flex; align-items:center; gap:7px;}
+  .hv-badge{
+    display:inline-block;
+    font-size:10px;
+    font-weight:700;
+    padding:2px 7px;
+    border-radius:4px;
+    background:var(--navy);
+    color:#fff;
+    letter-spacing:0.3px;
+  }
   .card-date{font-size:11px; color:var(--muted); font-weight:600;}
   .card-row{display:flex; font-size:13px; margin-bottom:3px; color:var(--text);}
   .card-row .lbl{color:var(--muted); width:88px; flex-shrink:0;}
@@ -498,6 +508,7 @@
             <th>Location</th>
             <th>Handling Unit</th>
             <th>SKU</th>
+            <th>High Value</th>
             <th>Status</th>
             <th>Count</th>
             <th>System Count</th>
@@ -540,6 +551,10 @@
           <label>SKU</label>
           <input type="text" id="f_sku" placeholder="SKU">
         </div>
+      </div>
+      <div class="field" style="display:flex; align-items:center; gap:8px; margin-top:4px;">
+        <input type="checkbox" id="f_highValue" style="width:16px; height:16px;">
+        <label style="margin-bottom:0; text-transform:none; font-size:14px; font-weight:500; color:var(--text);" for="f_highValue">High Value SKU</label>
       </div>
     </div>
     <div class="modal-footer">
@@ -757,6 +772,7 @@
           <td>${escapeHtml(rec.location)}</td>
           <td>${escapeHtml(rec.handlingUnit)}</td>
           <td>${escapeHtml(rec.sku)}</td>
+          <td>${rec.highValue ? 'Yes' : 'No'}</td>
           <td><span class="status-pill ${rec.status}">${rec.status}</span></td>
           <td>${escapeHtml(rec.count)}</td>
           <td>${escapeHtml(rec.systemCount)}</td>
@@ -791,7 +807,7 @@
       return `
         <div class="card" onclick="openCard('${rec.id}')">
           <div class="card-top">
-            <div class="card-sku">${escapeHtml(rec.sku)}</div>
+            <div class="card-sku">${escapeHtml(rec.sku)}${rec.highValue ? '<span class="hv-badge">HV</span>' : ''}</div>
             <div class="card-date">${fmtDate(rec.date)}</div>
           </div>
           <div class="card-row"><span class="lbl">Assigned To</span>${escapeHtml(rec.assignedTo)}</div>
@@ -816,6 +832,7 @@
     document.getElementById('f_location').value = '';
     document.getElementById('f_hu').value = '';
     document.getElementById('f_sku').value = '';
+    document.getElementById('f_highValue').checked = false;
     document.getElementById('initiateOverlay').classList.add('show');
   }
 
@@ -825,6 +842,7 @@
     const location = document.getElementById('f_location').value.trim();
     const hu = document.getElementById('f_hu').value.trim();
     const sku = document.getElementById('f_sku').value.trim();
+    const highValue = document.getElementById('f_highValue').checked;
 
     if (!date || !assignedTo || !sku) {
       alert('Please fill out Date, Assigned To, and SKU.');
@@ -838,7 +856,7 @@
     const newRef = db.ref('cycleCounts').push();
     newRef.set({
       date, assignedTo, location,
-      handlingUnit: hu, sku,
+      handlingUnit: hu, sku, highValue,
       createdAt: Date.now()
     });
 
@@ -921,7 +939,7 @@
   }
 
   function exportArchive(){
-    const rows = [['Completed','Date Requested','Assigned To','Location','Handling Unit','SKU','Status','Count','System Count','Variance']];
+    const rows = [['Completed','Date Requested','Assigned To','Location','Handling Unit','SKU','High Value','Status','Count','System Count','Variance']];
     Object.keys(records).forEach(id => {
       const rec = records[id];
       const status = statusOf(rec);
@@ -930,6 +948,7 @@
       rows.push([
         rec.completedAt ? new Date(rec.completedAt).toLocaleString() : '',
         rec.date || '', rec.assignedTo || '', rec.location || '', rec.handlingUnit || '', rec.sku || '',
+        rec.highValue ? 'Yes' : 'No',
         status, rec.count, rec.systemCount, variance
       ]);
     });
@@ -951,12 +970,12 @@
 
   function exportPending(){
     const filter = document.getElementById('pendingExportFilter').value;
-    const rows = [['Date','Assigned To','Location','Handling Unit','SKU']];
+    const rows = [['Date','Assigned To','Location','Handling Unit','SKU','High Value']];
     Object.keys(records).forEach(id => {
       const rec = records[id];
       if (statusOf(rec) !== 'pending') return;
       if (filter && rec.assignedTo !== filter) return;
-      rows.push([rec.date || '', rec.assignedTo || '', rec.location || '', rec.handlingUnit || '', rec.sku || '']);
+      rows.push([rec.date || '', rec.assignedTo || '', rec.location || '', rec.handlingUnit || '', rec.sku || '', rec.highValue ? 'Yes' : 'No']);
     });
     if (rows.length === 1) { alert('No pending cycle counts match that filter.'); return; }
     const prefix = 'cycle_count_pending' + (filter ? '_' + filter.replace(/\s+/g,'_') : '');

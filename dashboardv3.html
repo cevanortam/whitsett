@@ -1,0 +1,1265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Picker Assignment Tracker | Whitsett</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --navy-deep:#00152E;
+    --navy:#00204E;
+    --navy-panel:#062B5C;
+    --navy-card:#0A3269;
+    --navy-border:#1B4585;
+    --red:#C8102E;
+    --red-bright:#E31837;
+    --green:#2ECC71;
+    --amber:#F5A623;
+    --text:#F2F5FA;
+    --text-dim:#9FB1CC;
+    --text-faint:#6E82A6;
+    font-size:16px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--navy-deep);
+    background-image:
+      radial-gradient(circle at 15% 0%, rgba(200,16,46,0.08), transparent 40%),
+      radial-gradient(circle at 85% 10%, rgba(27,69,133,0.25), transparent 45%);
+    color:var(--text);
+    font-family:'Barlow', sans-serif;
+    min-height:100vh;
+  }
+  h1,h2,h3,.mono-label{font-family:'Barlow Condensed', sans-serif; letter-spacing:0.02em;}
+
+  /* Topbar */
+  header.topbar{
+    background:linear-gradient(180deg, var(--navy) 0%, var(--navy-deep) 100%);
+    border-bottom:3px solid var(--red);
+    padding:14px 28px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    position:sticky;
+    top:0;
+    z-index:40;
+    box-shadow:0 4px 18px rgba(0,0,0,0.35);
+  }
+  .brand{display:flex; align-items:center; gap:14px;}
+  .brand .ceva-logo{
+    height:34px;
+    width:auto;
+    display:block;
+  }
+  .brand h1{
+    font-size:1.15rem;
+    font-weight:600;
+    margin:0;
+    color:var(--text-dim);
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+  }
+  .topbar-actions{display:flex; align-items:center; gap:10px;}
+
+  .btn{
+    font-family:'Barlow', sans-serif;
+    font-weight:600;
+    font-size:0.92rem;
+    border:1px solid var(--navy-border);
+    background:var(--navy-panel);
+    color:var(--text);
+    padding:10px 18px;
+    border-radius:6px;
+    cursor:pointer;
+    transition:background .15s, border-color .15s, transform .1s;
+  }
+  .btn:hover{background:var(--navy-card); border-color:#2E5FA8;}
+  .btn:active{transform:translateY(1px);}
+  .btn-primary{
+    background:var(--red);
+    border-color:var(--red);
+    color:#fff;
+  }
+  .btn-primary:hover{background:var(--red-bright); border-color:var(--red-bright);}
+  .btn-ghost{
+    background:transparent;
+  }
+  .btn-tab{
+    background:transparent;
+    border:1px solid var(--navy-border);
+    color:var(--text-dim);
+  }
+  .btn-tab.active{
+    background:var(--navy-card);
+    color:#fff;
+    border-color:#2E5FA8;
+  }
+
+  main{max-width:1400px; margin:0 auto; padding:24px 28px 80px;}
+
+  .toolbar{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:16px;
+    margin-bottom:22px;
+    flex-wrap:wrap;
+  }
+  .search-wrap{position:relative; flex:1; min-width:220px; max-width:380px;}
+  .search-wrap input{
+    width:100%;
+    background:var(--navy-panel);
+    border:1px solid var(--navy-border);
+    color:var(--text);
+    padding:10px 14px;
+    border-radius:6px;
+    font-family:'Barlow', sans-serif;
+    font-size:0.95rem;
+  }
+  .search-wrap input::placeholder{color:var(--text-faint);}
+  .search-wrap input:focus{outline:none; border-color:var(--red);}
+
+  .tabs{display:flex; gap:8px;}
+  .tab-btn{padding:8px 16px; border-radius:20px; font-size:0.85rem;}
+
+  .empty-state{
+    text-align:center;
+    padding:80px 20px;
+    color:var(--text-faint);
+  }
+  .empty-state .glyph{font-size:2.4rem; margin-bottom:10px; opacity:0.5;}
+  .empty-state h3{color:var(--text-dim); font-size:1.3rem; margin:0 0 6px;}
+
+  /* Pull ID group */
+  .pull-group{
+    background:var(--navy-panel);
+    border:1px solid var(--navy-border);
+    border-radius:10px;
+    margin-bottom:20px;
+    overflow:hidden;
+  }
+  .pull-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:14px 20px;
+    background:linear-gradient(90deg, rgba(27,69,133,0.35), transparent);
+    border-bottom:1px solid var(--navy-border);
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  .pull-id-block{display:flex; align-items:center; gap:14px; flex-wrap:wrap;}
+  .pull-id-num{
+    font-family:'Barlow Condensed', sans-serif;
+    font-size:1.5rem;
+    font-weight:700;
+    letter-spacing:0.02em;
+  }
+  .pull-id-num .prefix{color:var(--text-faint); font-size:0.65em; font-weight:600; margin-right:6px; text-transform:uppercase;}
+  .pull-meta{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+  .chip{
+    font-size:0.78rem;
+    font-weight:600;
+    padding:4px 10px;
+    border-radius:20px;
+    text-transform:uppercase;
+    letter-spacing:0.04em;
+    border:1px solid var(--navy-border);
+    color:var(--text-dim);
+  }
+  .chip.type-auto{border-color:#3B6FC2; color:#8FB4F5; background:rgba(59,111,194,0.12);}
+  .chip.type-manual{border-color:#7A57C9; color:#C6ADF5; background:rgba(122,87,201,0.12);}
+  .sla-timer{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-family:'Barlow Condensed', sans-serif;
+    font-weight:700;
+    font-size:1.05rem;
+    padding:5px 12px;
+    border-radius:6px;
+    border:1px solid;
+  }
+  .sla-timer .dot{width:9px; height:9px; border-radius:50%;}
+  .sla-timer.ok{border-color:rgba(46,204,113,0.4); background:rgba(46,204,113,0.08); color:var(--green);}
+  .sla-timer.ok .dot{background:var(--green); box-shadow:0 0 8px var(--green);}
+  .sla-timer.warn{border-color:rgba(245,166,35,0.5); background:rgba(245,166,35,0.1); color:var(--amber);}
+  .sla-timer.warn .dot{background:var(--amber); box-shadow:0 0 8px var(--amber);}
+  .sla-timer.breach{border-color:rgba(227,24,55,0.5); background:rgba(227,24,55,0.12); color:var(--red-bright);}
+  .sla-timer.breach .dot{background:var(--red-bright); box-shadow:0 0 8px var(--red-bright); animation:pulse 1.2s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;} 50%{opacity:0.35;}}
+  .sla-label{font-size:0.72rem; color:var(--text-faint); font-weight:500; text-transform:none; letter-spacing:0;}
+
+  .wo-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(250px, 1fr));
+    gap:14px;
+    padding:18px 20px;
+  }
+  .wo-card{
+    background:var(--navy-card);
+    border:1px solid var(--navy-border);
+    border-radius:8px;
+    padding:14px 16px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    position:relative;
+  }
+  .wo-card .wo-num{
+    font-family:'Barlow Condensed', sans-serif;
+    font-weight:700;
+    font-size:1.15rem;
+  }
+  .wo-card .wo-num .prefix{color:var(--text-faint); font-size:0.65em; font-weight:600; margin-right:5px; text-transform:uppercase;}
+  .wo-card .picker{
+    font-size:0.88rem;
+    color:var(--text-dim);
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  .wo-card .picker .icon{opacity:0.7;}
+  .wo-card .wo-elapsed{
+    font-family:'Barlow Condensed', sans-serif;
+    font-size:0.95rem;
+    font-weight:600;
+    color:var(--text);
+  }
+  .wo-card .wo-elapsed.warn{color:var(--amber);}
+  .wo-card .wo-elapsed.breach{color:var(--red-bright);}
+  .wo-card .wo-elapsed-label{font-size:0.68rem; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.05em; margin-right:6px;}
+
+  .complete-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-top:2px;
+    padding-top:10px;
+    border-top:1px dashed var(--navy-border);
+  }
+  .complete-label{font-size:0.82rem; color:var(--text-dim); font-weight:500;}
+
+  /* Slider toggle */
+  .slide-toggle{
+    position:relative;
+    width:64px;
+    height:30px;
+    flex-shrink:0;
+  }
+  .slide-toggle input{opacity:0; width:0; height:0; position:absolute;}
+  .slide-track{
+    position:absolute; inset:0;
+    background:#12203F;
+    border:1px solid var(--navy-border);
+    border-radius:30px;
+    cursor:pointer;
+    transition:background .2s, border-color .2s;
+  }
+  .slide-track::before{
+    content:'';
+    position:absolute;
+    top:2px; left:2px;
+    width:24px; height:24px;
+    border-radius:50%;
+    background:var(--text-dim);
+    transition:transform .2s, background .2s;
+  }
+  .slide-track::after{
+    content:'VERIFY';
+    position:absolute;
+    right:8px; top:50%; transform:translateY(-50%);
+    font-size:0.55rem;
+    font-weight:700;
+    letter-spacing:0.05em;
+    color:var(--text-faint);
+  }
+  input:checked + .slide-track{background:rgba(46,204,113,0.18); border-color:var(--green);}
+  input:checked + .slide-track::before{transform:translateX(34px); background:var(--green);}
+  input:checked + .slide-track::after{content:'DONE'; color:var(--green); right:auto; left:10px;}
+
+  /* Modal */
+  .modal-overlay{
+    position:fixed; inset:0;
+    background:rgba(0,10,25,0.72);
+    backdrop-filter:blur(3px);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index:100;
+    padding:20px;
+  }
+  .modal-overlay.open{display:flex;}
+  .modal{
+    background:var(--navy-panel);
+    border:1px solid var(--navy-border);
+    border-radius:12px;
+    width:100%;
+    max-width:460px;
+    padding:26px 26px 22px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.5);
+  }
+  .modal h2{margin:0 0 4px; font-size:1.4rem;}
+  .modal .sub{color:var(--text-faint); font-size:0.85rem; margin:0 0 20px;}
+  .field{margin-bottom:16px;}
+  .field label{
+    display:block;
+    font-size:0.78rem;
+    font-weight:600;
+    text-transform:uppercase;
+    letter-spacing:0.05em;
+    color:var(--text-dim);
+    margin-bottom:6px;
+  }
+  .field input[type=text]{
+    width:100%;
+    background:var(--navy-deep);
+    border:1px solid var(--navy-border);
+    color:var(--text);
+    padding:10px 12px;
+    border-radius:6px;
+    font-size:0.95rem;
+    font-family:'Barlow', sans-serif;
+  }
+  .field input[type=text]:focus{outline:none; border-color:var(--red);}
+  .field-hint{font-size:0.76rem; color:var(--text-faint); margin-top:5px;}
+  .type-toggle{display:flex; gap:10px;}
+  .type-opt{
+    flex:1;
+    text-align:center;
+    padding:10px 8px;
+    border:1px solid var(--navy-border);
+    border-radius:6px;
+    cursor:pointer;
+    font-size:0.88rem;
+    font-weight:600;
+    color:var(--text-dim);
+    transition:all .15s;
+  }
+  .type-opt.active{border-color:var(--red); background:rgba(200,16,46,0.12); color:#fff;}
+  .type-opt .sla-note{display:block; font-size:0.7rem; font-weight:400; color:var(--text-faint); margin-top:3px;}
+  .type-locked{
+    padding:10px 12px;
+    border-radius:6px;
+    background:var(--navy-deep);
+    border:1px solid var(--navy-border);
+    font-size:0.88rem;
+    color:var(--text-dim);
+  }
+  .modal-actions{display:flex; justify-content:flex-end; gap:10px; margin-top:22px;}
+  .error-msg{color:var(--red-bright); font-size:0.82rem; margin-top:4px; display:none;}
+
+  /* Confirm modal */
+  .confirm-body{font-size:0.95rem; color:var(--text-dim); line-height:1.5; margin-bottom:4px;}
+  .confirm-body strong{color:var(--text);}
+
+  /* Inline spinner (buttons + loading states) */
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .inline-spinner{
+    display:inline-block;
+    width:14px; height:14px;
+    border:2px solid rgba(255,255,255,0.4);
+    border-top-color:#fff;
+    border-radius:50%;
+    animation:spin .6s linear infinite;
+    margin-right:8px;
+    vertical-align:middle;
+  }
+  .empty-state .inline-spinner{
+    width:28px; height:28px;
+    border-width:3px;
+    border-color:var(--navy-border);
+    border-top-color:var(--red);
+    margin:0 auto 14px;
+  }
+
+  /* QA panel (Archive detail) */
+  .qa-panel{
+    padding:16px 20px 20px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .qa-step{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    background:var(--navy-card);
+    border:1px solid var(--navy-border);
+    border-radius:8px;
+    padding:12px 16px;
+    gap:12px;
+    flex-wrap:wrap;
+  }
+  .qa-step-info{display:flex; flex-direction:column; gap:2px;}
+  .qa-step-title{font-family:'Barlow Condensed', sans-serif; font-weight:700; font-size:1.05rem;}
+  .qa-step-sub{font-size:0.78rem; color:var(--text-faint);}
+  .qa-step.done{border-color:rgba(46,204,113,0.4); background:rgba(46,204,113,0.07);}
+  .qa-step.done .qa-step-title{color:var(--green);}
+  .qa-step-done-badge{font-size:0.85rem; color:var(--green); font-weight:600; display:flex; align-items:center; gap:6px; white-space:nowrap;}
+  .btn:disabled{opacity:0.4; cursor:not-allowed;}
+  .btn:disabled:hover{background:var(--red); border-color:var(--red);}
+
+  /* QA board (Pending QA — kanban-style, click a card to advance it) */
+  .qa-board{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:20px;
+  }
+  .qa-column{
+    background:var(--navy-panel);
+    border:1px solid var(--navy-border);
+    border-radius:10px;
+    padding:16px;
+    min-height:140px;
+  }
+  .qa-column-header{
+    font-family:'Barlow Condensed', sans-serif;
+    font-weight:700;
+    font-size:1.1rem;
+    text-transform:uppercase;
+    letter-spacing:0.04em;
+    color:var(--text-dim);
+    margin-bottom:14px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .qa-count{
+    background:var(--navy-card);
+    border:1px solid var(--navy-border);
+    border-radius:20px;
+    padding:2px 10px;
+    font-size:0.8rem;
+    color:var(--text);
+  }
+  .qa-card-list{display:flex; flex-direction:column; gap:12px;}
+  .qa-column-empty{color:var(--text-faint); font-size:0.85rem; text-align:center; padding:30px 10px;}
+  .qa-pull-card{
+    background:var(--navy-card);
+    border:1px solid var(--navy-border);
+    border-radius:8px;
+    padding:14px 16px;
+    cursor:pointer;
+    transition:border-color .15s, transform .1s, background .15s;
+  }
+  .qa-pull-card:hover{border-color:var(--red); background:#0C3A78; transform:translateY(-1px);}
+  .qa-pull-card:active{transform:translateY(0);}
+  .qa-pull-card-top{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; flex-wrap:wrap;}
+  .qa-pull-card-meta{display:flex; justify-content:space-between; gap:10px; font-size:0.82rem; color:var(--text-dim); flex-wrap:wrap;}
+  .qa-pull-card-timer.warn{color:var(--amber);}
+  .qa-pull-card-timer.breach{color:var(--red-bright);}
+  .qa-pull-card-wos{display:flex; flex-direction:column; gap:5px; margin-top:10px;}
+  .qa-pull-card-wo-row{
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+    font-size:0.8rem;
+    color:var(--text-dim);
+    background:var(--navy-deep);
+    border:1px solid var(--navy-border);
+    border-radius:6px;
+    padding:6px 10px;
+  }
+  .qa-pull-card-wo-row .wo-mini-num{font-weight:600; color:var(--text);}
+  .qa-pull-card-hint{margin-top:10px; padding-top:8px; border-top:1px dashed var(--navy-border); font-size:0.7rem; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.04em;}
+
+  @media (max-width:640px){
+    .qa-board{grid-template-columns:1fr;}
+  }
+
+  footer{
+    text-align:center;
+    color:var(--text-faint);
+    font-size:0.78rem;
+    padding:30px 20px 10px;
+  }
+
+  @media (max-width:640px){
+    header.topbar{padding:12px 16px; flex-wrap:wrap;}
+    main{padding:18px 14px 60px;}
+    .pull-header{flex-direction:column; align-items:flex-start;}
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <img src="https://www.cevalogistics.com/public-cdn/images-spx/x_large_picture/CEVA_WhiteRed.png" alt="CEVA Logistics" class="ceva-logo">
+    <h1>Picker Assignment Tracker · Whitsett</h1>
+  </div>
+  <div class="topbar-actions">
+    <div class="tabs">
+      <button class="btn btn-tab tab-btn active" id="tabOpenBtn">Open</button>
+      <button class="btn btn-tab tab-btn" id="tabPendingBtn">Pending QA</button>
+      <button class="btn btn-tab tab-btn" id="tabArchiveBtn">Archive</button>
+    </div>
+    <button class="btn" id="exportExcelBtn" style="display:none;">&#128190; Export to Excel</button>
+    <button class="btn btn-primary" id="openAddModalBtn">+ Add Warehouse Order</button>
+  </div>
+</header>
+
+<main>
+  <div class="toolbar">
+    <div class="search-wrap">
+      <input type="text" id="searchInput" placeholder="Search Pull ID, WO #, or picker...">
+    </div>
+    <div class="mono-label" id="summaryLine" style="color:var(--text-faint); font-size:0.85rem;"></div>
+  </div>
+
+  <div id="openView"></div>
+  <div id="pendingView" style="display:none;"></div>
+  <div id="archiveView" style="display:none;"></div>
+</main>
+
+<footer>CEVA Logistics — Whitsett, NC · Picker Assignment Tracker</footer>
+
+<!-- Add Warehouse Order Modal -->
+<div class="modal-overlay" id="addModalOverlay">
+  <div class="modal">
+    <h2>Add Warehouse Order</h2>
+    <p class="sub">Attach it to a Pull ID and assign a picker.</p>
+
+    <div class="field">
+      <label for="pullIdInput">Pull ID</label>
+      <input type="text" id="pullIdInput" list="pullIdList" placeholder="e.g. P-10432" autocomplete="off">
+      <datalist id="pullIdList"></datalist>
+      <div class="field-hint" id="pullIdHint">New Pull ID — set its type below. Its timer starts now.</div>
+    </div>
+
+    <div class="field" id="typeField">
+      <label>Type of Pull</label>
+      <div class="type-toggle">
+        <div class="type-opt active" data-type="Manual" id="typeManualOpt">Manual<span class="sla-note">1 hour SLA</span></div>
+        <div class="type-opt" data-type="Auto" id="typeAutoOpt">Auto<span class="sla-note">5 hour SLA</span></div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="woNumInput">Warehouse Order #</label>
+      <input type="text" id="woNumInput" placeholder="e.g. WO-88213" autocomplete="off">
+    </div>
+
+    <div class="field">
+      <label for="pickerInput">Assigned Picker</label>
+      <input type="text" id="pickerInput" list="pickerList" placeholder="Picker name" autocomplete="off">
+      <datalist id="pickerList"></datalist>
+    </div>
+
+    <div class="error-msg" id="addErrorMsg"></div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="cancelAddBtn">Cancel</button>
+      <button class="btn btn-primary" id="saveAddBtn">Add Warehouse Order</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm completion modal -->
+<div class="modal-overlay" id="confirmModalOverlay">
+  <div class="modal">
+    <h2>Confirm completion</h2>
+    <p class="confirm-body" id="confirmBodyText"></p>
+    <p class="confirm-body" id="confirmSubText" style="font-size:0.85rem; color:var(--text-faint);"></p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="cancelConfirmBtn">Cancel</button>
+      <button class="btn btn-primary" id="acceptConfirmBtn">Confirm & Timestamp</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ==================== APPS SCRIPT CONFIG ====================
+   Paste the deployed Web App /exec URL here once you've deployed
+   Code.gs (Deploy > New deployment > Web app > Execute as: Me,
+   Who has access: Anyone). */
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzlEkVVAE8suO2QgZkuFmpb7jgSi7UuI6VS6sMEx3KpxmxGx6mDIQiDxKa3bPjz26PQvw/exec";
+
+/* How often to poll the sheet for changes made by other users, in ms. */
+const POLL_INTERVAL_MS = 6000;
+
+/* ==================== CONSTANTS ==================== */
+const SLA_MS = { Manual: 60 * 60 * 1000, Auto: 5 * 60 * 60 * 1000 };
+
+/* ==================== STATE ==================== */
+let pullIds = {};        // key -> {pullId, type, createdAt, closedAt, cevaQAAt, lenovoQAAt}
+let warehouseOrders = {}; // key -> {pullIdKey, pullId, woNumber, assignedPicker, addedAt, completed, completedAt}
+let currentTab = 'open';
+let searchTerm = '';
+let selectedType = 'Manual';
+let matchedExistingPullKey = null; // if pullId input matches an existing OPEN pull id
+let lastSyncedAt = null;
+let syncInFlight = false;
+let syncError = false;
+
+/* ==================== SHEETS SYNC (via Apps Script) ==================== */
+async function fetchData(){
+  if (syncInFlight) return;
+  syncInFlight = true;
+  try {
+    const res = await fetch(APPS_SCRIPT_URL + '?action=getData');
+    const json = await res.json();
+    if (json.ok){
+      pullIds = json.data.pullIds || {};
+      warehouseOrders = json.data.warehouseOrders || {};
+      lastSyncedAt = Date.now();
+      syncError = false;
+    } else {
+      console.error('getData error:', json.error);
+      syncError = true;
+    }
+  } catch (err) {
+    console.error('fetchData failed:', err);
+    syncError = true;
+  } finally {
+    syncInFlight = false;
+    render();
+  }
+}
+
+async function postAction(action, payload){
+  const res = await fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // avoids CORS preflight against Apps Script
+    body: JSON.stringify(Object.assign({ action: action }, payload))
+  });
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.error || 'Request failed');
+  return json;
+}
+
+fetchData();
+setInterval(fetchData, POLL_INTERVAL_MS);
+
+/* ==================== HELPERS ==================== */
+function fmtElapsed(ms){
+  if (ms < 0) ms = 0;
+  const totalSec = Math.floor(ms/1000);
+  const h = Math.floor(totalSec/3600);
+  const m = Math.floor((totalSec%3600)/60);
+  const s = totalSec%60;
+  return (h>0 ? h+'h ' : '') + String(m).padStart(2,'0')+'m '+String(s).padStart(2,'0')+'s';
+}
+function slaTier(elapsedMs, slaMs){
+  const pct = elapsedMs / slaMs;
+  if (pct >= 1) return 'breach';
+  if (pct >= 0.75) return 'warn';
+  return 'ok';
+}
+function syncStatusText(){
+  if (syncError) return 'Sync error — check the Apps Script URL';
+  if (!lastSyncedAt) return 'Loading...';
+  if (syncInFlight) return 'Refreshing...';
+  const secs = Math.round((Date.now() - lastSyncedAt) / 1000);
+  return secs < 2 ? 'Synced just now' : `Synced ${secs}s ago`;
+}
+function loadingStateHtml(){
+  return `<div class="empty-state"><div class="inline-spinner"></div><h3>Loading...</h3><p>Fetching the latest from the sheet.</p></div>`;
+}
+function exportArchiveToExcel(){
+  if (typeof XLSX === 'undefined'){
+    alert('Excel export library failed to load — check your internet connection and try again.');
+    return;
+  }
+  const term = searchTerm.trim().toLowerCase();
+  let groups = closedPullGroups();
+  if (term){
+    groups = groups.filter(g =>
+      String(g.pullId).toLowerCase().includes(term) ||
+      g.orders.some(o => String(o.woNumber).toLowerCase().includes(term) || String(o.assignedPicker).toLowerCase().includes(term))
+    );
+  }
+  if (groups.length === 0){
+    alert('No archived Pull IDs to export.');
+    return;
+  }
+
+  const pullRows = groups.map(g => {
+    const pickDoneAt = pickingCompletedAt(g.orders);
+    const pickingMs = pickDoneAt ? (pickDoneAt - g.createdAt) : null;
+    const totalMs = g.closedAt - g.createdAt;
+    return {
+      'Pull ID': g.pullId,
+      'Type': g.type,
+      'SLA (hrs)': g.type === 'Auto' ? 5 : 1,
+      'Created At': g.createdAt ? new Date(g.createdAt).toLocaleString() : '',
+      'Picking Completed At': pickDoneAt ? new Date(pickDoneAt).toLocaleString() : '',
+      'Picking Duration': pickingMs !== null ? fmtElapsed(pickingMs) : '',
+      'CEVA QA At': g.cevaQAAt ? new Date(g.cevaQAAt).toLocaleString() : '',
+      'Lenovo QA At': g.lenovoQAAt ? new Date(g.lenovoQAAt).toLocaleString() : '',
+      'Archived At': g.closedAt ? new Date(g.closedAt).toLocaleString() : '',
+      'Total Duration': fmtElapsed(totalMs),
+      'WO Count': g.orders.length
+    };
+  });
+
+  const woRows = [];
+  groups.forEach(g => {
+    g.orders.forEach(o => {
+      woRows.push({
+        'Pull ID': g.pullId,
+        'WO Number': o.woNumber,
+        'Assigned Picker': o.assignedPicker,
+        'Added At': o.addedAt ? new Date(o.addedAt).toLocaleString() : '',
+        'Completed At': o.completedAt ? new Date(o.completedAt).toLocaleString() : ''
+      });
+    });
+  });
+
+  const wb = XLSX.utils.book_new();
+  const wsPull = XLSX.utils.json_to_sheet(pullRows);
+  wsPull['!cols'] = [{wch:14},{wch:8},{wch:9},{wch:20},{wch:20},{wch:16},{wch:20},{wch:20},{wch:20},{wch:16},{wch:9}];
+  const wsWO = XLSX.utils.json_to_sheet(woRows);
+  wsWO['!cols'] = [{wch:14},{wch:14},{wch:18},{wch:20},{wch:20}];
+  XLSX.utils.book_append_sheet(wb, wsPull, 'Pull IDs');
+  XLSX.utils.book_append_sheet(wb, wsWO, 'Warehouse Orders');
+
+  const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+  XLSX.writeFile(wb, `picker-assignment-archive-${stamp}.xlsx`);
+}
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function openPullGroups(){
+  // returns array of {key, pullId, type, createdAt, orders:[...]} for pull ids with at least one open WO
+  const groups = {};
+  Object.entries(warehouseOrders).forEach(([woKey, wo]) => {
+    if (wo.completed) return;
+    if (!groups[wo.pullIdKey]) groups[wo.pullIdKey] = [];
+    groups[wo.pullIdKey].push({key: woKey, ...wo});
+  });
+  return Object.entries(groups).map(([pullKey, orders]) => {
+    const p = pullIds[pullKey] || {};
+    orders.sort((a,b) => a.addedAt - b.addedAt);
+    return {key: pullKey, pullId: p.pullId, type: p.type, createdAt: p.createdAt, orders};
+  }).sort((a,b) => {
+    // sort by Pull ID, numeric-aware
+    return String(a.pullId).localeCompare(String(b.pullId), undefined, {numeric:true, sensitivity:'base'});
+  });
+}
+function pendingQAGroups(){
+  // Pull IDs with every WO completed, but not yet archived (Lenovo QA not done).
+  const groups = {};
+  Object.entries(warehouseOrders).forEach(([woKey, wo]) => {
+    if (!groups[wo.pullIdKey]) groups[wo.pullIdKey] = [];
+    groups[wo.pullIdKey].push({key: woKey, ...wo});
+  });
+  return Object.entries(pullIds)
+    .filter(([k,p]) => !p.closedAt)
+    .map(([pullKey, p]) => {
+      const orders = (groups[pullKey] || []).sort((a,b) => a.addedAt - b.addedAt);
+      return {key: pullKey, ...p, orders};
+    })
+    .filter(g => g.orders.length > 0 && g.orders.every(o => o.completed))
+    .sort((a,b) => String(a.pullId).localeCompare(String(b.pullId), undefined, {numeric:true, sensitivity:'base'}));
+}
+function closedPullGroups(){
+  const groups = {};
+  Object.entries(warehouseOrders).forEach(([woKey, wo]) => {
+    if (!groups[wo.pullIdKey]) groups[wo.pullIdKey] = [];
+    groups[wo.pullIdKey].push({key: woKey, ...wo});
+  });
+  return Object.entries(pullIds)
+    .filter(([k,p]) => p.closedAt)
+    .map(([pullKey, p]) => {
+      const orders = (groups[pullKey] || []).sort((a,b) => a.addedAt - b.addedAt);
+      return {key: pullKey, ...p, orders};
+    })
+    .sort((a,b) => b.closedAt - a.closedAt);
+}
+function pickingCompletedAt(orders){
+  const times = orders.map(o => o.completedAt).filter(Boolean);
+  return times.length ? Math.max(...times) : null;
+}
+
+/* ==================== RENDER: OPEN VIEW ==================== */
+let tickHandle = null;
+function render(){
+  const term = searchTerm.trim().toLowerCase();
+
+  if (currentTab === 'open'){
+    document.getElementById('openView').style.display = '';
+    document.getElementById('pendingView').style.display = 'none';
+    document.getElementById('archiveView').style.display = 'none';
+    let groups = openPullGroups();
+    if (term){
+      groups = groups.map(g => ({
+        ...g,
+        orders: g.orders.filter(o =>
+          String(g.pullId).toLowerCase().includes(term) ||
+          String(o.woNumber).toLowerCase().includes(term) ||
+          String(o.assignedPicker).toLowerCase().includes(term)
+        )
+      })).filter(g => g.orders.length > 0 || String(g.pullId).toLowerCase().includes(term));
+    }
+
+    const totalOpenWO = groups.reduce((n,g) => n + g.orders.length, 0);
+    document.getElementById('summaryLine').textContent =
+      `${groups.length} open Pull ID${groups.length!==1?'s':''} · ${totalOpenWO} open Warehouse Order${totalOpenWO!==1?'s':''} · ${syncStatusText()}`;
+
+    const container = document.getElementById('openView');
+    if (groups.length === 0){
+      container.innerHTML = (!lastSyncedAt && !syncError) ? loadingStateHtml() :
+        `<div class="empty-state"><div class="glyph">&#9679;</div><h3>No open Warehouse Orders</h3><p>Add one to get started.</p></div>`;
+    } else {
+      container.innerHTML = groups.map(renderPullGroup).join('');
+    }
+    attachOpenViewHandlers();
+  } else if (currentTab === 'pending'){
+    document.getElementById('openView').style.display = 'none';
+    document.getElementById('pendingView').style.display = '';
+    document.getElementById('archiveView').style.display = 'none';
+    let groups = pendingQAGroups();
+    if (term){
+      groups = groups.filter(g =>
+        String(g.pullId).toLowerCase().includes(term) ||
+        g.orders.some(o => String(o.woNumber).toLowerCase().includes(term) || String(o.assignedPicker).toLowerCase().includes(term))
+      );
+    }
+    document.getElementById('summaryLine').textContent = `${groups.length} Pull ID${groups.length!==1?'s':''} awaiting QA sign-off · ${syncStatusText()}`;
+    const container = document.getElementById('pendingView');
+    if (groups.length === 0){
+      container.innerHTML = (!lastSyncedAt && !syncError) ? loadingStateHtml() :
+        `<div class="empty-state"><div class="glyph">&#9633;</div><h3>Nothing awaiting QA</h3><p>Pull IDs land here once every Warehouse Order on them is picked and verified.</p></div>`;
+    } else {
+      container.innerHTML = renderPendingBoard(groups);
+    }
+    attachPendingViewHandlers();
+  } else {
+    document.getElementById('openView').style.display = 'none';
+    document.getElementById('pendingView').style.display = 'none';
+    document.getElementById('archiveView').style.display = '';
+    let groups = closedPullGroups();
+    if (term){
+      groups = groups.filter(g =>
+        String(g.pullId).toLowerCase().includes(term) ||
+        g.orders.some(o => String(o.woNumber).toLowerCase().includes(term) || String(o.assignedPicker).toLowerCase().includes(term))
+      );
+    }
+    document.getElementById('summaryLine').textContent = `${groups.length} closed Pull ID${groups.length!==1?'s':''} · ${syncStatusText()}`;
+    const container = document.getElementById('archiveView');
+    if (groups.length === 0){
+      container.innerHTML = (!lastSyncedAt && !syncError) ? loadingStateHtml() :
+        `<div class="empty-state"><div class="glyph">&#9634;</div><h3>No archived Pull IDs yet</h3><p>Pull IDs land here once CEVA QA and Lenovo QA are both signed off.</p></div>`;
+    } else {
+      container.innerHTML = groups.map(renderArchiveGroup).join('');
+    }
+  }
+  refreshPickerAndPullDatalists();
+}
+
+function renderPullGroup(g){
+  const sla = SLA_MS[g.type] || SLA_MS.Manual;
+  const elapsed = Date.now() - g.createdAt;
+  const tier = slaTier(elapsed, sla);
+  const typeClass = g.type === 'Auto' ? 'type-auto' : 'type-manual';
+  const slaHours = g.type === 'Auto' ? 5 : 1;
+
+  return `
+  <div class="pull-group">
+    <div class="pull-header">
+      <div class="pull-id-block">
+        <div class="pull-id-num"><span class="prefix">Pull ID</span>${escapeHtml(g.pullId)}</div>
+        <span class="chip ${typeClass}">${escapeHtml(g.type || '—')}</span>
+        <div class="sla-timer ${tier}" data-created="${g.createdAt}" data-sla="${sla}">
+          <span class="dot"></span>
+          <span class="sla-time-val">${fmtElapsed(elapsed)}</span>
+          <span class="sla-label">open · ${slaHours}h SLA</span>
+        </div>
+      </div>
+      <div style="color:var(--text-faint); font-size:0.8rem;">${g.orders.length} open WO${g.orders.length!==1?'s':''}</div>
+    </div>
+    <div class="wo-grid">
+      ${g.orders.map(o => renderWoCard(o)).join('')}
+    </div>
+  </div>`;
+}
+
+function renderWoCard(o){
+  return `
+  <div class="wo-card">
+    <div class="wo-num"><span class="prefix">WO</span>${escapeHtml(o.woNumber)}</div>
+    <div class="picker"><span class="icon">&#128100;</span>${escapeHtml(o.assignedPicker)}</div>
+    <div class="wo-elapsed" data-added="${o.addedAt}">
+      <span class="wo-elapsed-label">Open</span><span class="wo-elapsed-val">${fmtElapsed(Date.now()-o.addedAt)}</span>
+    </div>
+    <div class="complete-row">
+      <span class="complete-label">Counted &amp; verified</span>
+      <label class="slide-toggle">
+        <input type="checkbox" class="complete-toggle" data-wo-key="${o.key}">
+        <span class="slide-track"></span>
+      </label>
+    </div>
+  </div>`;
+}
+
+function renderPendingBoard(groups){
+  const cevaGroups = groups.filter(g => !g.cevaQAAt);
+  const lenovoGroups = groups.filter(g => !!g.cevaQAAt); // lenovoQAAt done -> archived -> already excluded
+
+  return `
+  <div class="qa-board">
+    <div class="qa-column">
+      <div class="qa-column-header">CEVA QA <span class="qa-count">${cevaGroups.length}</span></div>
+      <div class="qa-card-list">
+        ${cevaGroups.length ? cevaGroups.map(g => renderQaCard(g, 'ceva')).join('') : '<div class="qa-column-empty">Nothing awaiting CEVA QA</div>'}
+      </div>
+    </div>
+    <div class="qa-column">
+      <div class="qa-column-header">Lenovo QA <span class="qa-count">${lenovoGroups.length}</span></div>
+      <div class="qa-card-list">
+        ${lenovoGroups.length ? lenovoGroups.map(g => renderQaCard(g, 'lenovo')).join('') : '<div class="qa-column-empty">Nothing awaiting Lenovo QA</div>'}
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderQaCard(g, stage){
+  const sla = SLA_MS[g.type] || SLA_MS.Manual;
+  const pickDoneAt = pickingCompletedAt(g.orders);
+  const pickingMs = pickDoneAt ? (pickDoneAt - g.createdAt) : 0;
+  const tier = slaTier(pickingMs, sla);
+  const typeClass = g.type === 'Auto' ? 'type-auto' : 'type-manual';
+  const slaHours = g.type === 'Auto' ? 5 : 1;
+  const hint = stage === 'ceva' ? 'Click to confirm CEVA QA \u2192 moves to Lenovo QA' : 'Click to confirm Lenovo QA \u2192 archives this Pull ID';
+
+  return `
+  <div class="qa-pull-card" data-qa-type="${stage}" data-pull-key="${g.key}">
+    <div class="qa-pull-card-top">
+      <div class="pull-id-num"><span class="prefix">Pull ID</span>${escapeHtml(g.pullId)}</div>
+      <span class="chip ${typeClass}">${escapeHtml(g.type || '—')}</span>
+    </div>
+    <div class="qa-pull-card-meta">
+      <span>${g.orders.length} WO${g.orders.length!==1?'s':''} picked</span>
+      <span class="qa-pull-card-timer ${tier}">${fmtElapsed(pickingMs)} picking · ${slaHours}h SLA</span>
+    </div>
+    <div class="qa-pull-card-wos">
+      ${g.orders.map(o => `
+        <div class="qa-pull-card-wo-row">
+          <span class="wo-mini-num">WO ${escapeHtml(o.woNumber)}</span>
+          <span>${escapeHtml(o.assignedPicker)}</span>
+        </div>`).join('')}
+    </div>
+    ${stage === 'lenovo' ? `<div class="qa-pull-card-meta"><span>CEVA QA done ${new Date(g.cevaQAAt).toLocaleString()}</span></div>` : ''}
+    <div class="qa-pull-card-hint">${hint}</div>
+  </div>`;
+}
+
+function renderArchiveGroup(g){
+  const sla = SLA_MS[g.type] || SLA_MS.Manual;
+  const pickDoneAt = pickingCompletedAt(g.orders);
+  const pickingMs = pickDoneAt ? (pickDoneAt - g.createdAt) : null;
+  const tier = pickingMs !== null ? slaTier(pickingMs, sla) : 'ok';
+  const totalMs = g.closedAt - g.createdAt;
+  const typeClass = g.type === 'Auto' ? 'type-auto' : 'type-manual';
+  const closedDate = new Date(g.closedAt).toLocaleString();
+  return `
+  <div class="pull-group">
+    <div class="pull-header">
+      <div class="pull-id-block">
+        <div class="pull-id-num"><span class="prefix">Pull ID</span>${escapeHtml(g.pullId)}</div>
+        <span class="chip ${typeClass}">${escapeHtml(g.type || '—')}</span>
+        <div class="sla-timer ${tier}" style="cursor:default;">
+          <span class="dot"></span>
+          <span>${pickingMs !== null ? fmtElapsed(pickingMs) : '—'} picking</span>
+        </div>
+        <div class="sla-timer ok" style="cursor:default; border-color:var(--navy-border); background:transparent; color:var(--text-dim);">
+          <span>${fmtElapsed(totalMs)} total</span>
+        </div>
+      </div>
+      <div style="color:var(--text-faint); font-size:0.8rem;">Archived ${closedDate}</div>
+    </div>
+    <div class="qa-panel" style="padding-top:16px;">
+      <div class="qa-step done">
+        <div class="qa-step-info">
+          <div class="qa-step-title">CEVA QA</div>
+          <div class="qa-step-sub">${g.cevaQAAt ? new Date(g.cevaQAAt).toLocaleString() : '—'}</div>
+        </div>
+        <span class="qa-step-done-badge">&#10003; Done</span>
+      </div>
+      <div class="qa-step done">
+        <div class="qa-step-info">
+          <div class="qa-step-title">Lenovo QA</div>
+          <div class="qa-step-sub">${g.lenovoQAAt ? new Date(g.lenovoQAAt).toLocaleString() : '—'}</div>
+        </div>
+        <span class="qa-step-done-badge">&#10003; Done</span>
+      </div>
+    </div>
+    <div class="wo-grid">
+      ${g.orders.map(o => `
+        <div class="wo-card">
+          <div class="wo-num"><span class="prefix">WO</span>${escapeHtml(o.woNumber)}</div>
+          <div class="picker"><span class="icon">&#128100;</span>${escapeHtml(o.assignedPicker)}</div>
+          <div class="wo-elapsed" style="color:var(--text-faint);">
+            <span class="wo-elapsed-label">Completed</span><span>${o.completedAt ? new Date(o.completedAt).toLocaleString() : '—'}</span>
+          </div>
+        </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+/* ==================== LIVE TICK ==================== */
+function tick(){
+  document.querySelectorAll('.sla-timer[data-created]').forEach(el => {
+    const created = Number(el.dataset.created);
+    const sla = Number(el.dataset.sla);
+    const elapsed = Date.now() - created;
+    const tier = slaTier(elapsed, sla);
+    el.classList.remove('ok','warn','breach');
+    el.classList.add(tier);
+    const valEl = el.querySelector('.sla-time-val');
+    if (valEl) valEl.textContent = fmtElapsed(elapsed);
+  });
+  document.querySelectorAll('.wo-elapsed[data-added]').forEach(el => {
+    const added = Number(el.dataset.added);
+    const elapsed = Date.now() - added;
+    const valEl = el.querySelector('.wo-elapsed-val');
+    if (valEl) valEl.textContent = fmtElapsed(elapsed);
+  });
+}
+if (!tickHandle) tickHandle = setInterval(tick, 1000);
+
+/* ==================== EVENT HANDLERS ==================== */
+function attachOpenViewHandlers(){
+  document.querySelectorAll('.complete-toggle').forEach(cb => {
+    cb.addEventListener('change', e => {
+      if (e.target.checked){
+        openConfirmModal('completeWO', e.target.dataset.woKey, e.target);
+      }
+    });
+  });
+}
+
+function attachPendingViewHandlers(){
+  document.querySelectorAll('.qa-pull-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const type = card.dataset.qaType === 'ceva' ? 'cevaQA' : 'lenovoQA';
+      openConfirmModal(type, card.dataset.pullKey, null);
+    });
+  });
+}
+
+function refreshPickerAndPullDatalists(){
+  const pullList = document.getElementById('pullIdList');
+  const openPulls = Object.values(pullIds).filter(p => !p.closedAt).map(p => p.pullId);
+  pullList.innerHTML = [...new Set(openPulls)].map(id => `<option value="${escapeHtml(id)}">`).join('');
+
+  const pickerList = document.getElementById('pickerList');
+  const pickers = Object.values(warehouseOrders).map(o => o.assignedPicker).filter(Boolean);
+  pickerList.innerHTML = [...new Set(pickers)].map(p => `<option value="${escapeHtml(p)}">`).join('');
+}
+
+/* ---- Tabs ---- */
+const VALID_TABS = ['open', 'pending', 'archive'];
+function setActiveTab(tab, updateHash){
+  currentTab = tab;
+  document.getElementById('tabOpenBtn').classList.toggle('active', tab==='open');
+  document.getElementById('tabPendingBtn').classList.toggle('active', tab==='pending');
+  document.getElementById('tabArchiveBtn').classList.toggle('active', tab==='archive');
+  document.getElementById('exportExcelBtn').style.display = (tab === 'archive') ? '' : 'none';
+  if (updateHash !== false && window.location.hash.replace('#','') !== tab){
+    window.location.hash = tab;
+  }
+  render();
+}
+document.getElementById('tabOpenBtn').addEventListener('click', () => setActiveTab('open'));
+document.getElementById('tabPendingBtn').addEventListener('click', () => setActiveTab('pending'));
+document.getElementById('tabArchiveBtn').addEventListener('click', () => setActiveTab('archive'));
+
+window.addEventListener('hashchange', () => {
+  const tab = window.location.hash.replace('#','');
+  if (VALID_TABS.includes(tab) && tab !== currentTab) setActiveTab(tab, false);
+});
+
+document.getElementById('exportExcelBtn').addEventListener('click', exportArchiveToExcel);
+
+// Set initial tab from the URL, if present, without touching browser history.
+(function initTabFromHash(){
+  const tab = window.location.hash.replace('#','');
+  if (VALID_TABS.includes(tab)) setActiveTab(tab, false);
+})();
+
+/* ---- Search ---- */
+document.getElementById('searchInput').addEventListener('input', e => {
+  searchTerm = e.target.value;
+  render();
+});
+
+/* ---- Add modal ---- */
+const addModalOverlay = document.getElementById('addModalOverlay');
+document.getElementById('openAddModalBtn').addEventListener('click', () => {
+  document.getElementById('pullIdInput').value = '';
+  document.getElementById('woNumInput').value = '';
+  document.getElementById('pickerInput').value = '';
+  document.getElementById('addErrorMsg').style.display = 'none';
+  selectedType = 'Manual';
+  matchedExistingPullKey = null;
+  updateTypeUI();
+  addModalOverlay.classList.add('open');
+  setTimeout(() => document.getElementById('pullIdInput').focus(), 50);
+});
+document.getElementById('cancelAddBtn').addEventListener('click', () => addModalOverlay.classList.remove('open'));
+addModalOverlay.addEventListener('click', e => { if (e.target === addModalOverlay) addModalOverlay.classList.remove('open'); });
+
+document.getElementById('pullIdInput').addEventListener('input', e => {
+  const val = e.target.value.trim().toLowerCase();
+  const match = Object.entries(pullIds).find(([k,p]) => !p.closedAt && String(p.pullId).toLowerCase() === val);
+  const hint = document.getElementById('pullIdHint');
+  const typeField = document.getElementById('typeField');
+  if (match){
+    matchedExistingPullKey = match[0];
+    selectedType = match[1].type;
+    const inQA = !!(match[1].cevaQAAt || match[1].lenovoQAAt);
+    hint.textContent = inQA
+      ? `Existing Pull ID already in QA · type locked to ${match[1].type} (${match[1].type==='Auto'?5:1}h SLA) · adding this WO will reopen it for picking and reset CEVA/Lenovo QA sign-off`
+      : `Existing open Pull ID · type locked to ${match[1].type} (${match[1].type==='Auto'?5:1}h SLA) · timer already running`;
+    typeField.querySelector('.type-toggle').style.display = 'none';
+    let locked = typeField.querySelector('.type-locked');
+    if (!locked){
+      locked = document.createElement('div');
+      locked.className = 'type-locked';
+      typeField.appendChild(locked);
+    }
+    locked.textContent = `${match[1].type} · ${match[1].type==='Auto'?5:1} hour SLA`;
+  } else {
+    matchedExistingPullKey = null;
+    hint.textContent = 'New Pull ID — set its type below. Its timer starts now.';
+    typeField.querySelector('.type-toggle').style.display = 'flex';
+    const locked = typeField.querySelector('.type-locked');
+    if (locked) locked.remove();
+  }
+});
+
+function updateTypeUI(){
+  document.getElementById('typeManualOpt').classList.toggle('active', selectedType==='Manual');
+  document.getElementById('typeAutoOpt').classList.toggle('active', selectedType==='Auto');
+  document.getElementById('typeField').querySelector('.type-toggle').style.display = 'flex';
+  const locked = document.getElementById('typeField').querySelector('.type-locked');
+  if (locked) locked.remove();
+}
+document.getElementById('typeManualOpt').addEventListener('click', () => { selectedType='Manual'; updateTypeUI(); });
+document.getElementById('typeAutoOpt').addEventListener('click', () => { selectedType='Auto'; updateTypeUI(); });
+
+document.getElementById('saveAddBtn').addEventListener('click', async () => {
+  const pullIdVal = document.getElementById('pullIdInput').value.trim();
+  const woNumVal = document.getElementById('woNumInput').value.trim();
+  const pickerVal = document.getElementById('pickerInput').value.trim();
+  const errEl = document.getElementById('addErrorMsg');
+  const saveBtn = document.getElementById('saveAddBtn');
+
+  if (!pullIdVal || !woNumVal || !pickerVal){
+    errEl.textContent = 'Pull ID, Warehouse Order #, and Assigned Picker are all required.';
+    errEl.style.display = 'block';
+    return;
+  }
+  errEl.style.display = 'none';
+  const cancelBtn = document.getElementById('cancelAddBtn');
+  saveBtn.disabled = true;
+  cancelBtn.disabled = true;
+  saveBtn.innerHTML = '<span class="inline-spinner"></span>Saving...';
+
+  const now = Date.now();
+  try {
+    let pullKey = matchedExistingPullKey;
+    if (!pullKey){
+      const pullRes = await postAction('addPullId', { pullId: pullIdVal, type: selectedType, createdAt: now });
+      pullKey = pullRes.key;
+    } else {
+      const existing = pullIds[pullKey];
+      if (existing && (existing.cevaQAAt || existing.lenovoQAAt)){
+        await postAction('reopenPullId', { key: pullKey });
+      }
+    }
+    await postAction('addWarehouseOrder', {
+      pullIdKey: pullKey,
+      pullId: pullIdVal,
+      woNumber: woNumVal,
+      assignedPicker: pickerVal,
+      addedAt: now
+    });
+    await fetchData();
+    addModalOverlay.classList.remove('open');
+  } catch (err) {
+    errEl.textContent = 'Could not save: ' + err.message;
+    errEl.style.display = 'block';
+  } finally {
+    saveBtn.disabled = false;
+    cancelBtn.disabled = false;
+    saveBtn.textContent = 'Add Warehouse Order';
+  }
+});
+
+/* ---- Confirm modal (Warehouse Order completion, CEVA QA, Lenovo QA) ---- */
+const confirmModalOverlay = document.getElementById('confirmModalOverlay');
+let pendingAction = null; // { type: 'completeWO'|'cevaQA'|'lenovoQA', key, toggleEl }
+
+function openConfirmModal(type, key, toggleEl){
+  pendingAction = { type, key, toggleEl };
+  const bodyEl = document.getElementById('confirmBodyText');
+  const subEl = document.getElementById('confirmSubText');
+
+  if (type === 'completeWO'){
+    const wo = warehouseOrders[key];
+    bodyEl.innerHTML = `Mark <strong>WO ${escapeHtml(wo.woNumber)}</strong> (Pull ID ${escapeHtml(wo.pullId)}, picker <strong>${escapeHtml(wo.assignedPicker)}</strong>) as complete?`;
+    subEl.textContent = 'This timestamps the Warehouse Order as complete and confirms items were counted and verified.';
+  } else if (type === 'cevaQA'){
+    const p = pullIds[key];
+    bodyEl.innerHTML = `Confirm <strong>CEVA QA</strong> for Pull ID <strong>${escapeHtml(p.pullId)}</strong> and move it to Lenovo QA?`;
+    subEl.textContent = "This timestamps CEVA's quality check as complete and moves the Pull ID into the Lenovo QA column.";
+  } else if (type === 'lenovoQA'){
+    const p = pullIds[key];
+    bodyEl.innerHTML = `Confirm <strong>Lenovo QA</strong> for Pull ID <strong>${escapeHtml(p.pullId)}</strong> and archive it?`;
+    subEl.textContent = "This timestamps Lenovo's sign-off as complete and archives the Pull ID.";
+  }
+  confirmModalOverlay.classList.add('open');
+}
+
+function closeConfirmModal(){
+  if (pendingAction && pendingAction.toggleEl) pendingAction.toggleEl.checked = false;
+  confirmModalOverlay.classList.remove('open');
+  pendingAction = null;
+}
+document.getElementById('cancelConfirmBtn').addEventListener('click', closeConfirmModal);
+confirmModalOverlay.addEventListener('click', e => {
+  if (e.target === confirmModalOverlay) closeConfirmModal();
+});
+document.getElementById('acceptConfirmBtn').addEventListener('click', async () => {
+  if (!pendingAction) return;
+  const { type, key, toggleEl } = pendingAction;
+  const now = Date.now();
+  const acceptBtn = document.getElementById('acceptConfirmBtn');
+  const cancelBtn = document.getElementById('cancelConfirmBtn');
+  acceptBtn.disabled = true;
+  cancelBtn.disabled = true;
+  acceptBtn.innerHTML = '<span class="inline-spinner"></span>Saving...';
+  try {
+    if (type === 'completeWO'){
+      await postAction('completeWarehouseOrder', { key, completedAt: now });
+    } else if (type === 'cevaQA'){
+      await postAction('markCevaQA', { key, cevaQAAt: now });
+    } else if (type === 'lenovoQA'){
+      await postAction('markLenovoQA', { key, lenovoQAAt: now });
+    }
+    await fetchData();
+    confirmModalOverlay.classList.remove('open');
+    pendingAction = null;
+  } catch (err) {
+    console.error(type + ' failed:', err);
+    if (toggleEl) toggleEl.checked = false;
+    confirmModalOverlay.classList.remove('open');
+    alert('Could not save: ' + err.message);
+    pendingAction = null;
+  } finally {
+    acceptBtn.disabled = false;
+    cancelBtn.disabled = false;
+    acceptBtn.textContent = 'Confirm & Timestamp';
+  }
+});
+</script>
+</body>
+</html>

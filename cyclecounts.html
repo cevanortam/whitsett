@@ -413,6 +413,30 @@
     font-size:14px;
     background:#fff;
   }
+  textarea.paste-field{
+    width:100%;
+    min-height:180px;
+    padding:10px 12px;
+    border:1px solid var(--border);
+    border-radius:6px;
+    font-family:'Consolas','Courier New',monospace;
+    font-size:13px;
+    resize:vertical;
+  }
+  textarea.paste-field:focus{outline:2px solid var(--navy); outline-offset:-1px;}
+  .rows-detected{
+    font-size:12px;
+    color:var(--muted);
+    margin-top:6px;
+  }
+  .rows-detected b{color:var(--navy);}
+  .paste-hint{
+    font-size:12px;
+    color:var(--muted);
+    margin-bottom:8px;
+    line-height:1.5;
+  }
+  .paste-hint code{background:var(--gray-bg); padding:1px 5px; border-radius:4px;}
 </style>
 </head>
 <body>
@@ -427,7 +451,8 @@
   </div>
   <div style="display:flex; align-items:center; gap:12px;">
     <span id="connBadge" class="conn-badge bad"><span class="dot"></span>Connecting...</span>
-    <button class="btn btn-primary" onclick="openInitiateModal()">+ New Cycle Count</button>
+    <button class="btn btn-secondary" onclick="openBulkModal()">+ Mass Cycle Count</button>
+    <button class="btn btn-primary" onclick="openInitiateModal()">+ Standard Cycle Count</button>
   </div>
 </header>
 
@@ -590,6 +615,49 @@
     </div>
     <div class="modal-footer" style="justify-content:flex-end;">
       <button class="btn btn-primary" onclick="submitComplete()">Save Count</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bulk Add Modal -->
+<div class="overlay" id="bulkOverlay">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-header">
+      <h2>Mass Cycle Count</h2>
+      <button class="modal-close" onclick="closeModal('bulkOverlay')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="two-col">
+        <div class="field">
+          <label>Date</label>
+          <input type="date" id="fb_date">
+        </div>
+        <div class="field">
+          <label>Cycle Count Assigned To</label>
+          <input type="text" id="fb_assignedTo" placeholder="Name">
+        </div>
+      </div>
+      <div class="field" style="display:flex; align-items:center; gap:8px; margin-top:2px; margin-bottom:16px;">
+        <input type="checkbox" id="fb_highValue" style="width:16px; height:16px;">
+        <label style="margin-bottom:0; text-transform:none; font-size:14px; font-weight:500; color:var(--text);" for="fb_highValue">All High Value SKUs</label>
+      </div>
+      <div class="field">
+        <label>Paste from Excel</label>
+        <div class="paste-hint">
+          Copy cells from Excel and paste below — one cycle count per line. Supported row formats:<br>
+          &bull; <code>SKU</code> only<br>
+          &bull; <code>SKU&nbsp;&nbsp;Location</code><br>
+          &bull; <code>SKU&nbsp;&nbsp;Location&nbsp;&nbsp;Handling Unit</code>
+        </div>
+        <textarea class="paste-field" id="fb_pasteText" placeholder="SKU-10293	A-12-3	HU4471
+SKU-10294	A-12-4	HU4472
+SKU-10295	A-14-1" oninput="updateBulkPreview()"></textarea>
+        <div class="rows-detected">Rows detected: <b id="bulkRowCount">0</b></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('bulkOverlay')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitBulk()">Add Cycle Counts</button>
     </div>
   </div>
 </div>
@@ -866,6 +934,77 @@
   function escapeHtml(v){
     if (v === undefined || v === null) return '';
     return String(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // ---------- Bulk Add flow ----------
+  function parseBulkRows(text){
+    return text.split('\n')
+      .map(line => line.replace(/\r/g,'').trim())
+      .filter(line => line.length > 0)
+      .map(line => {
+        // Prefer tab-delimited (native Excel paste); fall back to runs of 2+ spaces
+        let fields = line.split('\t').map(f => f.trim()).filter(f => f.length > 0);
+        if (fields.length < 2) {
+          fields = line.split(/\s{2,}/).map(f => f.trim()).filter(f => f.length > 0);
+        }
+        if (fields.length === 0) return null;
+        if (fields.length === 1) {
+          return { sku: fields[0] };
+        } else if (fields.length === 2) {
+          return { sku: fields[0], location: fields[1] };
+        } else {
+          return { sku: fields[0], location: fields[1], handlingUnit: fields[2] };
+        }
+      })
+      .filter(row => row && row.sku);
+  }
+
+  function updateBulkPreview(){
+    const rows = parseBulkRows(document.getElementById('fb_pasteText').value);
+    document.getElementById('bulkRowCount').textContent = rows.length;
+  }
+
+  function openBulkModal(){
+    document.getElementById('fb_date').value = new Date().toISOString().slice(0,10);
+    document.getElementById('fb_assignedTo').value = '';
+    document.getElementById('fb_highValue').checked = false;
+    document.getElementById('fb_pasteText').value = '';
+    document.getElementById('bulkRowCount').textContent = '0';
+    document.getElementById('bulkOverlay').classList.add('show');
+  }
+
+  function submitBulk(){
+    const date = document.getElementById('fb_date').value;
+    const assignedTo = document.getElementById('fb_assignedTo').value.trim();
+    const highValue = document.getElementById('fb_highValue').checked;
+    const rows = parseBulkRows(document.getElementById('fb_pasteText').value);
+
+    if (!date || !assignedTo) {
+      alert('Please fill out Date and Assigned To.');
+      return;
+    }
+    if (rows.length === 0) {
+      alert('No valid rows detected — make sure each line has at least a SKU.');
+      return;
+    }
+    if (!db) {
+      alert('Firebase is not configured yet — see the banner at the top of the page.');
+      return;
+    }
+
+    const now = Date.now();
+    rows.forEach((row, i) => {
+      const newRef = db.ref('cycleCounts').push();
+      newRef.set({
+        date, assignedTo, highValue,
+        location: row.location || '',
+        handlingUnit: row.handlingUnit || '',
+        sku: row.sku,
+        createdAt: now + i // stagger by 1ms so ordering is preserved
+      });
+    });
+
+    closeModal('bulkOverlay');
   }
 
   // ---------- Initiate flow ----------

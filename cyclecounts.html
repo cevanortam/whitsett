@@ -515,6 +515,7 @@
             <th>Variance</th>
             <th>Duration</th>
             <th>SAP Recorded</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody id="archiveBody"></tbody>
@@ -611,6 +612,28 @@
     <div class="modal-footer" style="justify-content:flex-end;">
       <button class="btn btn-outline" onclick="closeModal('pendingExportOverlay')">Cancel</button>
       <button class="btn btn-primary" onclick="exportPending()">Export to Excel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Confirmation Modal (password protected) -->
+<div class="overlay" id="deleteOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Delete Cycle Count</h2>
+      <button class="modal-close" onclick="closeModal('deleteOverlay')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px; color:var(--muted); margin-bottom:14px;">This permanently removes the record from the archive. Enter the password to confirm.</p>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="f_deletePassword" placeholder="Password" onkeydown="if(event.key==='Enter') confirmDelete()">
+      </div>
+      <div id="deleteError" style="display:none; color:var(--red); font-size:13px; font-weight:600; margin-top:-6px; margin-bottom:6px;">Incorrect password.</div>
+    </div>
+    <div class="modal-footer" style="justify-content:flex-end;">
+      <button class="btn btn-outline" onclick="closeModal('deleteOverlay')">Cancel</button>
+      <button class="btn btn-primary" style="background:var(--red);" onclick="confirmDelete()">Delete</button>
     </div>
   </div>
 </div>
@@ -771,7 +794,7 @@
 
     const tbody = document.getElementById('archiveBody');
     if (rows.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="13" style="text-align:center; color:var(--muted); padding:20px; font-style:italic;">No completed cycle counts yet</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="14" style="text-align:center; color:var(--muted); padding:20px; font-style:italic;">No completed cycle counts yet</td></tr>';
       return;
     }
 
@@ -794,6 +817,7 @@
           <td>${variance > 0 ? '+' : ''}${variance}</td>
           <td>${duration}</td>
           <td style="text-align:center;"><input type="checkbox" ${rec.sapRecorded ? 'checked' : ''} onchange="toggleSapRecorded('${rec.id}', this.checked)" style="width:16px; height:16px; cursor:pointer;"></td>
+          <td><button class="danger-link" onclick="openDeleteModal('${rec.id}')">Delete</button></td>
         </tr>
       `;
     }).join('');
@@ -952,6 +976,29 @@
   function toggleSapRecorded(id, checked){
     if (!db) return;
     db.ref('cycleCounts/' + id).update({ sapRecorded: checked });
+  }
+
+  const ARCHIVE_DELETE_PASSWORD = "Williams$300";
+  let pendingDeleteId = null;
+
+  function openDeleteModal(id){
+    pendingDeleteId = id;
+    document.getElementById('f_deletePassword').value = '';
+    document.getElementById('deleteError').style.display = 'none';
+    document.getElementById('deleteOverlay').classList.add('show');
+  }
+
+  function confirmDelete(){
+    const pw = document.getElementById('f_deletePassword').value;
+    if (pw !== ARCHIVE_DELETE_PASSWORD) {
+      document.getElementById('deleteError').style.display = 'block';
+      return;
+    }
+    if (db && pendingDeleteId) {
+      db.ref('cycleCounts/' + pendingDeleteId).remove();
+    }
+    pendingDeleteId = null;
+    closeModal('deleteOverlay');
   }
 
   // ---------- Export ----------

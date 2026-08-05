@@ -513,6 +513,8 @@
             <th>Count</th>
             <th>System Count</th>
             <th>Variance</th>
+            <th>Duration</th>
+            <th>SAP Recorded</th>
           </tr>
         </thead>
         <tbody id="archiveBody"></tbody>
@@ -692,6 +694,18 @@
     return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
   }
 
+  function formatDuration(ms){
+    if (!ms || ms < 0) return '';
+    const mins = Math.round(ms / 60000);
+    if (mins < 60) return mins + 'm';
+    const hrs = Math.floor(mins / 60);
+    const remMins = mins % 60;
+    if (hrs < 24) return hrs + 'h ' + remMins + 'm';
+    const days = Math.floor(hrs / 24);
+    const remHrs = hrs % 24;
+    return days + 'd ' + remHrs + 'h';
+  }
+
   // ---------- Tabs ----------
   function switchTab(tab){
     document.getElementById('boardView').classList.toggle('active', tab === 'board');
@@ -757,13 +771,14 @@
 
     const tbody = document.getElementById('archiveBody');
     if (rows.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:var(--muted); padding:20px; font-style:italic;">No completed cycle counts yet</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="13" style="text-align:center; color:var(--muted); padding:20px; font-style:italic;">No completed cycle counts yet</td></tr>';
       return;
     }
 
     tbody.innerHTML = rows.map(rec => {
       const variance = Number(rec.count) - Number(rec.systemCount);
       const completedStr = rec.completedAt ? new Date(rec.completedAt).toLocaleString() : '';
+      const duration = (rec.createdAt && rec.completedAt) ? formatDuration(rec.completedAt - rec.createdAt) : '';
       return `
         <tr>
           <td>${completedStr}</td>
@@ -777,6 +792,8 @@
           <td>${escapeHtml(rec.count)}</td>
           <td>${escapeHtml(rec.systemCount)}</td>
           <td>${variance > 0 ? '+' : ''}${variance}</td>
+          <td>${duration}</td>
+          <td style="text-align:center;"><input type="checkbox" ${rec.sapRecorded ? 'checked' : ''} onchange="toggleSapRecorded('${rec.id}', this.checked)" style="width:16px; height:16px; cursor:pointer;"></td>
         </tr>
       `;
     }).join('');
@@ -795,9 +812,11 @@
       let countsHtml = '';
       let varianceTag = '';
       if (status !== 'pending') {
+        const duration = (rec.createdAt && rec.completedAt) ? formatDuration(rec.completedAt - rec.createdAt) : '';
         countsHtml = `<div class="card-counts">
           <div>Count<br><b>${escapeHtml(rec.count)}</b></div>
           <div>System<br><b>${escapeHtml(rec.systemCount)}</b></div>
+          ${duration ? `<div>Duration<br><b>${duration}</b></div>` : ''}
         </div>`;
         if (status === 'discrepancy') {
           const diff = Number(rec.count) - Number(rec.systemCount);
@@ -930,6 +949,11 @@
     ov.addEventListener('click', (e) => { if (e.target === ov) ov.classList.remove('show'); });
   });
 
+  function toggleSapRecorded(id, checked){
+    if (!db) return;
+    db.ref('cycleCounts/' + id).update({ sapRecorded: checked });
+  }
+
   // ---------- Export ----------
   function downloadWorkbook(rows, sheetName, filenamePrefix){
     const ws = XLSX.utils.aoa_to_sheet(rows);
@@ -939,17 +963,19 @@
   }
 
   function exportArchive(){
-    const rows = [['Completed','Date Requested','Assigned To','Location','Handling Unit','SKU','High Value','Status','Count','System Count','Variance']];
+    const rows = [['Completed','Date Requested','Assigned To','Location','Handling Unit','SKU','High Value','Status','Count','System Count','Variance','Duration','SAP Recorded']];
     Object.keys(records).forEach(id => {
       const rec = records[id];
       const status = statusOf(rec);
       if (status === 'pending') return;
       const variance = Number(rec.count) - Number(rec.systemCount);
+      const duration = (rec.createdAt && rec.completedAt) ? formatDuration(rec.completedAt - rec.createdAt) : '';
       rows.push([
         rec.completedAt ? new Date(rec.completedAt).toLocaleString() : '',
         rec.date || '', rec.assignedTo || '', rec.location || '', rec.handlingUnit || '', rec.sku || '',
         rec.highValue ? 'Yes' : 'No',
-        status, rec.count, rec.systemCount, variance
+        status, rec.count, rec.systemCount, variance, duration,
+        rec.sapRecorded ? 'Yes' : 'No'
       ]);
     });
     if (rows.length === 1) { alert('No completed cycle counts to export yet.'); return; }

@@ -6,8 +6,8 @@
 <title>Whitsett Outbound Pull Dashboard</title>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
   :root{
     --bg: #0a1626;
@@ -602,9 +602,17 @@ function renderAll(){
   const pullIds = new Set(allLineItems.map(r=>r.pullId));
   document.getElementById('pullCount').textContent = pullIds.size.toLocaleString();
 
-  renderKPIs();
-  renderCharts();
-  renderTable();
+  safeRender('KPIs', renderKPIs);
+  safeRender('charts', renderCharts);
+  safeRender('table', renderTable);
+}
+
+function safeRender(label, fn){
+  try{ fn(); }
+  catch(err){
+    console.error('Failed to render '+label+':', err);
+    setSyncStatus('err', 'Error rendering '+label+' — open the console for details');
+  }
 }
 
 /* ---------------------------------------------------------------------
@@ -658,13 +666,21 @@ function renderKPIs(){
    Charts
 --------------------------------------------------------------------- */
 const CHART_FONT = {family:"-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif", size:11};
-Chart.defaults.color = '#93a8c4';
-Chart.defaults.font = CHART_FONT;
-Chart.defaults.borderColor = 'rgba(255,255,255,0.06)';
+if(typeof Chart !== 'undefined'){
+  Chart.defaults.color = '#93a8c4';
+  Chart.defaults.font = CHART_FONT;
+  Chart.defaults.borderColor = 'rgba(255,255,255,0.06)';
+}
 
 function destroyChart(id){ if(charts[id]){ charts[id].destroy(); delete charts[id]; } }
 
 function renderCharts(){
+  if(typeof Chart === 'undefined'){
+    document.querySelectorAll('.chart-holder').forEach(el=>{
+      el.innerHTML = '<div style="padding:20px;color:var(--text-faint);font-size:12px;">Chart library failed to load from CDN — check your network/firewall and reload.</div>';
+    });
+    throw new Error('Chart.js did not load (global "Chart" is undefined)');
+  }
   const items = filterByRange(allLineItems);
   const groups = groupByPullId(items);
   renderPerDayChart(groups);

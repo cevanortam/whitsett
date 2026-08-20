@@ -257,7 +257,7 @@
       <div class="chart-holder"><canvas id="chartUsers"></canvas></div>
     </div>
     <div class="chart-card">
-      <h3 id="titleAccuracy">Picking Accuracy by Day</h3>
+      <h3 id="titleAccuracy">Fill Rate by Day</h3>
       <div class="chart-note">Share of lines where actual qty matched target qty</div>
       <div class="chart-holder"><canvas id="chartAccuracy"></canvas></div>
     </div>
@@ -801,7 +801,7 @@ function renderKPIs(){
   const cards = [
     {label:'Pull IDs', value: totalPulls.toLocaleString(), sub: totalLines.toLocaleString()+' line items', accent:'var(--accent)'},
     {label:'Units Confirmed', value: totalUnits.toLocaleString(), sub:'actual qty picked', accent:'var(--info)'},
-    {label:'Pick Accuracy', value: accuracyPct!==null ? accuracyPct+'%' : '&mdash;', sub: accuracyPct!==null ? (totalLines-accurateLines)+' lines off qty' : 'no data', accent: accuracyPct!==null && accuracyPct<98 ? 'var(--warn)' : 'var(--good)'},
+    {label:'Fill Rate', value: accuracyPct!==null ? accuracyPct+'%' : '&mdash;', sub: accuracyPct!==null ? (totalLines-accurateLines)+' lines off qty' : 'no data', accent: accuracyPct!==null && accuracyPct<98 ? 'var(--warn)' : 'var(--good)'},
     {label:'Avg Cycle Time', value: formatDuration(avgCycle), sub:'created \u2192 confirmed', accent:'var(--info)'},
     {label:'Avg Dispatch Delay', value: formatDuration(avgDispatch), sub:'created \u2192 start', accent:'var(--info)'},
     {label:'Pull IDs / '+granularityLabel(), value: avgPerDay!==null ? avgPerDay : '&mdash;', sub:'average over range', accent:'var(--accent)'},
@@ -966,7 +966,7 @@ function updateChartTitles(){
   const g = granularityLabel();
   document.getElementById('titlePerDay').textContent = 'Pull IDs per '+g;
   document.getElementById('titleCycle').textContent = 'Avg Cycle Time by '+g;
-  document.getElementById('titleAccuracy').textContent = 'Picking Accuracy by '+g;
+  document.getElementById('titleAccuracy').textContent = 'Fill Rate by '+g;
   document.getElementById('titleBayVolume').textContent = 'Picks by Bay Type per '+g;
 }
 

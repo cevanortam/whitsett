@@ -986,13 +986,11 @@ function renderPerDayChart(groups){
   });
   destroyChart('perDay');
   const opts = baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}}, true);
-  opts.layout = {padding:{top:20}};
-  opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:9}, formatter:v=>v===0?'':v};
   charts.perDay = new Chart(document.getElementById('chartPerDay'), {
-    type:'bar',
+    type:'line',
     data:{ labels: autoHours.map((_,h)=>formatHour12(h)), datasets:[
-      {label:'Auto', data:autoHours, backgroundColor:'#3d9fe8', borderRadius:4, maxBarThickness:14},
-      {label:'Manual', data:manualHours, backgroundColor:'#a78bfa', borderRadius:4, maxBarThickness:14}
+      { label:'Auto', data:autoHours, borderColor:'#3d9fe8', backgroundColor:'rgba(61,159,232,0.15)', tension:0.3, fill:true, spanGaps:true },
+      { label:'Manual', data:manualHours, borderColor:'#a78bfa', backgroundColor:'rgba(167,139,250,0.15)', tension:0.3, fill:true, spanGaps:true }
     ]},
     options: opts
   });
@@ -1063,12 +1061,10 @@ function renderHourlyChart(items){
   items.forEach(r=>{ if(isValidDate(r.confirmedAt)) hours[r.confirmedAt.getHours()]++; });
   destroyChart('hourly');
   const opts = baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}});
-  opts.layout = {padding:{top:20}};
-  opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:9}, formatter:v=>v===0?'':v};
   charts.hourly = new Chart(document.getElementById('chartHourly'), {
-    type:'bar',
+    type:'line',
     data:{ labels: hours.map((_,h)=>formatHour12(h)),
-           datasets:[{ data:hours, backgroundColor:'#3d9fe8', borderRadius:4, maxBarThickness:14 }]},
+           datasets:[{ data:hours, borderColor:'#3d9fe8', backgroundColor:'rgba(61,159,232,0.15)', tension:0.3, fill:true }]},
     options: opts
   });
 }
@@ -1468,7 +1464,7 @@ function exportTableToExcel(){
     return;
   }
 
-  const rows = lastRenderedGroups.map(g=>({
+  const pullRows = lastRenderedGroups.map(g=>({
     'Pull ID': g.pullId,
     'Type': g.pullType,
     'Status': g.status,
@@ -1490,26 +1486,54 @@ function exportTableToExcel(){
     'Confirmed By': g.confirmedBy
   }));
 
-  const ws = XLSX.utils.json_to_sheet(rows, {cellDates:true});
-  ws['!cols'] = [
+  const lineRows = [];
+  lastRenderedGroups.forEach(g=>{
+    g.lines.forEach(l=>{
+      const result = classifyPickResult(l.targetQty, l.actualQty, isValidDate(l.confirmedAt));
+      const pickDurationMin = (isValidDate(l.createdAt) && isValidDate(l.confirmedAt)) ? minutesBetween(l.createdAt, l.confirmedAt) : '';
+      lineRows.push({
+        'Pull ID': g.pullId,
+        'Pull Type': g.pullType,
+        'Pull Status': g.status,
+        'SLA Status': g.slaStatus,
+        'Warehouse Task': l.warehouseTask,
+        'SKU': l.product,
+        'Description': l.productDesc,
+        'Source Bin (Location)': l.sourceBin,
+        'Bay Type': l.bayType,
+        'Dest Bin/HU': l.destBin || l.destHU || '',
+        'Warehouse Order': l.warehouseOrder,
+        'Target Qty': l.targetQty,
+        'Actual Qty': l.actualQty,
+        'Result': result,
+        'Created By': l.createdBy,
+        'Created At': isValidDate(l.createdAt) ? l.createdAt : '',
+        'Confirmed By': l.confirmedBy,
+        'Confirmed At': isValidDate(l.confirmedAt) ? l.confirmedAt : '',
+        'Pick Duration (min)': pickDurationMin
+      });
+    });
+  });
+
+  const pullSheet = XLSX.utils.json_to_sheet(pullRows, {cellDates:true});
+  pullSheet['!cols'] = [
     {wch:14},{wch:8},{wch:12},{wch:12},{wch:19},{wch:7},{wch:11},{wch:11},
     {wch:11},{wch:10},{wch:9},{wch:18},{wch:18},{wch:18},
     {wch:14},{wch:16},{wch:20},{wch:14},{wch:14}
   ];
-  // Render date columns in a readable datetime format rather than a raw serial number
-  const dateCols = ['Created','Started','Confirmed'];
-  const headerRow = Object.keys(rows[0]||{});
-  dateCols.forEach(col=>{
-    const colIdx = headerRow.indexOf(col);
-    if(colIdx===-1) return;
-    for(let r=0;r<rows.length;r++){
-      const addr = XLSX.utils.encode_cell({r:r+1, c:colIdx});
-      if(ws[addr] && ws[addr].t==='d') ws[addr].z = 'mm/dd/yyyy hh:mm AM/PM';
-    }
-  });
+  applyDateFormat(pullSheet, pullRows, ['Created','Started','Confirmed']);
+
+  const lineSheet = XLSX.utils.json_to_sheet(lineRows, {cellDates:true});
+  lineSheet['!cols'] = [
+    {wch:14},{wch:9},{wch:12},{wch:12},{wch:14},{wch:12},{wch:32},{wch:16},
+    {wch:11},{wch:14},{wch:14},{wch:10},{wch:10},{wch:9},
+    {wch:14},{wch:18},{wch:14},{wch:18},{wch:16}
+  ];
+  applyDateFormat(lineSheet, lineRows, ['Created At','Confirmed At']);
 
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Pull IDs');
+  XLSX.utils.book_append_sheet(wb, pullSheet, 'Pull IDs');
+  XLSX.utils.book_append_sheet(wb, lineSheet, 'Line Items');
 
   const rangeSuffix = rangeMode==='all' ? 'all-time'
     : rangeMode==='today' ? 'today'
@@ -1517,6 +1541,19 @@ function exportTableToExcel(){
     : 'last-'+rangeMode+'-days';
   const today = new Date().toISOString().slice(0,10);
   XLSX.writeFile(wb, 'whitsett-outbound-pulls_'+rangeSuffix+'_'+today+'.xlsx');
+}
+
+// Renders the given date columns of a sheet as a readable datetime instead of a raw serial number.
+function applyDateFormat(sheet, rows, dateCols){
+  const headerRow = Object.keys(rows[0]||{});
+  dateCols.forEach(col=>{
+    const colIdx = headerRow.indexOf(col);
+    if(colIdx===-1) return;
+    for(let r=0;r<rows.length;r++){
+      const addr = XLSX.utils.encode_cell({r:r+1, c:colIdx});
+      if(sheet[addr] && sheet[addr].t==='d') sheet[addr].z = 'mm/dd/yyyy hh:mm AM/PM';
+    }
+  });
 }
 </script>
 </body>

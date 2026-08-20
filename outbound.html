@@ -106,9 +106,8 @@
   .kpi .sub{font-size:11.5px;color:var(--text-dim);margin-top:6px;}
 
   .charts-grid{
-    display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:26px;
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:16px;margin-bottom:26px;
   }
-  @media (max-width:900px){.charts-grid{grid-template-columns:1fr;}}
   .chart-card{
     background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius);
     padding:18px 18px 10px;
@@ -233,6 +232,11 @@
       <h3>Top Confirmed By (Volume)</h3>
       <div class="chart-note">Line items confirmed, by associate</div>
       <div class="chart-holder"><canvas id="chartUsers"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Picking Accuracy by Day</h3>
+      <div class="chart-note">Share of lines where actual qty matched target qty</div>
+      <div class="chart-holder"><canvas id="chartAccuracy"></canvas></div>
     </div>
   </section>
 
@@ -721,6 +725,7 @@ function renderCharts(){
   renderCycleChart(groups);
   renderHourlyChart(items);
   renderUsersChart(items);
+  renderAccuracyChart(items);
 }
 
 function renderPerDayChart(groups){
@@ -798,6 +803,33 @@ function renderUsersChart(items){
 function formatShortDay(k){
   const [y,m,d] = k.split('-').map(Number);
   return new Date(y,m-1,d).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+}
+
+function renderAccuracyChart(items){
+  const byDay = {};
+  items.forEach(r=>{
+    if(!r.createdAt) return;
+    const k = dayKey(r.createdAt);
+    if(!byDay[k]) byDay[k] = {total:0, accurate:0};
+    byDay[k].total++;
+    if((r.actualQty||0) === (r.targetQty||0)) byDay[k].accurate++;
+  });
+  const labels = Object.keys(byDay).sort();
+  const data = labels.map(k => byDay[k].total ? Math.round((byDay[k].accurate/byDay[k].total)*1000)/10 : null);
+  destroyChart('accuracy');
+  const opts = baseChartOptions({y:{beginAtZero:true, suggestedMax:100, ticks:{callback:v=>v+'%'}}});
+  opts.plugins.tooltip = {
+    callbacks:{ label: ctx => {
+      const k = labels[ctx.dataIndex];
+      const d = byDay[k];
+      return 'Accuracy: '+ctx.parsed.y+'% ('+d.accurate+'/'+d.total+' lines)';
+    }}
+  };
+  charts.accuracy = new Chart(document.getElementById('chartAccuracy'), {
+    type:'bar',
+    data:{ labels: labels.map(l=>formatShortDay(l)), datasets:[{ data, backgroundColor:'#2fbf71', borderRadius:4, maxBarThickness:36 }]},
+    options: opts
+  });
 }
 
 function baseChartOptions(scalesExtra, showLegend, horizontal){

@@ -294,7 +294,10 @@
         <h2>Pull IDs</h2>
         <div class="meta" id="tableMeta">&nbsp;</div>
       </div>
-      <input type="text" id="searchBox" placeholder="Search Pull ID, WO, SKU, or user&hellip;" style="min-width:260px;">
+      <div style="display:flex;gap:10px;align-items:center;">
+        <input type="text" id="searchBox" placeholder="Search Pull ID, WO, SKU, or user&hellip;" style="min-width:260px;">
+        <button type="button" class="btn secondary" id="exportBtn">&#8595; Export to Excel</button>
+      </div>
     </div>
     <div style="overflow-x:auto;">
       <table>
@@ -386,6 +389,7 @@ let rangeMode = '30';
 let granularity = 'day'; // 'day' | 'month' | 'year' — controls how time-series charts bucket data
 let charts = {};
 let expandedPullIds = new Set();
+let lastRenderedGroups = []; // the exact filtered/sorted Pull ID rows currently on screen — used for Excel export
 
 /* ---------------------------------------------------------------------
    Date / time helpers
@@ -1038,7 +1042,7 @@ function renderAccuracyChart(items){
   const labels = Object.keys(byDay).sort();
   const data = labels.map(k => byDay[k].total ? Math.round((byDay[k].accurate/byDay[k].total)*1000)/10 : null);
   destroyChart('accuracy');
-  const opts = baseChartOptions({y:{beginAtZero:true, suggestedMax:100, ticks:{callback:v=>v+'%'}}});
+  const opts = baseChartOptions({y:{beginAtZero:true, suggestedMax:112, max:112, ticks:{callback:v=>v<=100?v+'%':'', stepSize:20}}});
   opts.layout = {padding:{top:20}};
   opts.plugins.tooltip = {
     callbacks:{ label: ctx => {
@@ -1131,8 +1135,8 @@ function renderSlaChart(groups){
   const auto = pctFor('Auto');
   const manual = pctFor('Manual');
   destroyChart('sla');
-  const opts = baseChartOptions({y:{beginAtZero:true, suggestedMax:100, ticks:{callback:v=>v+'%'}}}, true);
-  opts.layout = {padding:{top:30}};
+  const opts = baseChartOptions({y:{beginAtZero:true, suggestedMax:118, max:118, ticks:{callback:v=>v<=100?v+'%':'', stepSize:20}}}, true);
+  opts.layout = {padding:{top:24}};
   opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:10}, formatter:v=>v===null?'':v+'%'};
   opts.plugins.tooltip = { callbacks:{ label: ctx => {
     const k = labels[ctx.dataIndex];
@@ -1235,6 +1239,8 @@ function renderTable(){
     if(th.dataset.key===sortKey) th.classList.add(sortDir==='asc'?'sorted-asc':'sorted');
   });
 
+  lastRenderedGroups = groups;
+
   document.getElementById('tableMeta').textContent =
     groups.length.toLocaleString() + ' Pull ID' + (groups.length===1?'':'s') +
     (rangeMode!=='all' ? ' in selected range' : '');
@@ -1325,6 +1331,71 @@ function renderTable(){
 }
 
 function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
+
+/* ---------------------------------------------------------------------
+   Export to Excel
+--------------------------------------------------------------------- */
+document.getElementById('exportBtn').addEventListener('click', exportTableToExcel);
+
+function exportTableToExcel(){
+  if(typeof XLSX === 'undefined'){
+    setSyncStatus('err', 'Excel export library failed to load from CDN — check your network/firewall and reload.');
+    return;
+  }
+  if(lastRenderedGroups.length===0){
+    setSyncStatus('err', 'Nothing to export — no Pull IDs match the current filters.');
+    return;
+  }
+
+  const rows = lastRenderedGroups.map(g=>({
+    'Pull ID': g.pullId,
+    'Type': g.pullType,
+    'Status': g.status,
+    'SLA Status': g.slaStatus,
+    'Lines': g.lineCount,
+    'Target Qty': g.targetQty,
+    'Actual Qty': g.actualQty,
+    'Short Pick': g.hasShort ? 'Yes' : 'No',
+    'Over Pick': g.hasOver ? 'Yes' : 'No',
+    'NIL Pick': g.hasNil ? 'Yes' : 'No',
+    'Created': isValidDate(g.createdAt) ? g.createdAt : '',
+    'Started': isValidDate(g.startAt) ? g.startAt : '',
+    'Confirmed': isValidDate(g.confirmedAt) ? g.confirmedAt : '',
+    'Created\u2192Start (min)': g.createToStartMin ?? '',
+    'Created\u2192Confirmed (min)': g.createToConfirmMin ?? '',
+    'Warehouse Order(s)': g.warehouseOrders,
+    'Created By': g.createdBy,
+    'Confirmed By': g.confirmedBy
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(rows, {cellDates:true});
+  ws['!cols'] = [
+    {wch:14},{wch:8},{wch:12},{wch:12},{wch:7},{wch:11},{wch:11},
+    {wch:11},{wch:10},{wch:9},{wch:18},{wch:18},{wch:18},
+    {wch:14},{wch:16},{wch:20},{wch:14},{wch:14}
+  ];
+  // Render date columns in a readable datetime format rather than a raw serial number
+  const dateCols = ['Created','Started','Confirmed'];
+  const headerRow = Object.keys(rows[0]||{});
+  dateCols.forEach(col=>{
+    const colIdx = headerRow.indexOf(col);
+    if(colIdx===-1) return;
+    for(let r=0;r<rows.length;r++){
+      const addr = XLSX.utils.encode_cell({r:r+1, c:colIdx});
+      if(ws[addr] && ws[addr].t==='d') ws[addr].z = 'mm/dd/yyyy hh:mm AM/PM';
+    }
+  });
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Pull IDs');
+
+  const rangeSuffix = rangeMode==='all' ? 'all-time'
+    : rangeMode==='today' ? 'today'
+    : rangeMode==='custom' ? 'custom-range'
+    : 'last-'+rangeMode+'-days';
+  const today = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, 'whitsett-outbound-pulls_'+rangeSuffix+'_'+today+'.xlsx');
+}
 </script>
 </body>
 </html>

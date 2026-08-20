@@ -54,6 +54,17 @@
     border-radius:8px;padding:8px 10px;font-size:13px;outline:none;color-scheme:dark;
   }
   input[type=date]:focus{border-color:var(--accent);}
+
+  .segmented{
+    display:flex;background:var(--card);border:1px solid var(--card-border-light);
+    border-radius:8px;padding:3px;gap:2px;
+  }
+  .seg-btn{
+    background:transparent;border:none;color:var(--text-dim);border-radius:6px;
+    padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s ease, color .15s ease;
+  }
+  .seg-btn:hover{color:var(--text);}
+  .seg-btn.active{background:var(--accent);color:#fff;}
   .brand-mark{
     width:44px;height:44px;border-radius:9px;
     background:linear-gradient(135deg,var(--accent),#a8160f);
@@ -158,6 +169,8 @@
   .badge.complete{background:rgba(47,191,113,0.15);color:var(--good);}
   .badge.progress{background:rgba(232,163,61,0.15);color:var(--warn);}
   .badge.short{background:rgba(226,35,26,0.15);color:var(--accent);margin-left:5px;}
+  .badge.over{background:rgba(61,159,232,0.15);color:var(--info);margin-left:5px;}
+  .badge.nil{background:rgba(226,35,26,0.25);color:#ff6b61;margin-left:5px;}
   .badge.unknown{background:rgba(148,168,196,0.15);color:var(--text-dim);}
 
   .pull-id-cell{font-weight:700;color:var(--text);}
@@ -197,6 +210,11 @@
       </div>
     </div>
     <div class="controls">
+      <div class="segmented" id="granularityToggle">
+        <button type="button" class="seg-btn active" data-granularity="day">Day</button>
+        <button type="button" class="seg-btn" data-granularity="month">Month</button>
+        <button type="button" class="seg-btn" data-granularity="year">Year</button>
+      </div>
       <select id="rangeFilter">
         <option value="all">All time</option>
         <option value="today">Today</option>
@@ -219,12 +237,12 @@
 
   <section class="charts-grid">
     <div class="chart-card">
-      <h3>Pull IDs per Day</h3>
+      <h3 id="titlePerDay">Pull IDs per Day</h3>
       <div class="chart-note">Count of distinct Pull IDs created, by day</div>
       <div class="chart-holder"><canvas id="chartPerDay"></canvas></div>
     </div>
     <div class="chart-card">
-      <h3>Avg Cycle Time by Day</h3>
+      <h3 id="titleCycle">Avg Cycle Time by Day</h3>
       <div class="chart-note">Minutes: Created &rarr; Start &rarr; Confirmed</div>
       <div class="chart-holder"><canvas id="chartCycle"></canvas></div>
     </div>
@@ -239,12 +257,12 @@
       <div class="chart-holder"><canvas id="chartUsers"></canvas></div>
     </div>
     <div class="chart-card">
-      <h3>Picking Accuracy by Day</h3>
+      <h3 id="titleAccuracy">Picking Accuracy by Day</h3>
       <div class="chart-note">Share of lines where actual qty matched target qty</div>
       <div class="chart-holder"><canvas id="chartAccuracy"></canvas></div>
     </div>
     <div class="chart-card">
-      <h3>Picks by Bay Type per Day</h3>
+      <h3 id="titleBayVolume">Picks by Bay Type per Day</h3>
       <div class="chart-note">Low Bay vs. High Bay pick volume</div>
       <div class="chart-holder"><canvas id="chartBayVolume"></canvas></div>
     </div>
@@ -350,12 +368,24 @@ let sortKey = 'createdAt';
 let sortDir = 'desc';
 let searchTerm = '';
 let rangeMode = 'all';
+let granularity = 'day'; // 'day' | 'month' | 'year' — controls how time-series charts bucket data
 let charts = {};
 let expandedPullIds = new Set();
 
 /* ---------------------------------------------------------------------
    Date / time helpers
 --------------------------------------------------------------------- */
+// Classifies a single line's pick result against target/actual quantity.
+// NIL takes priority over Short: a target of >=1 with a confirmed 0 is
+// tracked as its own category rather than folded into "Short".
+function classifyPickResult(target, actual){
+  const t = target||0, a = actual||0;
+  if(a === t) return 'Accurate';
+  if(a === 0 && t >= 1) return 'NIL';
+  if(a < t) return 'Short';
+  return 'Over';
+}
+
 function isValidDate(d){ return d instanceof Date && !isNaN(d.getTime()); }
 
 // Bay classification per the Whitsett aisle/level scheme:
@@ -448,8 +478,10 @@ function formatDateOnly(d){
   return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
 }
 
-function dayKey(d){
+function periodKey(d){
   if(!isValidDate(d)) return null;
+  if(granularity==='year') return String(d.getFullYear());
+  if(granularity==='month') return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
 
@@ -610,6 +642,14 @@ uploadsRef.limitToLast(1).on('value', snap=>{
 /* ---------------------------------------------------------------------
    Filtering
 --------------------------------------------------------------------- */
+document.querySelectorAll('#granularityToggle .seg-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    granularity = btn.dataset.granularity;
+    document.querySelectorAll('#granularityToggle .seg-btn').forEach(b=>b.classList.toggle('active', b===btn));
+    renderAll();
+  });
+});
+
 document.getElementById('rangeFilter').addEventListener('change', e=>{
   rangeMode = e.target.value;
   document.getElementById('dateRangeInputs').classList.toggle('show', rangeMode==='custom');
@@ -667,7 +707,10 @@ function groupByPullId(items){
 
     const targetQty = lines.reduce((s,l)=>s+(l.targetQty||0),0);
     const actualQty = lines.reduce((s,l)=>s+(l.actualQty||0),0);
-    const hasShortPick = lines.some(l=>(l.actualQty||0) !== (l.targetQty||0));
+    const lineResults = lines.map(l=>classifyPickResult(l.targetQty, l.actualQty));
+    const hasShort = lineResults.includes('Short');
+    const hasOver = lineResults.includes('Over');
+    const hasNil = lineResults.includes('NIL');
     const confirmedByUsers = [...new Set(lines.map(l=>l.confirmedBy).filter(Boolean))];
     const createdByUsers = [...new Set(lines.map(l=>l.createdBy).filter(Boolean))];
     const warehouseOrders = [...new Set(lines.map(l=>l.warehouseOrder).filter(Boolean))];
@@ -676,7 +719,7 @@ function groupByPullId(items){
       pullId,
       pullType: lines[0].pullType || 'Unknown',
       lineCount: lines.length,
-      targetQty, actualQty, hasShortPick,
+      targetQty, actualQty, hasShort, hasOver, hasNil,
       createdAt, startAt, confirmedAt,
       status: allConfirmed ? 'Complete' : 'In Progress',
       createToStartMin: minutesBetween(createdAt, startAt),
@@ -726,7 +769,12 @@ function renderKPIs(){
   const accurateLines = items.filter(r=>(r.actualQty||0)===(r.targetQty||0)).length;
   const accuracyPct = totalLines ? Math.round((accurateLines/totalLines)*1000)/10 : null;
   const pendingLines = items.filter(r=>!isValidDate(r.confirmedAt)).length;
-  const shortPickPulls = groups.filter(g=>g.hasShortPick).length;
+  const shortLines = items.filter(r=>classifyPickResult(r.targetQty, r.actualQty)==='Short').length;
+  const overLines = items.filter(r=>classifyPickResult(r.targetQty, r.actualQty)==='Over').length;
+  const nilLines = items.filter(r=>classifyPickResult(r.targetQty, r.actualQty)==='NIL').length;
+  const shortPickPulls = groups.filter(g=>g.hasShort).length;
+  const overPickPulls = groups.filter(g=>g.hasOver).length;
+  const nilPickPulls = groups.filter(g=>g.hasNil).length;
 
   const cycleTimes = groups.map(g=>g.createToConfirmMin).filter(v=>v!==null && v!==undefined && v>=0);
   const avgCycle = cycleTimes.length ? Math.round(cycleTimes.reduce((a,b)=>a+b,0)/cycleTimes.length) : null;
@@ -735,7 +783,7 @@ function renderKPIs(){
   const avgDispatch = dispatchTimes.length ? Math.round(dispatchTimes.reduce((a,b)=>a+b,0)/dispatchTimes.length) : null;
 
   const dayCounts = {};
-  groups.forEach(g=>{ if(g.createdAt){ const k=dayKey(g.createdAt); dayCounts[k]=(dayCounts[k]||0)+1; } });
+  groups.forEach(g=>{ if(g.createdAt){ const k=periodKey(g.createdAt); dayCounts[k]=(dayCounts[k]||0)+1; } });
   const dayVals = Object.values(dayCounts);
   const avgPerDay = dayVals.length ? Math.round((dayVals.reduce((a,b)=>a+b,0)/dayVals.length)*10)/10 : null;
 
@@ -756,9 +804,11 @@ function renderKPIs(){
     {label:'Pick Accuracy', value: accuracyPct!==null ? accuracyPct+'%' : '&mdash;', sub: accuracyPct!==null ? (totalLines-accurateLines)+' lines off qty' : 'no data', accent: accuracyPct!==null && accuracyPct<98 ? 'var(--warn)' : 'var(--good)'},
     {label:'Avg Cycle Time', value: formatDuration(avgCycle), sub:'created \u2192 confirmed', accent:'var(--info)'},
     {label:'Avg Dispatch Delay', value: formatDuration(avgDispatch), sub:'created \u2192 start', accent:'var(--info)'},
-    {label:'Pull IDs / Day', value: avgPerDay!==null ? avgPerDay : '&mdash;', sub:'average over range', accent:'var(--accent)'},
+    {label:'Pull IDs / '+granularityLabel(), value: avgPerDay!==null ? avgPerDay : '&mdash;', sub:'average over range', accent:'var(--accent)'},
     {label:'Pending Confirmation', value: pendingLines.toLocaleString(), sub:'line items not yet confirmed', accent: pendingLines>0 ? 'var(--warn)' : 'var(--good)'},
-    {label:'Short-Pick Pulls', value: shortPickPulls.toLocaleString(), sub:'actual \u2260 target on \u22651 line', accent: shortPickPulls>0 ? 'var(--bad)' : 'var(--good)'},
+    {label:'Short-Pick Pulls', value: shortPickPulls.toLocaleString(), sub: shortLines+' line'+(shortLines===1?'':'s')+' under target', accent: shortPickPulls>0 ? 'var(--bad)' : 'var(--good)'},
+    {label:'Over-Pick Pulls', value: overPickPulls.toLocaleString(), sub: overLines+' line'+(overLines===1?'':'s')+' over target', accent: overPickPulls>0 ? 'var(--info)' : 'var(--good)'},
+    {label:'NIL Picks', value: nilPickPulls.toLocaleString(), sub: nilLines+' line'+(nilLines===1?'':'s')+' confirmed at 0', accent: nilPickPulls>0 ? 'var(--bad)' : 'var(--good)'},
     {label:'Low Bay Picks', value: lowItems.length.toLocaleString(), sub: lowPct!==null ? lowPct+'% of classified picks' : '&mdash;', accent:'var(--good)'},
     {label:'High Bay Picks', value: highItems.length.toLocaleString(), sub: highPct!==null ? highPct+'% of classified picks' : '&mdash;', accent:'var(--warn)'},
     {label:'High Value Picks', value: hvItems.length.toLocaleString(), sub: hvPct!==null ? hvPct+'% of classified picks' : '&mdash;', accent:'var(--hv-color)'},
@@ -799,6 +849,7 @@ const LABEL_COLOR = '#e7eef7';
 function destroyChart(id){ if(charts[id]){ charts[id].destroy(); delete charts[id]; } }
 
 function renderCharts(){
+  updateChartTitles();
   if(typeof Chart === 'undefined'){
     document.querySelectorAll('.chart-holder').forEach(el=>{
       el.innerHTML = '<div style="padding:20px;color:var(--text-faint);font-size:12px;">Chart library failed to load from CDN — check your network/firewall and reload.</div>';
@@ -818,7 +869,7 @@ function renderCharts(){
 
 function renderPerDayChart(groups){
   const counts = {};
-  groups.forEach(g=>{ if(g.createdAt){ const k=dayKey(g.createdAt); counts[k]=(counts[k]||0)+1; } });
+  groups.forEach(g=>{ if(g.createdAt){ const k=periodKey(g.createdAt); counts[k]=(counts[k]||0)+1; } });
   const labels = Object.keys(counts).sort();
   const data = labels.map(k=>counts[k]);
   destroyChart('perDay');
@@ -827,7 +878,7 @@ function renderPerDayChart(groups){
   opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:v=>v};
   charts.perDay = new Chart(document.getElementById('chartPerDay'), {
     type:'bar',
-    data:{ labels: labels.map(l=>formatShortDay(l)), datasets:[{ data, backgroundColor:'#e2231a', borderRadius:4, maxBarThickness:36 }]},
+    data:{ labels: labels.map(l=>formatPeriodLabel(l)), datasets:[{ data, backgroundColor:'#e2231a', borderRadius:4, maxBarThickness:36 }]},
     options: opts
   });
 }
@@ -836,7 +887,7 @@ function renderCycleChart(groups){
   const byDay = {};
   groups.forEach(g=>{
     if(!g.createdAt) return;
-    const k = dayKey(g.createdAt);
+    const k = periodKey(g.createdAt);
     if(!byDay[k]) byDay[k] = {dispatch:[], cycle:[]};
     if(g.createToStartMin!==null && g.createToStartMin>=0) byDay[k].dispatch.push(g.createToStartMin);
     if(g.createToConfirmMin!==null && g.createToConfirmMin>=0) byDay[k].cycle.push(g.createToConfirmMin);
@@ -852,7 +903,7 @@ function renderCycleChart(groups){
   };
   charts.cycle = new Chart(document.getElementById('chartCycle'), {
     type:'line',
-    data:{ labels: labels.map(l=>formatShortDay(l)), datasets:[
+    data:{ labels: labels.map(l=>formatPeriodLabel(l)), datasets:[
       { label:'Created\u2192Start', data:dispatchData, borderColor:'#3d9fe8', backgroundColor:'rgba(61,159,232,0.15)', tension:0.3, fill:true, spanGaps:true },
       { label:'Created\u2192Confirmed', data:cycleData, borderColor:'#e2231a', backgroundColor:'rgba(226,35,26,0.12)', tension:0.3, fill:true, spanGaps:true }
     ]},
@@ -897,16 +948,33 @@ function renderUsersChart(items){
   });
 }
 
-function formatShortDay(k){
+function formatPeriodLabel(k){
+  if(granularity==='year') return k;
+  if(granularity==='month'){
+    const [y,m] = k.split('-').map(Number);
+    return new Date(y,m-1,1).toLocaleDateString('en-US',{month:'short',year:'numeric'});
+  }
   const [y,m,d] = k.split('-').map(Number);
   return new Date(y,m-1,d).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+}
+
+function granularityLabel(){
+  return granularity==='year' ? 'Year' : granularity==='month' ? 'Month' : 'Day';
+}
+
+function updateChartTitles(){
+  const g = granularityLabel();
+  document.getElementById('titlePerDay').textContent = 'Pull IDs per '+g;
+  document.getElementById('titleCycle').textContent = 'Avg Cycle Time by '+g;
+  document.getElementById('titleAccuracy').textContent = 'Picking Accuracy by '+g;
+  document.getElementById('titleBayVolume').textContent = 'Picks by Bay Type per '+g;
 }
 
 function renderAccuracyChart(items){
   const byDay = {};
   items.forEach(r=>{
     if(!r.createdAt) return;
-    const k = dayKey(r.createdAt);
+    const k = periodKey(r.createdAt);
     if(!byDay[k]) byDay[k] = {total:0, accurate:0};
     byDay[k].total++;
     if((r.actualQty||0) === (r.targetQty||0)) byDay[k].accurate++;
@@ -926,7 +994,7 @@ function renderAccuracyChart(items){
   opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:v=>v+'%'};
   charts.accuracy = new Chart(document.getElementById('chartAccuracy'), {
     type:'bar',
-    data:{ labels: labels.map(l=>formatShortDay(l)), datasets:[{ data, backgroundColor:'#2fbf71', borderRadius:4, maxBarThickness:36 }]},
+    data:{ labels: labels.map(l=>formatPeriodLabel(l)), datasets:[{ data, backgroundColor:'#2fbf71', borderRadius:4, maxBarThickness:36 }]},
     options: opts
   });
 }
@@ -937,7 +1005,7 @@ function renderBayVolumeChart(items){
     if(!isValidDate(r.confirmedAt)) return;
     const bay = classifyBay(r.sourceBin);
     if(bay==='Other') return;
-    const k = dayKey(r.confirmedAt);
+    const k = periodKey(r.confirmedAt);
     if(!byDay[k]) byDay[k] = {'Low Bay':0, 'High Bay':0, 'High Value':0};
     byDay[k][bay]++;
   });
@@ -951,7 +1019,7 @@ function renderBayVolumeChart(items){
   opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:10}, formatter:v=>v||''};
   charts.bayVolume = new Chart(document.getElementById('chartBayVolume'), {
     type:'bar',
-    data:{ labels: labels.map(l=>formatShortDay(l)), datasets:[
+    data:{ labels: labels.map(l=>formatPeriodLabel(l)), datasets:[
       {label:'Low Bay', data:low, backgroundColor:'#2fbf71', borderRadius:4, maxBarThickness:22},
       {label:'High Bay', data:high, backgroundColor:'#e8a33d', borderRadius:4, maxBarThickness:22},
       {label:'High Value', data:hv, backgroundColor:'#a78bfa', borderRadius:4, maxBarThickness:22}
@@ -966,7 +1034,7 @@ function renderBayVelocityChart(items){
     if(!isValidDate(r.confirmedAt)) return;
     const bay = classifyBay(r.sourceBin);
     if(bay==='Other') return;
-    const k = dayKey(r.confirmedAt);
+    const k = periodKey(r.confirmedAt);
     if(!grouped[k]) grouped[k] = {'Low Bay':[], 'High Bay':[], 'High Value':[]};
     grouped[k][bay].push(r.confirmedAt.getTime());
   });
@@ -979,7 +1047,7 @@ function renderBayVelocityChart(items){
   opts.plugins.tooltip = { callbacks:{ label: ctx => ctx.dataset.label+': '+(ctx.parsed.y===null?'\u2014':ctx.parsed.y+' picks/hr') } };
   charts.bayVelocity = new Chart(document.getElementById('chartBayVelocity'), {
     type:'line',
-    data:{ labels: labels.map(l=>formatShortDay(l)), datasets:[
+    data:{ labels: labels.map(l=>formatPeriodLabel(l)), datasets:[
       { label:'Low Bay', data:low, borderColor:'#2fbf71', backgroundColor:'rgba(47,191,113,0.15)', tension:0.3, fill:true, spanGaps:true },
       { label:'High Bay', data:high, borderColor:'#e8a33d', backgroundColor:'rgba(232,163,61,0.12)', tension:0.3, fill:true, spanGaps:true },
       { label:'High Value', data:hv, borderColor:'#a78bfa', backgroundColor:'rgba(167,139,250,0.12)', tension:0.3, fill:true, spanGaps:true }
@@ -1063,9 +1131,17 @@ function renderTable(){
     const statusBadge = g.status==='Complete'
       ? '<span class="badge complete">Complete</span>'
       : '<span class="badge progress">In Progress</span>';
-    const shortBadge = g.hasShortPick ? '<span class="badge short">Short Pick</span>' : '';
+    const shortBadge = g.hasShort ? '<span class="badge short">Short Pick</span>' : '';
+    const overBadge = g.hasOver ? '<span class="badge over">Over Pick</span>' : '';
+    const nilBadge = g.hasNil ? '<span class="badge nil">NIL Pick</span>' : '';
 
-    const detailRows = g.lines.map(l=>`
+    const detailRows = g.lines.map(l=>{
+      const result = classifyPickResult(l.targetQty, l.actualQty);
+      const qtyStyle = result==='NIL' ? 'color:#ff6b61;font-weight:700;'
+        : result==='Short' ? 'color:var(--accent);font-weight:700;'
+        : result==='Over' ? 'color:var(--info);font-weight:700;'
+        : '';
+      return `
       <tr>
         <td>${l.warehouseTask||'&mdash;'}</td>
         <td>${l.product||'&mdash;'}</td>
@@ -1074,12 +1150,12 @@ function renderTable(){
         <td>${classifyBay(l.sourceBin)}</td>
         <td>${l.destBin||l.destHU||'&mdash;'}</td>
         <td>${l.targetQty}</td>
-        <td style="${(l.actualQty!==l.targetQty)?'color:var(--accent);font-weight:700;':''}">${l.actualQty}</td>
+        <td style="${qtyStyle}">${l.actualQty}${result!=='Accurate' ? ' ('+result+')' : ''}</td>
         <td>${l.createdBy||'&mdash;'}</td>
         <td>${l.confirmedBy||'&mdash;'}</td>
         <td>${formatDateTime(l.confirmedAt)}</td>
       </tr>
-    `).join('');
+    `;}).join('');
 
     return `
       <tr class="pull-row ${isOpen?'expanded':''}" data-pullid="${escapeAttr(g.pullId)}">
@@ -1093,7 +1169,7 @@ function renderTable(){
         <td>${formatDateTime(g.confirmedAt)}</td>
         <td>${formatDuration(g.createToStartMin)}</td>
         <td>${formatDuration(g.createToConfirmMin)}</td>
-        <td>${statusBadge}${shortBadge}</td>
+        <td>${statusBadge}${shortBadge}${overBadge}${nilBadge}</td>
       </tr>
       <tr class="detail-row ${isOpen?'open':''}" data-pullid-detail="${escapeAttr(g.pullId)}">
         <td colspan="11">

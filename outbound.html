@@ -281,6 +281,11 @@
       <div class="chart-note">Share of completed pulls within SLA &mdash; Auto (5hr) vs. Manual (1hr)</div>
       <div class="chart-holder"><canvas id="chartSla"></canvas></div>
     </div>
+    <div class="chart-card">
+      <h3>Pick Share by Bay Type</h3>
+      <div class="chart-note">Share of classified picks in the selected range</div>
+      <div class="chart-holder"><canvas id="chartBaySplit"></canvas></div>
+    </div>
   </section>
 
   <section class="table-section">
@@ -537,11 +542,11 @@ async function parseSapExport(file){
     if(!row || row.length===0) continue;
     totalRows++;
 
-    const pullId = row[COL.pullId];
-    if(!pullId){ skippedIncomplete++; continue; } // no Pull ID to group by (e.g. sub-lines with no qty)
-
     const targetQty = Number(row[COL.targetQty]) || 0;
-    if(targetQty === 0){ skippedZero++; continue; }
+    if(targetQty === 0){ skippedZero++; continue; } // 0.000 target qty — always excluded, checked before Pull ID so it's never miscounted as "incomplete"
+
+    const pullId = row[COL.pullId];
+    if(!pullId){ skippedIncomplete++; continue; } // no Pull ID to group by
 
     const warehouseTask = row[COL.warehouseTask];
     if(!warehouseTask){ skippedIncomplete++; continue; } // no reliable dedupe key
@@ -845,9 +850,6 @@ function renderKPIs(){
   const lowVelocity = computeVelocity(lowItems);
   const highVelocity = computeVelocity(highItems);
   const hvVelocity = computeVelocity(hvItems);
-  const lowPct = totalLines ? Math.round((lowItems.length/totalLines)*1000)/10 : null;
-  const highPct = totalLines ? Math.round((highItems.length/totalLines)*1000)/10 : null;
-  const hvPct = totalLines ? Math.round((hvItems.length/totalLines)*1000)/10 : null;
 
   const cards = [
     {label:'Pull IDs', value: totalPulls.toLocaleString(), sub: totalLines.toLocaleString()+' line items', accent:'var(--accent)'},
@@ -863,9 +865,6 @@ function renderKPIs(){
     {label:'NIL Picks', value: nilFreePct!==null ? nilFreePct+'%' : '&mdash;', sub: nilLines+' of '+confirmedLines.length+' confirmed lines are NIL', accent: nilPickPulls>0 ? 'var(--bad)' : 'var(--good)'},
     {label:'Auto SLA Adherence', value: autoSla.pct!==null ? autoSla.pct+'%' : '&mdash;', sub: autoSla.pct!==null ? autoSla.breached+' breached'+(autoSla.atRisk?', '+autoSla.atRisk+' at risk':'')+' (5hr SLA)' : 'no completed Auto pulls', accent: autoSla.pct!==null && autoSla.pct<95 ? 'var(--bad)' : 'var(--good)'},
     {label:'Manual SLA Adherence', value: manualSla.pct!==null ? manualSla.pct+'%' : '&mdash;', sub: manualSla.pct!==null ? manualSla.breached+' breached'+(manualSla.atRisk?', '+manualSla.atRisk+' at risk':'')+' (1hr SLA)' : 'no completed Manual pulls', accent: manualSla.pct!==null && manualSla.pct<95 ? 'var(--bad)' : 'var(--good)'},
-    {label:'Low Bay Picks', value: lowItems.length.toLocaleString(), sub: lowPct!==null ? lowPct+'% of classified picks' : '&mdash;', accent:'var(--good)'},
-    {label:'High Bay Picks', value: highItems.length.toLocaleString(), sub: highPct!==null ? highPct+'% of classified picks' : '&mdash;', accent:'var(--warn)'},
-    {label:'High Value Picks', value: hvItems.length.toLocaleString(), sub: hvPct!==null ? hvPct+'% of classified picks' : '&mdash;', accent:'var(--hv-color)'},
     {label:'Low Bay Velocity', value: lowVelocity!==null ? lowVelocity+'/hr' : '&mdash;', sub:'active-hour rate', accent:'var(--good)'},
     {label:'High Bay Velocity', value: highVelocity!==null ? highVelocity+'/hr' : '&mdash;', sub:'active-hour rate', accent:'var(--warn)'},
     {label:'High Value Velocity', value: hvVelocity!==null ? hvVelocity+'/hr' : '&mdash;', sub:'active-hour rate', accent:'var(--hv-color)'}
@@ -920,6 +919,7 @@ function renderCharts(){
   renderBayVolumeChart(items);
   renderBayVelocityChart(items);
   renderSlaChart(groups);
+  renderBaySplitChart(items);
 }
 
 function renderPerDayChart(groups){
@@ -1146,6 +1146,36 @@ function renderSlaChart(groups){
       {label:'Manual', data:manual, backgroundColor:'#a78bfa', borderRadius:4, maxBarThickness:26}
     ]},
     options: opts
+  });
+}
+
+function renderBaySplitChart(items){
+  const low = items.filter(r=>classifyBay(r.sourceBin)==='Low Bay').length;
+  const high = items.filter(r=>classifyBay(r.sourceBin)==='High Bay').length;
+  const hv = items.filter(r=>classifyBay(r.sourceBin)==='High Value').length;
+  const total = low + high + hv;
+  const data = [low, high, hv];
+  destroyChart('baySplit');
+  charts.baySplit = new Chart(document.getElementById('chartBaySplit'), {
+    type:'doughnut',
+    data:{
+      labels:['Low Bay','High Bay','High Value'],
+      datasets:[{ data, backgroundColor:['#2fbf71','#e8a33d','#a78bfa'], borderColor:'#122A47', borderWidth:2 }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ display:true, position:'bottom', labels:{boxWidth:10, padding:16, color:'#93a8c4'} },
+        tooltip:{ callbacks:{ label: ctx => {
+          const pct = total ? Math.round((ctx.parsed/total)*1000)/10 : 0;
+          return ctx.label+': '+pct+'% ('+ctx.parsed.toLocaleString()+' picks)';
+        }}},
+        datalabels:{
+          display:true, color:'#0a1626', font:{weight:700, size:11},
+          formatter:(v)=> total ? Math.round((v/total)*1000)/10+'%' : ''
+        }
+      }
+    }
   });
 }
 

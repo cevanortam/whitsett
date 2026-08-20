@@ -278,7 +278,7 @@
     </div>
     <div class="chart-card">
       <h3 id="titleSla">SLA Adherence by Day</h3>
-      <div class="chart-note">Share of completed pulls within SLA &mdash; Auto (5hr) vs. Manual (1hr)</div>
+      <div class="chart-note">Share of completed pulls within SLA &mdash; Auto (5hr) vs. Manual (1hr). Sundays excluded from the clock.</div>
       <div class="chart-holder"><canvas id="chartSla"></canvas></div>
     </div>
     <div class="chart-card">
@@ -390,6 +390,7 @@ let granularity = 'day'; // 'day' | 'month' | 'year' — controls how time-serie
 let charts = {};
 let expandedPullIds = new Set();
 let lastRenderedGroups = []; // the exact filtered/sorted Pull ID rows currently on screen — used for Excel export
+let cachedRangeGroups = []; // Pull ID groups after date-range filtering only (pre search/sort) — reused by search/sort so they don't redo the full grouping pass
 
 /* ---------------------------------------------------------------------
    Date / time helpers
@@ -493,6 +494,25 @@ function computeStartDateTime(createdOnDate, createdAtTime, startTimeVal){
 function minutesBetween(a,b){
   if(!isValidDate(a) || !isValidDate(b)) return null;
   return Math.round((b.getTime()-a.getTime())/60000);
+}
+
+// Same as minutesBetween, but any time that falls on a Sunday (the
+// warehouse's non-working day) is excluded from the elapsed total —
+// used specifically for SLA clock calculations, not general cycle-time
+// reporting. Saturdays still count, since the warehouse sometimes works them.
+function minutesBetweenExcludingSundays(a,b){
+  if(!isValidDate(a) || !isValidDate(b) || b<a) return null;
+  let total = 0;
+  let cursor = new Date(a);
+  while(cursor < b){
+    const nextMidnight = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate()+1, 0,0,0);
+    const segmentEnd = nextMidnight < b ? nextMidnight : b;
+    if(cursor.getDay() !== 0){ // 0 = Sunday
+      total += (segmentEnd.getTime() - cursor.getTime()) / 60000;
+    }
+    cursor = segmentEnd;
+  }
+  return Math.round(total);
 }
 
 function formatDuration(min){
@@ -652,7 +672,8 @@ lineItemsRef.on('value', snap => {
       _key: k,
       createdAt: r.createdAt ? new Date(r.createdAt) : null,
       startAt: r.startAt ? new Date(r.startAt) : null,
-      confirmedAt: r.confirmedAt ? new Date(r.confirmedAt) : null
+      confirmedAt: r.confirmedAt ? new Date(r.confirmedAt) : null,
+      bayType: classifyBay(r.sourceBin) // precomputed once per load instead of re-classified on every render
     };
   });
   setSyncStatus('ok','Connected');
@@ -691,7 +712,8 @@ document.getElementById('rangeFilter').addEventListener('change', e=>{
 document.getElementById('dateFrom').addEventListener('change', renderAll);
 document.getElementById('dateTo').addEventListener('change', renderAll);
 document.getElementById('searchBox').addEventListener('input', e=>{
-  searchTerm = e.target.value.trim().toLowerCase(); renderTable();
+  searchTerm = e.target.value.trim().toLowerCase();
+  safeRender('table', ()=>renderTable(cachedRangeGroups));
 });
 
 function filterByRange(items){
@@ -752,12 +774,14 @@ function groupByPullId(items){
     const createToConfirmMin = allConfirmed ? minutesBetween(createdAt, confirmedAt) : null;
     const slaThresholdMin = SLA_MINUTES[pullType] ?? null;
     let slaStatus = 'N/A';
+    let slaElapsedMin = null;
     if(slaThresholdMin!==null && createdAt){
       if(allConfirmed){
-        slaStatus = (createToConfirmMin!==null && createToConfirmMin<=slaThresholdMin) ? 'Met' : 'Breached';
+        slaElapsedMin = minutesBetweenExcludingSundays(createdAt, confirmedAt);
+        slaStatus = (slaElapsedMin!==null && slaElapsedMin<=slaThresholdMin) ? 'Met' : 'Breached';
       } else {
-        const elapsedMin = minutesBetween(createdAt, new Date());
-        slaStatus = (elapsedMin!==null && elapsedMin>slaThresholdMin) ? 'At Risk' : 'Pending';
+        slaElapsedMin = minutesBetweenExcludingSundays(createdAt, new Date());
+        slaStatus = (slaElapsedMin!==null && slaElapsedMin>slaThresholdMin) ? 'At Risk' : 'Pending';
       }
     }
 
@@ -771,7 +795,7 @@ function groupByPullId(items){
       createToStartMin: minutesBetween(createdAt, startAt),
       createToConfirmMin,
       startToConfirmMin: allConfirmed ? minutesBetween(startAt, confirmedAt) : null,
-      slaThresholdMin, slaStatus,
+      slaThresholdMin, slaStatus, slaElapsedMin,
       confirmedBy: confirmedByUsers.join(', '),
       createdBy: createdByUsers.join(', '),
       warehouseOrders: warehouseOrders.join(', '),
@@ -789,9 +813,13 @@ function renderAll(){
   const pullIds = new Set(allLineItems.map(r=>r.pullId));
   document.getElementById('pullCount').textContent = pullIds.size.toLocaleString();
 
-  safeRender('KPIs', renderKPIs);
-  safeRender('charts', renderCharts);
-  safeRender('table', renderTable);
+  const items = filterByRange(allLineItems);
+  const groups = groupByPullId(items);
+  cachedRangeGroups = groups;
+
+  safeRender('KPIs', ()=>renderKPIs(items, groups));
+  safeRender('charts', ()=>renderCharts(items, groups));
+  safeRender('table', ()=>renderTable(groups));
 }
 
 function safeRender(label, fn){
@@ -805,9 +833,7 @@ function safeRender(label, fn){
 /* ---------------------------------------------------------------------
    KPI cards
 --------------------------------------------------------------------- */
-function renderKPIs(){
-  const items = filterByRange(allLineItems);
-  const groups = groupByPullId(items);
+function renderKPIs(items, groups){
   const grid = document.getElementById('kpiGrid');
 
   const totalPulls = groups.length;
@@ -847,9 +873,9 @@ function renderKPIs(){
   const dayVals = Object.values(dayCounts);
   const avgPerDay = dayVals.length ? Math.round((dayVals.reduce((a,b)=>a+b,0)/dayVals.length)*10)/10 : null;
 
-  const lowItems = items.filter(r=>classifyBay(r.sourceBin)==='Low Bay');
-  const highItems = items.filter(r=>classifyBay(r.sourceBin)==='High Bay');
-  const hvItems = items.filter(r=>classifyBay(r.sourceBin)==='High Value');
+  const lowItems = items.filter(r=>r.bayType==='Low Bay');
+  const highItems = items.filter(r=>r.bayType==='High Bay');
+  const hvItems = items.filter(r=>r.bayType==='High Value');
   const otherBayCount = totalLines - lowItems.length - highItems.length - hvItems.length;
   const lowVelocity = computeVelocity(lowItems);
   const highVelocity = computeVelocity(highItems);
@@ -905,7 +931,18 @@ const LABEL_COLOR = '#e7eef7';
 
 function destroyChart(id){ if(charts[id]){ charts[id].destroy(); delete charts[id]; } }
 
-function renderCharts(){
+// How many bars to skip between shown data labels, based on how many bars
+// are on screen — keeps wide date ranges (e.g. 30 days) readable instead of
+// every label overlapping its neighbors. Every label still appears on hover
+// via the tooltip regardless of this.
+function labelSkipStep(barCount){
+  if(barCount <= 10) return 1;
+  if(barCount <= 16) return 2;
+  if(barCount <= 24) return 3;
+  return Math.ceil(barCount/8);
+}
+
+function renderCharts(items, groups){
   updateChartTitles();
   if(typeof Chart === 'undefined'){
     document.querySelectorAll('.chart-holder').forEach(el=>{
@@ -913,8 +950,6 @@ function renderCharts(){
     });
     throw new Error('Chart.js did not load (global "Chart" is undefined)');
   }
-  const items = filterByRange(allLineItems);
-  const groups = groupByPullId(items);
   renderPerDayChart(groups);
   renderCycleChart(groups);
   renderHourlyChart(items);
@@ -932,9 +967,10 @@ function renderPerDayChart(groups){
   const labels = Object.keys(counts).sort();
   const data = labels.map(k=>counts[k]);
   destroyChart('perDay');
+  const step = labelSkipStep(labels.length);
   const opts = baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}});
   opts.layout = {padding:{top:20}};
-  opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:v=>v};
+  opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:(v,ctx)=> ctx.dataIndex % step === 0 ? v : ''};
   charts.perDay = new Chart(document.getElementById('chartPerDay'), {
     type:'bar',
     data:{ labels: labels.map(l=>formatPeriodLabel(l)), datasets:[{ data, backgroundColor:'#e2231a', borderRadius:4, maxBarThickness:36 }]},
@@ -1042,6 +1078,7 @@ function renderAccuracyChart(items){
   const labels = Object.keys(byDay).sort();
   const data = labels.map(k => byDay[k].total ? Math.round((byDay[k].accurate/byDay[k].total)*1000)/10 : null);
   destroyChart('accuracy');
+  const step = labelSkipStep(labels.length);
   const opts = baseChartOptions({y:{beginAtZero:true, suggestedMax:112, max:112, ticks:{callback:v=>v<=100?v+'%':'', stepSize:20}}});
   opts.layout = {padding:{top:20}};
   opts.plugins.tooltip = {
@@ -1051,7 +1088,7 @@ function renderAccuracyChart(items){
       return 'Accuracy: '+ctx.parsed.y+'% ('+d.accurate+'/'+d.total+' lines)';
     }}
   };
-  opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:v=>v+'%'};
+  opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:(v,ctx)=> ctx.dataIndex % step === 0 ? v+'%' : ''};
   charts.accuracy = new Chart(document.getElementById('chartAccuracy'), {
     type:'bar',
     data:{ labels: labels.map(l=>formatPeriodLabel(l)), datasets:[{ data, backgroundColor:'#2fbf71', borderRadius:4, maxBarThickness:36 }]},
@@ -1063,7 +1100,7 @@ function renderBayVolumeChart(items){
   const byDay = {};
   items.forEach(r=>{
     if(!isValidDate(r.confirmedAt)) return;
-    const bay = classifyBay(r.sourceBin);
+    const bay = r.bayType;
     if(bay==='Other') return;
     const k = periodKey(r.confirmedAt);
     if(!byDay[k]) byDay[k] = {'Low Bay':0, 'High Bay':0, 'High Value':0};
@@ -1074,9 +1111,10 @@ function renderBayVolumeChart(items){
   const high = labels.map(k=>byDay[k]['High Bay']);
   const hv = labels.map(k=>byDay[k]['High Value']);
   destroyChart('bayVolume');
+  const step = labelSkipStep(labels.length);
   const opts = baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}}, true);
   opts.layout = {padding:{top:30}};
-  opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:10}, formatter:v=>v||''};
+  opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:10}, formatter:(v,ctx)=> (v && ctx.dataIndex % step === 0) ? v : ''};
   charts.bayVolume = new Chart(document.getElementById('chartBayVolume'), {
     type:'bar',
     data:{ labels: labels.map(l=>formatPeriodLabel(l)), datasets:[
@@ -1092,7 +1130,7 @@ function renderBayVelocityChart(items){
   const grouped = {};
   items.forEach(r=>{
     if(!isValidDate(r.confirmedAt)) return;
-    const bay = classifyBay(r.sourceBin);
+    const bay = r.bayType;
     if(bay==='Other') return;
     const k = periodKey(r.confirmedAt);
     if(!grouped[k]) grouped[k] = {'Low Bay':[], 'High Bay':[], 'High Value':[]};
@@ -1135,9 +1173,10 @@ function renderSlaChart(groups){
   const auto = pctFor('Auto');
   const manual = pctFor('Manual');
   destroyChart('sla');
+  const step = labelSkipStep(labels.length);
   const opts = baseChartOptions({y:{beginAtZero:true, suggestedMax:118, max:118, ticks:{callback:v=>v<=100?v+'%':'', stepSize:20}}}, true);
   opts.layout = {padding:{top:24}};
-  opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:10}, formatter:v=>v===null?'':v+'%'};
+  opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:10}, formatter:(v,ctx)=> (v===null || ctx.dataIndex % step !== 0) ? '' : v+'%'};
   opts.plugins.tooltip = { callbacks:{ label: ctx => {
     const k = labels[ctx.dataIndex];
     const d = byPeriod[k][ctx.dataset.label];
@@ -1154,9 +1193,9 @@ function renderSlaChart(groups){
 }
 
 function renderBaySplitChart(items){
-  const low = items.filter(r=>classifyBay(r.sourceBin)==='Low Bay').length;
-  const high = items.filter(r=>classifyBay(r.sourceBin)==='High Bay').length;
-  const hv = items.filter(r=>classifyBay(r.sourceBin)==='High Value').length;
+  const low = items.filter(r=>r.bayType==='Low Bay').length;
+  const high = items.filter(r=>r.bayType==='High Bay').length;
+  const hv = items.filter(r=>r.bayType==='High Value').length;
   const total = low + high + hv;
   const data = [low, high, hv];
   destroyChart('baySplit');
@@ -1204,13 +1243,12 @@ document.querySelectorAll('thead th').forEach(th=>{
     const key = th.dataset.key;
     if(sortKey===key){ sortDir = sortDir==='asc'?'desc':'asc'; }
     else { sortKey = key; sortDir = 'desc'; }
-    renderTable();
+    safeRender('table', ()=>renderTable(cachedRangeGroups));
   });
 });
 
-function renderTable(){
-  const items = filterByRange(allLineItems);
-  let groups = groupByPullId(items);
+function renderTable(rangeGroups){
+  let groups = rangeGroups;
 
   if(searchTerm){
     groups = groups.filter(g=>{
@@ -1280,7 +1318,7 @@ function renderTable(){
         <td>${l.product||'&mdash;'}</td>
         <td style="white-space:normal;max-width:260px;">${l.productDesc||'&mdash;'}</td>
         <td>${l.sourceBin||'&mdash;'}</td>
-        <td>${classifyBay(l.sourceBin)}</td>
+        <td>${l.bayType}</td>
         <td>${l.destBin||l.destHU||'&mdash;'}</td>
         <td>${l.targetQty}</td>
         <td style="${qtyStyle}">${l.actualQty}${result!=='Accurate' ? ' ('+result+')' : ''}</td>
@@ -1325,7 +1363,7 @@ function renderTable(){
       const id = tr.dataset.pullid;
       if(expandedPullIds.has(id)) expandedPullIds.delete(id);
       else expandedPullIds.add(id);
-      renderTable();
+      renderTable(rangeGroups);
     });
   });
 }
@@ -1352,6 +1390,7 @@ function exportTableToExcel(){
     'Type': g.pullType,
     'Status': g.status,
     'SLA Status': g.slaStatus,
+    'SLA Elapsed (min, ex. Sun)': g.slaElapsedMin ?? '',
     'Lines': g.lineCount,
     'Target Qty': g.targetQty,
     'Actual Qty': g.actualQty,
@@ -1370,7 +1409,7 @@ function exportTableToExcel(){
 
   const ws = XLSX.utils.json_to_sheet(rows, {cellDates:true});
   ws['!cols'] = [
-    {wch:14},{wch:8},{wch:12},{wch:12},{wch:7},{wch:11},{wch:11},
+    {wch:14},{wch:8},{wch:12},{wch:12},{wch:19},{wch:7},{wch:11},{wch:11},
     {wch:11},{wch:10},{wch:9},{wch:18},{wch:18},{wch:18},
     {wch:14},{wch:16},{wch:20},{wch:14},{wch:14}
   ];

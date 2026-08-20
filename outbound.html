@@ -178,6 +178,13 @@
   .badge.sla-breached{background:rgba(226,35,26,0.15);color:var(--accent);margin-left:5px;}
   .badge.sla-risk{background:rgba(232,163,61,0.15);color:var(--warn);margin-left:5px;}
 
+  .delete-line-btn{
+    background:transparent;border:1px solid var(--card-border-light);color:var(--text-faint);
+    border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;line-height:1;
+    transition:border-color .15s ease, color .15s ease;
+  }
+  .delete-line-btn:hover{border-color:var(--accent);color:var(--accent);}
+
   .pull-id-cell{font-weight:700;color:var(--text);}
   .caret{display:inline-block;margin-right:6px;color:var(--text-faint);transition:transform .15s ease;font-size:10px;}
   tr.pull-row.expanded .caret{transform:rotate(90deg);color:var(--accent);}
@@ -242,8 +249,8 @@
 
   <section class="charts-grid">
     <div class="chart-card">
-      <h3 id="titlePerDay">Pull IDs per Day</h3>
-      <div class="chart-note">Count of distinct Pull IDs created, by day</div>
+      <h3>Pull IDs by Hour Created</h3>
+      <div class="chart-note">Count of Pull IDs, by the hour they were created (Eastern Time)</div>
       <div class="chart-holder"><canvas id="chartPerDay"></canvas></div>
     </div>
     <div class="chart-card">
@@ -326,10 +333,10 @@
   </section>
 
   <footer class="note">
-    Auto vs. Manual pull classification is not yet available in the source export &mdash; all pulls show as
-    <b>Unknown</b> until an identification method is provided. Rows with a 0.000 Target Quantity are excluded on upload.
-    Repeat uploads merge into existing data and are de-duplicated by Warehouse Task, so re-uploading an export that
-    overlaps a previous one is safe.
+    Rows with a 0.000 Target Quantity are excluded on upload. Repeat uploads merge into existing data and are
+    de-duplicated by Warehouse Task, so re-uploading an export that overlaps a previous one is safe. Line items
+    can be permanently deleted from the expandable detail view (click a Pull ID, then the trash icon on a row) &mdash;
+    this is password-protected and cannot be undone.
   </footer>
 
 </div>
@@ -838,6 +845,7 @@ function renderKPIs(items, groups){
 
   const totalPulls = groups.length;
   const totalLines = items.length;
+  const avgPicksPerPull = totalPulls ? Math.round((totalLines/totalPulls)*10)/10 : null;
   const confirmedLines = items.filter(r=>isValidDate(r.confirmedAt));
   const accurateLines = confirmedLines.filter(r=>(r.actualQty||0)===(r.targetQty||0)).length;
   const accuracyPct = confirmedLines.length ? Math.round((accurateLines/confirmedLines.length)*1000)/10 : null;
@@ -883,6 +891,7 @@ function renderKPIs(items, groups){
 
   const cards = [
     {label:'Pull IDs', value: totalPulls.toLocaleString(), sub: totalLines.toLocaleString()+' line items', accent:'var(--accent)'},
+    {label:'Picks per Pull ID', value: avgPicksPerPull!==null ? avgPicksPerPull : '&mdash;', sub:'avg line items per Pull ID', accent:'var(--accent)'},
     {label:'Fill Rate', value: accuracyPct!==null ? accuracyPct+'%' : '&mdash;', sub: accuracyPct!==null ? (confirmedLines.length-accurateLines)+' of '+confirmedLines.length+' confirmed lines off qty' : 'no confirmed lines', accent: accuracyPct!==null && accuracyPct<98 ? 'var(--warn)' : 'var(--good)'},
     {label:'Auto Avg Cycle Time', value: formatDuration(avgCycleAuto), sub:'created \u2192 confirmed', accent:'var(--info)'},
     {label:'Manual Avg Cycle Time', value: formatDuration(avgCycleManual), sub:'created \u2192 confirmed', accent:'var(--hv-color)'},
@@ -962,18 +971,15 @@ function renderCharts(items, groups){
 }
 
 function renderPerDayChart(groups){
-  const counts = {};
-  groups.forEach(g=>{ if(g.createdAt){ const k=periodKey(g.createdAt); counts[k]=(counts[k]||0)+1; } });
-  const labels = Object.keys(counts).sort();
-  const data = labels.map(k=>counts[k]);
+  const hours = new Array(24).fill(0);
+  groups.forEach(g=>{ if(isValidDate(g.createdAt)) hours[g.createdAt.getHours()]++; });
   destroyChart('perDay');
-  const step = labelSkipStep(labels.length);
   const opts = baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}});
   opts.layout = {padding:{top:20}};
-  opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:(v,ctx)=> ctx.dataIndex % step === 0 ? v : ''};
+  opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:v=>v===0?'':v};
   charts.perDay = new Chart(document.getElementById('chartPerDay'), {
     type:'bar',
-    data:{ labels: labels.map(l=>formatPeriodLabel(l)), datasets:[{ data, backgroundColor:'#e2231a', borderRadius:4, maxBarThickness:36 }]},
+    data:{ labels: hours.map((_,h)=>formatHour12(h)), datasets:[{ data:hours, backgroundColor:'#e2231a', borderRadius:4, maxBarThickness:26 }]},
     options: opts
   });
 }
@@ -1058,7 +1064,6 @@ function granularityLabel(){
 
 function updateChartTitles(){
   const g = granularityLabel();
-  document.getElementById('titlePerDay').textContent = 'Pull IDs per '+g;
   document.getElementById('titleCycle').textContent = 'Avg Cycle Time by '+g;
   document.getElementById('titleAccuracy').textContent = 'Fill Rate by '+g;
   document.getElementById('titleBayVolume').textContent = 'Picks by Bay Type per '+g;
@@ -1325,6 +1330,7 @@ function renderTable(rangeGroups){
         <td>${formatDateTime(l.createdAt)}</td>
         <td>${l.confirmedBy||'&mdash;'}</td>
         <td>${formatDateTime(l.confirmedAt)}</td>
+        <td><button type="button" class="delete-line-btn" data-key="${escapeAttr(l._key||'')}" title="Delete this line item">&#128465;</button></td>
       </tr>
     `;}).join('');
 
@@ -1348,7 +1354,7 @@ function renderTable(rangeGroups){
             <table>
               <thead><tr>
                 <th>Whse Task</th><th>SKU</th><th>Description</th><th>Source Bin</th><th>Bay Type</th><th>Dest Bin/HU</th>
-                <th>Target</th><th>Actual</th><th>Created By</th><th>Created At</th><th>Confirmed By</th><th>Confirmed At</th>
+                <th>Target</th><th>Actual</th><th>Created By</th><th>Created At</th><th>Confirmed By</th><th>Confirmed At</th><th></th>
               </tr></thead>
               <tbody>${detailRows}</tbody>
             </table>
@@ -1366,6 +1372,33 @@ function renderTable(rangeGroups){
       renderTable(rangeGroups);
     });
   });
+
+  tbody.querySelectorAll('.delete-line-btn').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      deleteLineItemPrompt(btn.dataset.key);
+    });
+  });
+}
+
+const DELETE_LINE_PASSWORD = 'Jen$en120313!';
+
+async function deleteLineItemPrompt(key){
+  if(!key){ alert('This line item is missing its record key and cannot be deleted.'); return; }
+  const pw = prompt('Enter the password to delete this line item:');
+  if(pw === null) return; // cancelled
+  if(pw !== DELETE_LINE_PASSWORD){
+    alert('Incorrect password. Line item was not deleted.');
+    return;
+  }
+  if(!confirm('Delete this line item permanently? This cannot be undone.')) return;
+  try{
+    await lineItemsRef.child(key).remove();
+    setSyncStatus('ok', 'Line item deleted');
+  }catch(err){
+    console.error(err);
+    setSyncStatus('err', 'Failed to delete line item: '+err.message);
+  }
 }
 
 function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }

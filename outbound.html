@@ -25,6 +25,7 @@
     --warn: #e8a33d;
     --bad: #e2231a;
     --info: #3d9fe8;
+    --hv-color: #a78bfa;
     --radius: 10px;
   }
   *{box-sizing:border-box;}
@@ -249,7 +250,7 @@
     </div>
     <div class="chart-card">
       <h3>Picking Velocity by Bay Type</h3>
-      <div class="chart-note">Picks per hour, Low Bay vs. High Bay</div>
+      <div class="chart-note">Picks per hour, Low vs. High vs. High Value (excludes gaps over 60 min as idle time)</div>
       <div class="chart-holder"><canvas id="chartBayVelocity"></canvas></div>
     </div>
   </section>
@@ -361,12 +362,15 @@ function isValidDate(d){ return d instanceof Date && !isNaN(d.getTime()); }
 //   Aisles 1-5:   Level A = Low Bay, everything else = High Bay
 //   Aisles 8-23:  Level A = Low Bay, everything else = High Bay
 //   Aisles 6-7:   Levels A-D = Low Bay, everything else = High Bay
-// Bins that don't match the standard AA-BB-LevelN pattern (blank, HVP zones,
-// cages, aisles outside 1-23, etc.) are classified as "Other" rather than
-// guessed at, since the rule above doesn't cover them.
+// Bins starting with "HVP" are High Value locations, physically low bay but
+// tracked as their own category rather than folded into Low Bay.
+// Bins that don't match any of the above (blank, cages, aisles outside
+// 1-23, etc.) are classified as "Other" and excluded from bay metrics.
 function classifyBay(bin){
   if(!bin) return 'Other';
-  const m = String(bin).trim().match(/^(\d{1,3})-\d{1,3}-([A-Za-z]+)\d*$/);
+  const s = String(bin).trim();
+  if(/^HVP/i.test(s)) return 'High Value';
+  const m = s.match(/^(\d{1,3})-\d{1,3}-([A-Za-z]+)\d*$/);
   if(!m) return 'Other';
   const aisle = parseInt(m[1],10);
   const level = m[2].toUpperCase();
@@ -376,26 +380,26 @@ function classifyBay(bin){
   return 'Other';
 }
 
-// Picks per hour, aggregated across days: for each day, sums the elapsed
-// time between the first and last confirmed pick of that type, then divides
-// total picks by total elapsed hours. Days with fewer than 2 picks
-// contribute to the pick count but not the hours (no span to measure).
+// Picks per hour, excluding idle time. Gaps between consecutive confirmed
+// picks longer than IDLE_GAP_MINUTES (a break, shift change, overnight,
+// etc.) are treated as no activity and dropped from the time base entirely,
+// rather than counted against the rate.
+const IDLE_GAP_MINUTES = 60;
+
+function velocityFromTimes(times){
+  if(!times || times.length < 2) return null;
+  const sorted = [...times].sort((a,b)=>a-b);
+  let activeHours = 0;
+  for(let i=1;i<sorted.length;i++){
+    const gapMin = (sorted[i]-sorted[i-1]) / 60000;
+    if(gapMin <= IDLE_GAP_MINUTES) activeHours += gapMin/60;
+  }
+  return activeHours > 0 ? Math.round((sorted.length/activeHours)*10)/10 : null;
+}
+
 function computeVelocity(items){
-  const byDay = {};
-  items.forEach(r=>{
-    if(!isValidDate(r.confirmedAt)) return;
-    const k = dayKey(r.confirmedAt);
-    if(!byDay[k]) byDay[k] = [];
-    byDay[k].push(r.confirmedAt.getTime());
-  });
-  let totalPicks = 0, totalHours = 0;
-  Object.values(byDay).forEach(times=>{
-    totalPicks += times.length;
-    if(times.length > 1){
-      totalHours += (Math.max(...times) - Math.min(...times)) / 3600000;
-    }
-  });
-  return totalHours > 0 ? Math.round((totalPicks/totalHours)*10)/10 : null;
+  const times = items.map(r=>r.confirmedAt).filter(isValidDate).map(d=>d.getTime());
+  return velocityFromTimes(times);
 }
 
 function combineDateAndTime(dateVal, timeVal){
@@ -737,11 +741,14 @@ function renderKPIs(){
 
   const lowItems = items.filter(r=>classifyBay(r.sourceBin)==='Low Bay');
   const highItems = items.filter(r=>classifyBay(r.sourceBin)==='High Bay');
-  const otherBayCount = totalLines - lowItems.length - highItems.length;
+  const hvItems = items.filter(r=>classifyBay(r.sourceBin)==='High Value');
+  const otherBayCount = totalLines - lowItems.length - highItems.length - hvItems.length;
   const lowVelocity = computeVelocity(lowItems);
   const highVelocity = computeVelocity(highItems);
+  const hvVelocity = computeVelocity(hvItems);
   const lowPct = totalLines ? Math.round((lowItems.length/totalLines)*1000)/10 : null;
   const highPct = totalLines ? Math.round((highItems.length/totalLines)*1000)/10 : null;
+  const hvPct = totalLines ? Math.round((hvItems.length/totalLines)*1000)/10 : null;
 
   const cards = [
     {label:'Pull IDs', value: totalPulls.toLocaleString(), sub: totalLines.toLocaleString()+' line items', accent:'var(--accent)'},
@@ -754,8 +761,10 @@ function renderKPIs(){
     {label:'Short-Pick Pulls', value: shortPickPulls.toLocaleString(), sub:'actual \u2260 target on \u22651 line', accent: shortPickPulls>0 ? 'var(--bad)' : 'var(--good)'},
     {label:'Low Bay Picks', value: lowItems.length.toLocaleString(), sub: lowPct!==null ? lowPct+'% of classified picks' : '&mdash;', accent:'var(--good)'},
     {label:'High Bay Picks', value: highItems.length.toLocaleString(), sub: highPct!==null ? highPct+'% of classified picks' : '&mdash;', accent:'var(--warn)'},
-    {label:'Low Bay Velocity', value: lowVelocity!==null ? lowVelocity+'/hr' : '&mdash;', sub:'picks per hour', accent:'var(--good)'},
-    {label:'High Bay Velocity', value: highVelocity!==null ? highVelocity+'/hr' : '&mdash;', sub:'picks per hour', accent:'var(--warn)'}
+    {label:'High Value Picks', value: hvItems.length.toLocaleString(), sub: hvPct!==null ? hvPct+'% of classified picks' : '&mdash;', accent:'var(--hv-color)'},
+    {label:'Low Bay Velocity', value: lowVelocity!==null ? lowVelocity+'/hr' : '&mdash;', sub:'active-hour rate', accent:'var(--good)'},
+    {label:'High Bay Velocity', value: highVelocity!==null ? highVelocity+'/hr' : '&mdash;', sub:'active-hour rate', accent:'var(--warn)'},
+    {label:'High Value Velocity', value: hvVelocity!==null ? hvVelocity+'/hr' : '&mdash;', sub:'active-hour rate', accent:'var(--hv-color)'}
   ];
 
   grid.innerHTML = cards.map(c=>`
@@ -768,7 +777,7 @@ function renderKPIs(){
 
   const noteEl = document.getElementById('bayNote');
   noteEl.textContent = otherBayCount > 0
-    ? otherBayCount.toLocaleString()+' line item'+(otherBayCount===1?'':'s')+' in this range have a source bin outside the aisle 1\u201323 low/high bay scheme (blank, HVP zones, cages, etc.) and are excluded from the Low/High Bay figures above.'
+    ? otherBayCount.toLocaleString()+' line item'+(otherBayCount===1?'':'s')+' in this range have no source bin or one outside the aisle 1\u201323 scheme (blank, cages, etc.) and are excluded from the Low/High/High Value Bay figures above.'
     : '';
 }
 
@@ -929,12 +938,13 @@ function renderBayVolumeChart(items){
     const bay = classifyBay(r.sourceBin);
     if(bay==='Other') return;
     const k = dayKey(r.confirmedAt);
-    if(!byDay[k]) byDay[k] = {'Low Bay':0, 'High Bay':0};
+    if(!byDay[k]) byDay[k] = {'Low Bay':0, 'High Bay':0, 'High Value':0};
     byDay[k][bay]++;
   });
   const labels = Object.keys(byDay).sort();
   const low = labels.map(k=>byDay[k]['Low Bay']);
   const high = labels.map(k=>byDay[k]['High Bay']);
+  const hv = labels.map(k=>byDay[k]['High Value']);
   destroyChart('bayVolume');
   const opts = baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}}, true);
   opts.layout = {padding:{top:20}};
@@ -942,8 +952,9 @@ function renderBayVolumeChart(items){
   charts.bayVolume = new Chart(document.getElementById('chartBayVolume'), {
     type:'bar',
     data:{ labels: labels.map(l=>formatShortDay(l)), datasets:[
-      {label:'Low Bay', data:low, backgroundColor:'#2fbf71', borderRadius:4, maxBarThickness:26},
-      {label:'High Bay', data:high, backgroundColor:'#e8a33d', borderRadius:4, maxBarThickness:26}
+      {label:'Low Bay', data:low, backgroundColor:'#2fbf71', borderRadius:4, maxBarThickness:22},
+      {label:'High Bay', data:high, backgroundColor:'#e8a33d', borderRadius:4, maxBarThickness:22},
+      {label:'High Value', data:hv, backgroundColor:'#a78bfa', borderRadius:4, maxBarThickness:22}
     ]},
     options: opts
   });
@@ -956,17 +967,13 @@ function renderBayVelocityChart(items){
     const bay = classifyBay(r.sourceBin);
     if(bay==='Other') return;
     const k = dayKey(r.confirmedAt);
-    if(!grouped[k]) grouped[k] = {'Low Bay':[], 'High Bay':[]};
+    if(!grouped[k]) grouped[k] = {'Low Bay':[], 'High Bay':[], 'High Value':[]};
     grouped[k][bay].push(r.confirmedAt.getTime());
   });
   const labels = Object.keys(grouped).sort();
-  const velocityFor = (times) => {
-    if(!times || times.length<2) return null;
-    const span = (Math.max(...times)-Math.min(...times))/3600000;
-    return span>0 ? Math.round((times.length/span)*10)/10 : null;
-  };
-  const low = labels.map(k=>velocityFor(grouped[k]['Low Bay']));
-  const high = labels.map(k=>velocityFor(grouped[k]['High Bay']));
+  const low = labels.map(k=>velocityFromTimes(grouped[k]['Low Bay']));
+  const high = labels.map(k=>velocityFromTimes(grouped[k]['High Bay']));
+  const hv = labels.map(k=>velocityFromTimes(grouped[k]['High Value']));
   destroyChart('bayVelocity');
   const opts = baseChartOptions({y:{beginAtZero:true, ticks:{callback:v=>v+'/hr'}}}, true);
   opts.plugins.tooltip = { callbacks:{ label: ctx => ctx.dataset.label+': '+(ctx.parsed.y===null?'\u2014':ctx.parsed.y+' picks/hr') } };
@@ -974,7 +981,8 @@ function renderBayVelocityChart(items){
     type:'line',
     data:{ labels: labels.map(l=>formatShortDay(l)), datasets:[
       { label:'Low Bay', data:low, borderColor:'#2fbf71', backgroundColor:'rgba(47,191,113,0.15)', tension:0.3, fill:true, spanGaps:true },
-      { label:'High Bay', data:high, borderColor:'#e8a33d', backgroundColor:'rgba(232,163,61,0.12)', tension:0.3, fill:true, spanGaps:true }
+      { label:'High Bay', data:high, borderColor:'#e8a33d', backgroundColor:'rgba(232,163,61,0.12)', tension:0.3, fill:true, spanGaps:true },
+      { label:'High Value', data:hv, borderColor:'#a78bfa', backgroundColor:'rgba(167,139,250,0.12)', tension:0.3, fill:true, spanGaps:true }
     ]},
     options: opts
   });

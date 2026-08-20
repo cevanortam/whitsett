@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Whitsett Outbound Pull Dashboard</title>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg: #0a1626;
+    --bg-alt: #0e1d33;
+    --card: #122A47;
+    --card-border: #1f3d61;
+    --card-border-light: #2a4a73;
+    --text: #e7eef7;
+    --text-dim: #93a8c4;
+    --text-faint: #5f7796;
+    --accent: #e2231a;
+    --accent-dim: #7a2f2b;
+    --good: #2fbf71;
+    --warn: #e8a33d;
+    --bad: #e2231a;
+    --info: #3d9fe8;
+    --radius: 10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background: radial-gradient(1200px 600px at 10% -10%, #123156 0%, var(--bg) 55%) fixed, var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    min-height:100vh;
+  }
+  .wrap{max-width:1400px;margin:0 auto;padding:24px 28px 64px;}
+
+  header.top{
+    display:flex;justify-content:space-between;align-items:flex-start;
+    gap:20px;flex-wrap:wrap;
+    padding-bottom:20px;margin-bottom:24px;
+    border-bottom:1px solid var(--card-border);
+  }
+  .brand{display:flex;align-items:center;gap:14px;}
+  .brand-mark{
+    width:44px;height:44px;border-radius:9px;
+    background:linear-gradient(135deg,var(--accent),#a8160f);
+    display:flex;align-items:center;justify-content:center;
+    font-weight:800;font-size:16px;letter-spacing:0.5px;
+    box-shadow:0 4px 14px rgba(226,35,26,0.35);
+    flex-shrink:0;
+  }
+  .brand h1{font-size:19px;margin:0;font-weight:700;letter-spacing:0.2px;}
+  .brand .sub{color:var(--text-dim);font-size:12.5px;margin-top:3px;}
+
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  select, input[type=text]{
+    background:var(--card);border:1px solid var(--card-border-light);color:var(--text);
+    border-radius:8px;padding:9px 12px;font-size:13px;outline:none;
+  }
+  select:focus, input[type=text]:focus{border-color:var(--accent);}
+
+  .btn{
+    background:var(--accent);color:#fff;border:none;border-radius:8px;
+    padding:10px 16px;font-size:13.5px;font-weight:600;cursor:pointer;
+    display:inline-flex;align-items:center;gap:8px;
+    transition:filter .15s ease, transform .1s ease;
+  }
+  .btn:hover{filter:brightness(1.1);}
+  .btn:active{transform:scale(0.98);}
+  .btn.secondary{background:var(--card);border:1px solid var(--card-border-light);color:var(--text);}
+  .btn.secondary:hover{border-color:var(--accent);}
+  input[type=file]{display:none;}
+
+  .status-line{font-size:12px;color:var(--text-faint);margin-top:6px;display:flex;gap:14px;flex-wrap:wrap;}
+  .status-line b{color:var(--text-dim);font-weight:600;}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--good);display:inline-block;margin-right:5px;}
+  .dot.busy{background:var(--warn);animation:pulse 1s infinite;}
+  .dot.err{background:var(--bad);}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.35;}}
+
+  .kpi-grid{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));
+    gap:14px;margin-bottom:24px;
+  }
+  .kpi{
+    background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius);
+    padding:16px 18px;position:relative;overflow:hidden;
+  }
+  .kpi::before{
+    content:"";position:absolute;top:0;left:0;width:3px;height:100%;
+    background:var(--kpi-accent, var(--accent));
+  }
+  .kpi .label{font-size:11px;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-faint);font-weight:600;}
+  .kpi .value{font-size:26px;font-weight:800;margin-top:8px;line-height:1;}
+  .kpi .sub{font-size:11.5px;color:var(--text-dim);margin-top:6px;}
+
+  .charts-grid{
+    display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:26px;
+  }
+  @media (max-width:900px){.charts-grid{grid-template-columns:1fr;}}
+  .chart-card{
+    background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius);
+    padding:18px 18px 10px;
+  }
+  .chart-card h3{margin:0 0 2px;font-size:13.5px;font-weight:700;}
+  .chart-card .chart-note{font-size:11.5px;color:var(--text-faint);margin-bottom:10px;}
+  .chart-card .chart-holder{position:relative;height:230px;}
+
+  .table-section{
+    background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius);
+    padding:20px;
+  }
+  .table-section-head{
+    display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px;
+  }
+  .table-section-head h2{margin:0;font-size:15.5px;}
+  .table-section-head .meta{font-size:12px;color:var(--text-faint);margin-top:3px;}
+
+  table{width:100%;border-collapse:collapse;font-size:12.8px;}
+  thead th{
+    text-align:left;padding:9px 10px;color:var(--text-faint);font-weight:600;
+    text-transform:uppercase;font-size:10.5px;letter-spacing:0.5px;
+    border-bottom:1px solid var(--card-border-light);cursor:pointer;user-select:none;
+    white-space:nowrap;
+  }
+  thead th:hover{color:var(--text);}
+  thead th.sorted::after{content:" \25BE";color:var(--accent);}
+  thead th.sorted-asc::after{content:" \25B4";color:var(--accent);}
+  tbody tr.pull-row{border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;}
+  tbody tr.pull-row:hover{background:rgba(255,255,255,0.03);}
+  tbody td{padding:9px 10px;vertical-align:middle;white-space:nowrap;}
+  tbody tr.detail-row{display:none;background:var(--bg-alt);}
+  tbody tr.detail-row.open{display:table-row;}
+  tbody tr.detail-row td{padding:0;white-space:normal;}
+  .detail-inner{padding:14px 18px 18px 34px;}
+  .detail-inner table{margin-top:4px;}
+  .detail-inner thead th{cursor:default;font-size:10px;}
+  .detail-inner thead th::after{content:"";}
+
+  .badge{
+    display:inline-block;padding:3px 9px;border-radius:99px;font-size:10.5px;font-weight:700;
+    letter-spacing:0.3px;text-transform:uppercase;
+  }
+  .badge.complete{background:rgba(47,191,113,0.15);color:var(--good);}
+  .badge.progress{background:rgba(232,163,61,0.15);color:var(--warn);}
+  .badge.short{background:rgba(226,35,26,0.15);color:var(--accent);margin-left:5px;}
+  .badge.unknown{background:rgba(148,168,196,0.15);color:var(--text-dim);}
+
+  .pull-id-cell{font-weight:700;color:var(--text);}
+  .caret{display:inline-block;margin-right:6px;color:var(--text-faint);transition:transform .15s ease;font-size:10px;}
+  tr.pull-row.expanded .caret{transform:rotate(90deg);color:var(--accent);}
+
+  .empty-state{padding:50px 20px;text-align:center;color:var(--text-faint);}
+  .empty-state .big{font-size:15px;color:var(--text-dim);margin-bottom:6px;}
+
+  footer.note{
+    margin-top:22px;font-size:11.5px;color:var(--text-faint);line-height:1.6;
+    border-top:1px solid var(--card-border);padding-top:16px;
+  }
+  ::-webkit-scrollbar{height:8px;width:8px;}
+  ::-webkit-scrollbar-thumb{background:var(--card-border-light);border-radius:4px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <div class="brand">
+        <div class="brand-mark">CEVA</div>
+        <div>
+          <h1>Whitsett Outbound Pull Dashboard</h1>
+          <div class="sub">SAP outbound pull activity &mdash; Whitsett, NC</div>
+        </div>
+      </div>
+      <div class="status-line">
+        <span id="syncStatus"><span class="dot" id="syncDot"></span><b id="syncText">Connecting&hellip;</b></span>
+        <span><b id="recordCount">0</b> line items on file</span>
+        <span><b id="pullCount">0</b> Pull IDs</span>
+        <span id="lastUploadLine" style="display:none;">Last upload: <b id="lastUploadTime">&mdash;</b></span>
+      </div>
+    </div>
+    <div class="controls">
+      <select id="rangeFilter">
+        <option value="all">All time</option>
+        <option value="today">Today</option>
+        <option value="7">Last 7 days</option>
+        <option value="30">Last 30 days</option>
+      </select>
+      <label class="btn" for="fileInput">&#8593; Upload SAP Export</label>
+      <input type="file" id="fileInput" accept=".xlsx,.xls">
+    </div>
+  </header>
+
+  <section class="kpi-grid" id="kpiGrid"></section>
+
+  <section class="charts-grid">
+    <div class="chart-card">
+      <h3>Pull IDs per Day</h3>
+      <div class="chart-note">Count of distinct Pull IDs created, by day</div>
+      <div class="chart-holder"><canvas id="chartPerDay"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Avg Cycle Time by Day</h3>
+      <div class="chart-note">Minutes: Created &rarr; Start &rarr; Confirmed</div>
+      <div class="chart-holder"><canvas id="chartCycle"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Confirmations by Hour of Day</h3>
+      <div class="chart-note">When work actually gets confirmed &mdash; useful for staffing</div>
+      <div class="chart-holder"><canvas id="chartHourly"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Top Confirmed By (Volume)</h3>
+      <div class="chart-note">Line items confirmed, by associate</div>
+      <div class="chart-holder"><canvas id="chartUsers"></canvas></div>
+    </div>
+  </section>
+
+  <section class="table-section">
+    <div class="table-section-head">
+      <div>
+        <h2>Pull IDs</h2>
+        <div class="meta" id="tableMeta">&nbsp;</div>
+      </div>
+      <input type="text" id="searchBox" placeholder="Search Pull ID, WO, SKU, or user&hellip;" style="min-width:260px;">
+    </div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th data-key="pullId">Pull ID</th>
+            <th data-key="pullType">Type</th>
+            <th data-key="lineCount">Lines</th>
+            <th data-key="targetQty">Target Qty</th>
+            <th data-key="actualQty">Actual Qty</th>
+            <th data-key="createdAt">Created</th>
+            <th data-key="startAt">Started</th>
+            <th data-key="confirmedAt">Confirmed</th>
+            <th data-key="createToStartMin">Created&rarr;Start</th>
+            <th data-key="createToConfirmMin">Created&rarr;Confirmed</th>
+            <th data-key="status">Status</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+    <div class="empty-state" id="emptyState" style="display:none;">
+      <div class="big">No data yet</div>
+      <div>Upload a SAP outbound pull export to get started.</div>
+    </div>
+  </section>
+
+  <footer class="note">
+    Auto vs. Manual pull classification is not yet available in the source export &mdash; all pulls show as
+    <b>Unknown</b> until an identification method is provided. Rows with a 0.000 Target Quantity are excluded on upload.
+    Repeat uploads merge into existing data and are de-duplicated by Warehouse Task, so re-uploading an export that
+    overlaps a previous one is safe.
+  </footer>
+
+</div>
+
+<script>
+/* ---------------------------------------------------------------------
+   Firebase setup (shares the whitsett-cycle-counts project; this tool
+   writes under its own top-level nodes so it never touches cycle count
+   data: /outbound_pulls and /outbound_pull_uploads)
+--------------------------------------------------------------------- */
+const firebaseConfig = {
+  apiKey: "AIzaSyBAcAK0z5N9Cw9gRtdH9WA_7v_NyKPKJMs",
+  authDomain: "whitsett-cycle-counts.firebaseapp.com",
+  databaseURL: "https://whitsett-cycle-counts-default-rtdb.firebaseio.com",
+  projectId: "whitsett-cycle-counts",
+  storageBucket: "whitsett-cycle-counts.firebasestorage.app",
+  messagingSenderId: "960015809565",
+  appId: "1:960015809565:web:6bcc50b9cb411b959c1af4"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const lineItemsRef = db.ref('outbound_pulls');
+const uploadsRef = db.ref('outbound_pull_uploads');
+
+/* ---------------------------------------------------------------------
+   Column map (0-based array index from SheetJS header:1 rows)
+--------------------------------------------------------------------- */
+const COL = {
+  pullId: 0,          // A
+  warehouseOrder: 2,  // C
+  destHU: 3,           // D
+  product: 4,          // E
+  sourceBin: 5,        // F
+  productDesc: 6,      // G
+  targetQty: 9,        // J
+  actualQty: 10,       // K
+  warehouseTask: 11,   // L
+  confirmDate: 13,      // N
+  confirmTime: 14,      // O
+  confirmedBy: 17,      // R
+  destBin: 18,           // S
+  createdBy: 21,          // V
+  sourceHU: 23,            // X
+  startTime: 30,            // AE
+  createdOnDate: 40,        // AO
+  createdAtTime: 41         // AP
+};
+
+/* ---------------------------------------------------------------------
+   State
+--------------------------------------------------------------------- */
+let allLineItems = [];      // flat array of parsed line item records (from Firebase)
+let sortKey = 'createdAt';
+let sortDir = 'desc';
+let searchTerm = '';
+let rangeMode = 'all';
+let charts = {};
+let expandedPullIds = new Set();
+
+/* ---------------------------------------------------------------------
+   Date / time helpers
+--------------------------------------------------------------------- */
+function isValidDate(d){ return d instanceof Date && !isNaN(d.getTime()); }
+
+function combineDateAndTime(dateVal, timeVal){
+  if(!isValidDate(dateVal) || !isValidDate(timeVal)) return null;
+  return new Date(dateVal.getFullYear(), dateVal.getMonth(), dateVal.getDate(),
+                   timeVal.getHours(), timeVal.getMinutes(), timeVal.getSeconds());
+}
+
+// Start Time (AE) only carries a time-of-day. Pair it with the Created On
+// date (AO); if the resulting time-of-day is earlier than Created At (AP),
+// the start actually rolled past midnight, so bump the date by one day.
+function computeStartDateTime(createdOnDate, createdAtTime, startTimeVal){
+  if(!isValidDate(createdOnDate) || !isValidDate(startTimeVal)) return null;
+  let start = new Date(createdOnDate.getFullYear(), createdOnDate.getMonth(), createdOnDate.getDate(),
+                        startTimeVal.getHours(), startTimeVal.getMinutes(), startTimeVal.getSeconds());
+  if(isValidDate(createdAtTime)){
+    const createdMinutes = createdAtTime.getHours()*60 + createdAtTime.getMinutes();
+    const startMinutes = startTimeVal.getHours()*60 + startTimeVal.getMinutes();
+    if(startMinutes < createdMinutes - 5){ // small buffer against second-level noise
+      start.setDate(start.getDate()+1);
+    }
+  }
+  return start;
+}
+
+function minutesBetween(a,b){
+  if(!isValidDate(a) || !isValidDate(b)) return null;
+  return Math.round((b.getTime()-a.getTime())/60000);
+}
+
+function formatDuration(min){
+  if(min===null || min===undefined || isNaN(min)) return '&mdash;';
+  if(min<0) min = 0;
+  const h = Math.floor(min/60), m = Math.round(min%60);
+  if(h===0) return m+'m';
+  return h+'h '+m+'m';
+}
+
+function formatDateTime(d){
+  if(!isValidDate(d)) return '&mdash;';
+  return d.toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+}
+
+function formatDateOnly(d){
+  if(!isValidDate(d)) return '&mdash;';
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+}
+
+function dayKey(d){
+  if(!isValidDate(d)) return null;
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+/* ---------------------------------------------------------------------
+   Excel parsing
+--------------------------------------------------------------------- */
+function readFileAsArrayBuffer(file){
+  return new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target.result);
+    reader.onerror = reject;
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+async function parseSapExport(file){
+  const buf = await readFileAsArrayBuffer(file);
+  const wb = XLSX.read(buf, {type:'array', cellDates:true});
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:null, raw:true});
+
+  const updates = {};
+  let totalRows = 0, skippedZero = 0, skippedIncomplete = 0, imported = 0;
+
+  for(let i=1;i<rows.length;i++){
+    const row = rows[i];
+    if(!row || row.length===0) continue;
+    totalRows++;
+
+    const pullId = row[COL.pullId];
+    if(!pullId){ skippedIncomplete++; continue; } // no Pull ID to group by (e.g. sub-lines with no qty)
+
+    const targetQty = Number(row[COL.targetQty]) || 0;
+    if(targetQty === 0){ skippedZero++; continue; }
+
+    const warehouseTask = row[COL.warehouseTask];
+    if(!warehouseTask){ skippedIncomplete++; continue; } // no reliable dedupe key
+
+    const confirmDate = row[COL.confirmDate];
+    const confirmTime = row[COL.confirmTime];
+    const createdOnDate = row[COL.createdOnDate];
+    const createdAtTime = row[COL.createdAtTime];
+    const startTimeRaw = row[COL.startTime];
+
+    const confirmedAt = combineDateAndTime(confirmDate, confirmTime);
+    const createdAt = combineDateAndTime(createdOnDate, createdAtTime);
+    const startAt = computeStartDateTime(createdOnDate, createdAtTime, startTimeRaw);
+
+    const record = {
+      pullId: String(pullId).trim(),
+      warehouseOrder: row[COL.warehouseOrder] ?? null,
+      destHU: row[COL.destHU] ?? null,
+      product: row[COL.product] ?? null,
+      sourceBin: row[COL.sourceBin] ?? null,
+      productDesc: row[COL.productDesc] ?? null,
+      targetQty: targetQty,
+      actualQty: Number(row[COL.actualQty]) || 0,
+      warehouseTask: String(warehouseTask).trim(),
+      confirmedBy: row[COL.confirmedBy] ?? null,
+      destBin: row[COL.destBin] ?? null,
+      createdBy: row[COL.createdBy] ?? null,
+      sourceHU: row[COL.sourceHU] ?? null,
+      // TODO: once a way to distinguish Auto vs Manual pulls is available,
+      // classify it here instead of hardcoding 'Unknown'.
+      pullType: 'Unknown',
+      createdAt: createdAt ? createdAt.toISOString() : null,
+      startAt: startAt ? startAt.toISOString() : null,
+      confirmedAt: confirmedAt ? confirmedAt.toISOString() : null,
+      uploadedAt: new Date().toISOString()
+    };
+
+    const key = sanitizeKey(record.warehouseTask);
+    updates[key] = record;
+    imported++;
+  }
+
+  return {updates, totalRows, skippedZero, skippedIncomplete, imported};
+}
+
+function sanitizeKey(k){
+  return String(k).replace(/[.#$\[\]\/]/g,'_');
+}
+
+/* ---------------------------------------------------------------------
+   Upload flow
+--------------------------------------------------------------------- */
+document.getElementById('fileInput').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  setSyncStatus('busy','Reading file&hellip;');
+  try{
+    const {updates, totalRows, skippedZero, skippedIncomplete, imported} = await parseSapExport(file);
+    const keys = Object.keys(updates);
+    if(keys.length===0){
+      setSyncStatus('err','No importable rows found in that file');
+      e.target.value='';
+      return;
+    }
+    setSyncStatus('busy','Syncing '+keys.length+' line items to Firebase&hellip;');
+    await lineItemsRef.update(updates);
+    await uploadsRef.push({
+      fileName: file.name,
+      uploadedAt: new Date().toISOString(),
+      totalRows, skippedZero, skippedIncomplete, imported
+    });
+    setSyncStatus('ok','Connected');
+    document.getElementById('lastUploadLine').style.display='inline';
+    document.getElementById('lastUploadTime').textContent =
+      new Date().toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
+      + ' (' + imported + ' lines, ' + skippedZero + ' zero-qty skipped)';
+  }catch(err){
+    console.error(err);
+    setSyncStatus('err','Upload failed: '+err.message);
+  }
+  e.target.value='';
+});
+
+function setSyncStatus(kind, text){
+  const dot = document.getElementById('syncDot');
+  const txt = document.getElementById('syncText');
+  dot.className = 'dot' + (kind==='busy'?' busy':kind==='err'?' err':'');
+  txt.textContent = text;
+}
+
+/* ---------------------------------------------------------------------
+   Firebase live listener
+--------------------------------------------------------------------- */
+setSyncStatus('busy','Connecting&hellip;');
+lineItemsRef.on('value', snap => {
+  const val = snap.val() || {};
+  allLineItems = Object.keys(val).map(k=>{
+    const r = val[k];
+    return {
+      ...r,
+      _key: k,
+      createdAt: r.createdAt ? new Date(r.createdAt) : null,
+      startAt: r.startAt ? new Date(r.startAt) : null,
+      confirmedAt: r.confirmedAt ? new Date(r.confirmedAt) : null
+    };
+  });
+  setSyncStatus('ok','Connected');
+  renderAll();
+}, err=>{
+  console.error(err);
+  setSyncStatus('err','Connection error: '+err.message);
+});
+
+uploadsRef.limitToLast(1).on('value', snap=>{
+  const val = snap.val();
+  if(!val) return;
+  const entry = Object.values(val)[0];
+  document.getElementById('lastUploadLine').style.display='inline';
+  document.getElementById('lastUploadTime').textContent =
+    new Date(entry.uploadedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
+    + ' (' + entry.imported + ' lines, ' + entry.skippedZero + ' zero-qty skipped)';
+});
+
+/* ---------------------------------------------------------------------
+   Filtering
+--------------------------------------------------------------------- */
+document.getElementById('rangeFilter').addEventListener('change', e=>{
+  rangeMode = e.target.value; renderAll();
+});
+document.getElementById('searchBox').addEventListener('input', e=>{
+  searchTerm = e.target.value.trim().toLowerCase(); renderTable();
+});
+
+function filterByRange(items){
+  if(rangeMode==='all') return items;
+  const now = new Date();
+  let cutoff;
+  if(rangeMode==='today'){
+    cutoff = new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  } else {
+    cutoff = new Date(now.getTime() - Number(rangeMode)*24*3600*1000);
+  }
+  return items.filter(r => r.createdAt && r.createdAt >= cutoff);
+}
+
+/* ---------------------------------------------------------------------
+   Aggregation: group line items into Pull ID summaries
+--------------------------------------------------------------------- */
+function groupByPullId(items){
+  const map = new Map();
+  for(const r of items){
+    if(!map.has(r.pullId)) map.set(r.pullId, []);
+    map.get(r.pullId).push(r);
+  }
+  const groups = [];
+  for(const [pullId, lines] of map.entries()){
+    const createdTimes = lines.map(l=>l.createdAt).filter(isValidDate);
+    const startTimes = lines.map(l=>l.startAt).filter(isValidDate);
+    const confirmTimes = lines.map(l=>l.confirmedAt).filter(isValidDate);
+    const createdAt = createdTimes.length ? new Date(Math.min(...createdTimes)) : null;
+    const startAt = startTimes.length ? new Date(Math.min(...startTimes)) : null;
+    const allConfirmed = lines.every(l=>isValidDate(l.confirmedAt));
+    const confirmedAt = allConfirmed && confirmTimes.length ? new Date(Math.max(...confirmTimes)) : null;
+
+    const targetQty = lines.reduce((s,l)=>s+(l.targetQty||0),0);
+    const actualQty = lines.reduce((s,l)=>s+(l.actualQty||0),0);
+    const hasShortPick = lines.some(l=>(l.actualQty||0) !== (l.targetQty||0));
+    const confirmedByUsers = [...new Set(lines.map(l=>l.confirmedBy).filter(Boolean))];
+    const createdByUsers = [...new Set(lines.map(l=>l.createdBy).filter(Boolean))];
+    const warehouseOrders = [...new Set(lines.map(l=>l.warehouseOrder).filter(Boolean))];
+
+    groups.push({
+      pullId,
+      pullType: lines[0].pullType || 'Unknown',
+      lineCount: lines.length,
+      targetQty, actualQty, hasShortPick,
+      createdAt, startAt, confirmedAt,
+      status: allConfirmed ? 'Complete' : 'In Progress',
+      createToStartMin: minutesBetween(createdAt, startAt),
+      createToConfirmMin: allConfirmed ? minutesBetween(createdAt, confirmedAt) : null,
+      startToConfirmMin: allConfirmed ? minutesBetween(startAt, confirmedAt) : null,
+      confirmedBy: confirmedByUsers.join(', '),
+      createdBy: createdByUsers.join(', '),
+      warehouseOrders: warehouseOrders.join(', '),
+      lines
+    });
+  }
+  return groups;
+}
+
+/* ---------------------------------------------------------------------
+   Render: orchestrator
+--------------------------------------------------------------------- */
+function renderAll(){
+  document.getElementById('recordCount').textContent = allLineItems.length.toLocaleString();
+  const pullIds = new Set(allLineItems.map(r=>r.pullId));
+  document.getElementById('pullCount').textContent = pullIds.size.toLocaleString();
+
+  renderKPIs();
+  renderCharts();
+  renderTable();
+}
+
+/* ---------------------------------------------------------------------
+   KPI cards
+--------------------------------------------------------------------- */
+function renderKPIs(){
+  const items = filterByRange(allLineItems);
+  const groups = groupByPullId(items);
+  const grid = document.getElementById('kpiGrid');
+
+  const totalPulls = groups.length;
+  const totalLines = items.length;
+  const totalUnits = items.reduce((s,r)=>s+(r.actualQty||0),0);
+  const accurateLines = items.filter(r=>(r.actualQty||0)===(r.targetQty||0)).length;
+  const accuracyPct = totalLines ? Math.round((accurateLines/totalLines)*1000)/10 : null;
+  const pendingLines = items.filter(r=>!isValidDate(r.confirmedAt)).length;
+  const shortPickPulls = groups.filter(g=>g.hasShortPick).length;
+
+  const cycleTimes = groups.map(g=>g.createToConfirmMin).filter(v=>v!==null && v!==undefined && v>=0);
+  const avgCycle = cycleTimes.length ? Math.round(cycleTimes.reduce((a,b)=>a+b,0)/cycleTimes.length) : null;
+
+  const dispatchTimes = groups.map(g=>g.createToStartMin).filter(v=>v!==null && v!==undefined && v>=0);
+  const avgDispatch = dispatchTimes.length ? Math.round(dispatchTimes.reduce((a,b)=>a+b,0)/dispatchTimes.length) : null;
+
+  const dayCounts = {};
+  groups.forEach(g=>{ if(g.createdAt){ const k=dayKey(g.createdAt); dayCounts[k]=(dayCounts[k]||0)+1; } });
+  const dayVals = Object.values(dayCounts);
+  const avgPerDay = dayVals.length ? Math.round((dayVals.reduce((a,b)=>a+b,0)/dayVals.length)*10)/10 : null;
+
+  const cards = [
+    {label:'Pull IDs', value: totalPulls.toLocaleString(), sub: totalLines.toLocaleString()+' line items', accent:'var(--accent)'},
+    {label:'Units Confirmed', value: totalUnits.toLocaleString(), sub:'actual qty picked', accent:'var(--info)'},
+    {label:'Pick Accuracy', value: accuracyPct!==null ? accuracyPct+'%' : '&mdash;', sub: accuracyPct!==null ? (totalLines-accurateLines)+' lines off qty' : 'no data', accent: accuracyPct!==null && accuracyPct<98 ? 'var(--warn)' : 'var(--good)'},
+    {label:'Avg Cycle Time', value: formatDuration(avgCycle), sub:'created \u2192 confirmed', accent:'var(--info)'},
+    {label:'Avg Dispatch Delay', value: formatDuration(avgDispatch), sub:'created \u2192 start', accent:'var(--info)'},
+    {label:'Pull IDs / Day', value: avgPerDay!==null ? avgPerDay : '&mdash;', sub:'average over range', accent:'var(--accent)'},
+    {label:'Pending Confirmation', value: pendingLines.toLocaleString(), sub:'line items not yet confirmed', accent: pendingLines>0 ? 'var(--warn)' : 'var(--good)'},
+    {label:'Short-Pick Pulls', value: shortPickPulls.toLocaleString(), sub:'actual \u2260 target on \u22651 line', accent: shortPickPulls>0 ? 'var(--bad)' : 'var(--good)'}
+  ];
+
+  grid.innerHTML = cards.map(c=>`
+    <div class="kpi" style="--kpi-accent:${c.accent}">
+      <div class="label">${c.label}</div>
+      <div class="value">${c.value}</div>
+      <div class="sub">${c.sub}</div>
+    </div>
+  `).join('');
+}
+
+/* ---------------------------------------------------------------------
+   Charts
+--------------------------------------------------------------------- */
+const CHART_FONT = {family:"-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif", size:11};
+Chart.defaults.color = '#93a8c4';
+Chart.defaults.font = CHART_FONT;
+Chart.defaults.borderColor = 'rgba(255,255,255,0.06)';
+
+function destroyChart(id){ if(charts[id]){ charts[id].destroy(); delete charts[id]; } }
+
+function renderCharts(){
+  const items = filterByRange(allLineItems);
+  const groups = groupByPullId(items);
+  renderPerDayChart(groups);
+  renderCycleChart(groups);
+  renderHourlyChart(items);
+  renderUsersChart(items);
+}
+
+function renderPerDayChart(groups){
+  const counts = {};
+  groups.forEach(g=>{ if(g.createdAt){ const k=dayKey(g.createdAt); counts[k]=(counts[k]||0)+1; } });
+  const labels = Object.keys(counts).sort();
+  const data = labels.map(k=>counts[k]);
+  destroyChart('perDay');
+  charts.perDay = new Chart(document.getElementById('chartPerDay'), {
+    type:'bar',
+    data:{ labels: labels.map(l=>formatShortDay(l)), datasets:[{ data, backgroundColor:'#e2231a', borderRadius:4, maxBarThickness:36 }]},
+    options: baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}})
+  });
+}
+
+function renderCycleChart(groups){
+  const byDay = {};
+  groups.forEach(g=>{
+    if(!g.createdAt) return;
+    const k = dayKey(g.createdAt);
+    if(!byDay[k]) byDay[k] = {dispatch:[], cycle:[]};
+    if(g.createToStartMin!==null && g.createToStartMin>=0) byDay[k].dispatch.push(g.createToStartMin);
+    if(g.createToConfirmMin!==null && g.createToConfirmMin>=0) byDay[k].cycle.push(g.createToConfirmMin);
+  });
+  const labels = Object.keys(byDay).sort();
+  const avg = arr => arr.length ? Math.round(arr.reduce((a,b)=>a+b,0)/arr.length) : null;
+  const dispatchData = labels.map(k=>avg(byDay[k].dispatch));
+  const cycleData = labels.map(k=>avg(byDay[k].cycle));
+  destroyChart('cycle');
+  charts.cycle = new Chart(document.getElementById('chartCycle'), {
+    type:'line',
+    data:{ labels: labels.map(l=>formatShortDay(l)), datasets:[
+      { label:'Created\u2192Start', data:dispatchData, borderColor:'#3d9fe8', backgroundColor:'rgba(61,159,232,0.15)', tension:0.3, fill:true, spanGaps:true },
+      { label:'Created\u2192Confirmed', data:cycleData, borderColor:'#e2231a', backgroundColor:'rgba(226,35,26,0.12)', tension:0.3, fill:true, spanGaps:true }
+    ]},
+    options: baseChartOptions({y:{beginAtZero:true}}, true)
+  });
+}
+
+function renderHourlyChart(items){
+  const hours = new Array(24).fill(0);
+  items.forEach(r=>{ if(isValidDate(r.confirmedAt)) hours[r.confirmedAt.getHours()]++; });
+  destroyChart('hourly');
+  charts.hourly = new Chart(document.getElementById('chartHourly'), {
+    type:'bar',
+    data:{ labels: hours.map((_,h)=>h.toString().padStart(2,'0')+':00'),
+           datasets:[{ data:hours, backgroundColor:'#3d9fe8', borderRadius:4, maxBarThickness:14 }]},
+    options: baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}})
+  });
+}
+
+function renderUsersChart(items){
+  const counts = {};
+  items.forEach(r=>{ if(r.confirmedBy) counts[r.confirmedBy]=(counts[r.confirmedBy]||0)+1; });
+  const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  destroyChart('users');
+  charts.users = new Chart(document.getElementById('chartUsers'), {
+    type:'bar',
+    data:{ labels: sorted.map(s=>s[0]), datasets:[{ data: sorted.map(s=>s[1]), backgroundColor:'#e2231a', borderRadius:4, maxBarThickness:18 }]},
+    options: baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}}, false, true)
+  });
+}
+
+function formatShortDay(k){
+  const [y,m,d] = k.split('-').map(Number);
+  return new Date(y,m-1,d).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+}
+
+function baseChartOptions(scalesExtra, showLegend, horizontal){
+  return {
+    responsive:true, maintainAspectRatio:false,
+    indexAxis: horizontal ? 'y' : 'x',
+    plugins:{ legend:{ display: !!showLegend, labels:{boxWidth:10, padding:12} } },
+    scales:{
+      x:{ grid:{display:false} },
+      y:{ grid:{color:'rgba(255,255,255,0.06)'} },
+      ...scalesExtra
+    }
+  };
+}
+
+/* ---------------------------------------------------------------------
+   Table
+--------------------------------------------------------------------- */
+document.querySelectorAll('thead th').forEach(th=>{
+  th.addEventListener('click', ()=>{
+    const key = th.dataset.key;
+    if(sortKey===key){ sortDir = sortDir==='asc'?'desc':'asc'; }
+    else { sortKey = key; sortDir = 'desc'; }
+    renderTable();
+  });
+});
+
+function renderTable(){
+  const items = filterByRange(allLineItems);
+  let groups = groupByPullId(items);
+
+  if(searchTerm){
+    groups = groups.filter(g=>{
+      const hay = [g.pullId, g.warehouseOrders, g.confirmedBy, g.createdBy,
+                   ...g.lines.map(l=>l.product), ...g.lines.map(l=>l.productDesc)]
+                   .join(' ').toLowerCase();
+      return hay.includes(searchTerm);
+    });
+  }
+
+  groups.sort((a,b)=>{
+    let av = a[sortKey], bv = b[sortKey];
+    if(av instanceof Date) av = av.getTime()||0;
+    if(bv instanceof Date) bv = bv.getTime()||0;
+    if(av===null||av===undefined) av = sortDir==='asc' ? Infinity : -Infinity;
+    if(bv===null||bv===undefined) bv = sortDir==='asc' ? Infinity : -Infinity;
+    if(typeof av==='string') av = av.toLowerCase();
+    if(typeof bv==='string') bv = bv.toLowerCase();
+    if(av<bv) return sortDir==='asc'?-1:1;
+    if(av>bv) return sortDir==='asc'?1:-1;
+    return 0;
+  });
+
+  document.querySelectorAll('thead th').forEach(th=>{
+    th.classList.remove('sorted','sorted-asc');
+    if(th.dataset.key===sortKey) th.classList.add(sortDir==='asc'?'sorted-asc':'sorted');
+  });
+
+  document.getElementById('tableMeta').textContent =
+    groups.length.toLocaleString() + ' Pull ID' + (groups.length===1?'':'s') +
+    (rangeMode!=='all' ? ' in selected range' : '');
+
+  const tbody = document.getElementById('tableBody');
+  const emptyState = document.getElementById('emptyState');
+
+  if(groups.length===0){
+    tbody.innerHTML = '';
+    emptyState.style.display = 'block';
+    return;
+  }
+  emptyState.style.display = 'none';
+
+  tbody.innerHTML = groups.map(g=>{
+    const isOpen = expandedPullIds.has(g.pullId);
+    const statusBadge = g.status==='Complete'
+      ? '<span class="badge complete">Complete</span>'
+      : '<span class="badge progress">In Progress</span>';
+    const shortBadge = g.hasShortPick ? '<span class="badge short">Short Pick</span>' : '';
+
+    const detailRows = g.lines.map(l=>`
+      <tr>
+        <td>${l.warehouseTask||'&mdash;'}</td>
+        <td>${l.product||'&mdash;'}</td>
+        <td style="white-space:normal;max-width:260px;">${l.productDesc||'&mdash;'}</td>
+        <td>${l.sourceBin||'&mdash;'}</td>
+        <td>${l.destBin||l.destHU||'&mdash;'}</td>
+        <td>${l.targetQty}</td>
+        <td style="${(l.actualQty!==l.targetQty)?'color:var(--accent);font-weight:700;':''}">${l.actualQty}</td>
+        <td>${l.createdBy||'&mdash;'}</td>
+        <td>${l.confirmedBy||'&mdash;'}</td>
+        <td>${formatDateTime(l.confirmedAt)}</td>
+      </tr>
+    `).join('');
+
+    return `
+      <tr class="pull-row ${isOpen?'expanded':''}" data-pullid="${escapeAttr(g.pullId)}">
+        <td class="pull-id-cell"><span class="caret">&#9656;</span>${g.pullId}</td>
+        <td><span class="badge unknown">${g.pullType}</span></td>
+        <td>${g.lineCount}</td>
+        <td>${g.targetQty.toLocaleString()}</td>
+        <td>${g.actualQty.toLocaleString()}</td>
+        <td>${formatDateTime(g.createdAt)}</td>
+        <td>${formatDateTime(g.startAt)}</td>
+        <td>${formatDateTime(g.confirmedAt)}</td>
+        <td>${formatDuration(g.createToStartMin)}</td>
+        <td>${formatDuration(g.createToConfirmMin)}</td>
+        <td>${statusBadge}${shortBadge}</td>
+      </tr>
+      <tr class="detail-row ${isOpen?'open':''}" data-pullid-detail="${escapeAttr(g.pullId)}">
+        <td colspan="11">
+          <div class="detail-inner">
+            <table>
+              <thead><tr>
+                <th>Whse Task</th><th>SKU</th><th>Description</th><th>Source Bin</th><th>Dest Bin/HU</th>
+                <th>Target</th><th>Actual</th><th>Created By</th><th>Confirmed By</th><th>Confirmed At</th>
+              </tr></thead>
+              <tbody>${detailRows}</tbody>
+            </table>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  tbody.querySelectorAll('tr.pull-row').forEach(tr=>{
+    tr.addEventListener('click', ()=>{
+      const id = tr.dataset.pullid;
+      if(expandedPullIds.has(id)) expandedPullIds.delete(id);
+      else expandedPullIds.add(id);
+      renderTable();
+    });
+  });
+}
+
+function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
+</script>
+</body>
+</html>

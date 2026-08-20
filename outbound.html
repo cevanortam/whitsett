@@ -20,7 +20,6 @@
     --text-dim: #93a8c4;
     --text-faint: #5f7796;
     --accent: #e2231a;
-    --accent-dim: #7a2f2b;
     --good: #2fbf71;
     --warn: #e8a33d;
     --bad: #e2231a;
@@ -260,7 +259,7 @@
     </div>
     <div class="chart-card">
       <h3 id="titlePickDuration">Avg Time to Complete a Pick by Day</h3>
-      <div class="chart-note">Avg Start&rarr;Confirmed per Warehouse Task, Auto vs. Manual</div>
+      <div class="chart-note">Avg Created&rarr;Confirmed per Warehouse Task, Auto vs. Manual</div>
       <div class="chart-holder"><canvas id="chartPickDuration"></canvas></div>
     </div>
     <div class="chart-card">
@@ -508,6 +507,12 @@ function minutesBetween(a,b){
   return Math.round((b.getTime()-a.getTime())/60000);
 }
 
+// Rounded mean of an array of numbers, or null for an empty array. Shared by
+// every chart/KPI that averages a list of per-pull or per-line durations.
+function average(arr){
+  return arr && arr.length ? Math.round(arr.reduce((a,b)=>a+b,0)/arr.length) : null;
+}
+
 // Same as minutesBetween, but any time that falls on a Sunday (the
 // warehouse's non-working day) is excluded from the elapsed total —
 // used specifically for SLA clock calculations, not general cycle-time
@@ -538,11 +543,6 @@ function formatDuration(min){
 function formatDateTime(d){
   if(!isValidDate(d)) return '&mdash;';
   return d.toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
-}
-
-function formatDateOnly(d){
-  if(!isValidDate(d)) return '&mdash;';
-  return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
 }
 
 function periodKey(d){
@@ -875,11 +875,10 @@ function renderKPIs(items, groups){
   const autoSla = slaAdherence('Auto');
   const manualSla = slaAdherence('Manual');
 
-  const avgFor = (values) => values.length ? Math.round(values.reduce((a,b)=>a+b,0)/values.length) : null;
-  const avgCycleAuto = avgFor(groups.filter(g=>g.pullType==='Auto').map(g=>g.createToConfirmMin).filter(v=>v!==null && v!==undefined && v>=0));
-  const avgCycleManual = avgFor(groups.filter(g=>g.pullType==='Manual').map(g=>g.createToConfirmMin).filter(v=>v!==null && v!==undefined && v>=0));
-  const avgDispatchAuto = avgFor(groups.filter(g=>g.pullType==='Auto').map(g=>g.createToStartMin).filter(v=>v!==null && v!==undefined && v>=0));
-  const avgDispatchManual = avgFor(groups.filter(g=>g.pullType==='Manual').map(g=>g.createToStartMin).filter(v=>v!==null && v!==undefined && v>=0));
+  const avgCycleAuto = average(groups.filter(g=>g.pullType==='Auto').map(g=>g.createToConfirmMin).filter(v=>v!==null && v!==undefined && v>=0));
+  const avgCycleManual = average(groups.filter(g=>g.pullType==='Manual').map(g=>g.createToConfirmMin).filter(v=>v!==null && v!==undefined && v>=0));
+  const avgDispatchAuto = average(groups.filter(g=>g.pullType==='Auto').map(g=>g.createToStartMin).filter(v=>v!==null && v!==undefined && v>=0));
+  const avgDispatchManual = average(groups.filter(g=>g.pullType==='Manual').map(g=>g.createToStartMin).filter(v=>v!==null && v!==undefined && v>=0));
 
   const dayCounts = {};
   groups.forEach(g=>{ if(g.createdAt){ const k=periodKey(g.createdAt); dayCounts[k]=(dayCounts[k]||0)+1; } });
@@ -1007,9 +1006,8 @@ function renderCycleChart(groups){
     if(g.createToConfirmMin!==null && g.createToConfirmMin>=0) byDay[k][g.pullType].push(g.createToConfirmMin);
   });
   const labels = Object.keys(byDay).sort();
-  const avg = arr => arr.length ? Math.round(arr.reduce((a,b)=>a+b,0)/arr.length) : null;
-  const autoCycle = labels.map(k=>avg(byDay[k].Auto));
-  const manualCycle = labels.map(k=>avg(byDay[k].Manual));
+  const autoCycle = labels.map(k=>average(byDay[k].Auto));
+  const manualCycle = labels.map(k=>average(byDay[k].Manual));
   destroyChart('cycle');
   const cycleOpts = baseChartOptions({y:{beginAtZero:true, ticks:{callback:v=>formatDuration(v)}}}, true);
   cycleOpts.plugins.tooltip = {
@@ -1025,14 +1023,15 @@ function renderCycleChart(groups){
   });
 }
 
-// Time to complete an individual pick (Warehouse Task): Start Time -> Confirmation
-// Time, at the line-item level. Distinct from the Pull-ID-level "Avg Cycle Time"
-// chart, which measures Created -> Confirmed for the whole Pull ID.
+// Time to complete an individual pick (Warehouse Task): Created -> Confirmed,
+// at the line-item level. Distinct from the Pull-ID-level "Avg Cycle Time"
+// chart, which measures Created -> Confirmed aggregated across all lines of
+// the whole Pull ID.
 function renderPickDurationChart(items){
   const byDay = {};
   items.forEach(r=>{
-    if(!isValidDate(r.startAt) || !isValidDate(r.confirmedAt) || !isValidDate(r.createdAt)) return;
-    const dur = minutesBetween(r.startAt, r.confirmedAt);
+    if(!isValidDate(r.createdAt) || !isValidDate(r.confirmedAt)) return;
+    const dur = minutesBetween(r.createdAt, r.confirmedAt);
     if(dur===null || dur<0) return;
     const pType = classifyPullType(r.pullId);
     if(pType!=='Auto' && pType!=='Manual') return;
@@ -1041,9 +1040,8 @@ function renderPickDurationChart(items){
     byDay[k][pType].push(dur);
   });
   const labels = Object.keys(byDay).sort();
-  const avg = arr => arr.length ? Math.round(arr.reduce((a,b)=>a+b,0)/arr.length) : null;
-  const autoPick = labels.map(k=>avg(byDay[k].Auto));
-  const manualPick = labels.map(k=>avg(byDay[k].Manual));
+  const autoPick = labels.map(k=>average(byDay[k].Auto));
+  const manualPick = labels.map(k=>average(byDay[k].Manual));
   destroyChart('pickDuration');
   const opts = baseChartOptions({y:{beginAtZero:true, ticks:{callback:v=>formatDuration(v)}}}, true);
   opts.plugins.tooltip = {
@@ -1365,7 +1363,7 @@ function renderTable(rangeGroups){
         : result==='Over' ? 'color:var(--info);font-weight:700;'
         : result==='Pending' ? 'color:var(--text-faint);'
         : '';
-      const pickDurationMin = (isValidDate(l.startAt) && isValidDate(l.confirmedAt)) ? minutesBetween(l.startAt, l.confirmedAt) : null;
+      const pickDurationMin = (isValidDate(l.createdAt) && isValidDate(l.confirmedAt)) ? minutesBetween(l.createdAt, l.confirmedAt) : null;
       return `
       <tr>
         <td>${l.warehouseTask||'&mdash;'}</td>

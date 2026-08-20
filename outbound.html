@@ -803,7 +803,6 @@ function renderKPIs(){
 
   const totalPulls = groups.length;
   const totalLines = items.length;
-  const totalUnits = items.reduce((s,r)=>s+(r.actualQty||0),0);
   const confirmedLines = items.filter(r=>isValidDate(r.confirmedAt));
   const accurateLines = confirmedLines.filter(r=>(r.actualQty||0)===(r.targetQty||0)).length;
   const accuracyPct = confirmedLines.length ? Math.round((accurateLines/confirmedLines.length)*1000)/10 : null;
@@ -814,6 +813,7 @@ function renderKPIs(){
   const shortPickPulls = groups.filter(g=>g.hasShort).length;
   const overPickPulls = groups.filter(g=>g.hasOver).length;
   const nilPickPulls = groups.filter(g=>g.hasNil).length;
+  const nilPct = confirmedLines.length ? Math.round((nilLines/confirmedLines.length)*1000)/10 : null;
 
   const slaAdherence = (type) => {
     const resolved = groups.filter(g=>g.pullType===type && (g.slaStatus==='Met' || g.slaStatus==='Breached'));
@@ -827,11 +827,11 @@ function renderKPIs(){
   const autoSla = slaAdherence('Auto');
   const manualSla = slaAdherence('Manual');
 
-  const cycleTimes = groups.map(g=>g.createToConfirmMin).filter(v=>v!==null && v!==undefined && v>=0);
-  const avgCycle = cycleTimes.length ? Math.round(cycleTimes.reduce((a,b)=>a+b,0)/cycleTimes.length) : null;
-
-  const dispatchTimes = groups.map(g=>g.createToStartMin).filter(v=>v!==null && v!==undefined && v>=0);
-  const avgDispatch = dispatchTimes.length ? Math.round(dispatchTimes.reduce((a,b)=>a+b,0)/dispatchTimes.length) : null;
+  const avgFor = (values) => values.length ? Math.round(values.reduce((a,b)=>a+b,0)/values.length) : null;
+  const avgCycleAuto = avgFor(groups.filter(g=>g.pullType==='Auto').map(g=>g.createToConfirmMin).filter(v=>v!==null && v!==undefined && v>=0));
+  const avgCycleManual = avgFor(groups.filter(g=>g.pullType==='Manual').map(g=>g.createToConfirmMin).filter(v=>v!==null && v!==undefined && v>=0));
+  const avgDispatchAuto = avgFor(groups.filter(g=>g.pullType==='Auto').map(g=>g.createToStartMin).filter(v=>v!==null && v!==undefined && v>=0));
+  const avgDispatchManual = avgFor(groups.filter(g=>g.pullType==='Manual').map(g=>g.createToStartMin).filter(v=>v!==null && v!==undefined && v>=0));
 
   const dayCounts = {};
   groups.forEach(g=>{ if(g.createdAt){ const k=periodKey(g.createdAt); dayCounts[k]=(dayCounts[k]||0)+1; } });
@@ -851,15 +851,16 @@ function renderKPIs(){
 
   const cards = [
     {label:'Pull IDs', value: totalPulls.toLocaleString(), sub: totalLines.toLocaleString()+' line items', accent:'var(--accent)'},
-    {label:'Units Confirmed', value: totalUnits.toLocaleString(), sub:'actual qty picked', accent:'var(--info)'},
     {label:'Fill Rate', value: accuracyPct!==null ? accuracyPct+'%' : '&mdash;', sub: accuracyPct!==null ? (confirmedLines.length-accurateLines)+' of '+confirmedLines.length+' confirmed lines off qty' : 'no confirmed lines', accent: accuracyPct!==null && accuracyPct<98 ? 'var(--warn)' : 'var(--good)'},
-    {label:'Avg Cycle Time', value: formatDuration(avgCycle), sub:'created \u2192 confirmed', accent:'var(--info)'},
-    {label:'Avg Dispatch Delay', value: formatDuration(avgDispatch), sub:'created \u2192 start', accent:'var(--info)'},
+    {label:'Auto Avg Cycle Time', value: formatDuration(avgCycleAuto), sub:'created \u2192 confirmed', accent:'var(--info)'},
+    {label:'Manual Avg Cycle Time', value: formatDuration(avgCycleManual), sub:'created \u2192 confirmed', accent:'var(--hv-color)'},
+    {label:'Auto Avg Dispatch Delay', value: formatDuration(avgDispatchAuto), sub:'created \u2192 start', accent:'var(--info)'},
+    {label:'Manual Avg Dispatch Delay', value: formatDuration(avgDispatchManual), sub:'created \u2192 start', accent:'var(--hv-color)'},
     {label:'Pull IDs / '+granularityLabel(), value: avgPerDay!==null ? avgPerDay : '&mdash;', sub:'average over range', accent:'var(--accent)'},
     {label:'Pending Confirmation', value: pendingLines.toLocaleString(), sub:'line items not yet confirmed', accent: pendingLines>0 ? 'var(--warn)' : 'var(--good)'},
     {label:'Short-Pick Pulls', value: shortPickPulls.toLocaleString(), sub: shortLines+' line'+(shortLines===1?'':'s')+' under target', accent: shortPickPulls>0 ? 'var(--bad)' : 'var(--good)'},
     {label:'Over-Pick Pulls', value: overPickPulls.toLocaleString(), sub: overLines+' line'+(overLines===1?'':'s')+' over target', accent: overPickPulls>0 ? 'var(--info)' : 'var(--good)'},
-    {label:'NIL Picks', value: nilPickPulls.toLocaleString(), sub: nilLines+' line'+(nilLines===1?'':'s')+' confirmed at 0', accent: nilPickPulls>0 ? 'var(--bad)' : 'var(--good)'},
+    {label:'NIL Picks', value: nilPct!==null ? nilPct+'%' : '&mdash;', sub: nilLines+' of '+confirmedLines.length+' confirmed lines', accent: nilPickPulls>0 ? 'var(--bad)' : 'var(--good)'},
     {label:'Auto SLA Adherence', value: autoSla.pct!==null ? autoSla.pct+'%' : '&mdash;', sub: autoSla.pct!==null ? autoSla.breached+' breached'+(autoSla.atRisk?', '+autoSla.atRisk+' at risk':'')+' (5hr SLA)' : 'no completed Auto pulls', accent: autoSla.pct!==null && autoSla.pct<95 ? 'var(--bad)' : 'var(--good)'},
     {label:'Manual SLA Adherence', value: manualSla.pct!==null ? manualSla.pct+'%' : '&mdash;', sub: manualSla.pct!==null ? manualSla.breached+' breached'+(manualSla.atRisk?', '+manualSla.atRisk+' at risk':'')+' (1hr SLA)' : 'no completed Manual pulls', accent: manualSla.pct!==null && manualSla.pct<95 ? 'var(--bad)' : 'var(--good)'},
     {label:'Low Bay Picks', value: lowItems.length.toLocaleString(), sub: lowPct!==null ? lowPct+'% of classified picks' : '&mdash;', accent:'var(--good)'},

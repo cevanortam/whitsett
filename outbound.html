@@ -250,7 +250,7 @@
   <section class="charts-grid">
     <div class="chart-card">
       <h3>Pull IDs by Hour Created</h3>
-      <div class="chart-note">Count of Pull IDs, by the hour they were created (Eastern Time)</div>
+      <div class="chart-note">Auto vs. Manual, by the hour they were created (Eastern Time)</div>
       <div class="chart-holder"><canvas id="chartPerDay"></canvas></div>
     </div>
     <div class="chart-card">
@@ -971,15 +971,23 @@ function renderCharts(items, groups){
 }
 
 function renderPerDayChart(groups){
-  const hours = new Array(24).fill(0);
-  groups.forEach(g=>{ if(isValidDate(g.createdAt)) hours[g.createdAt.getHours()]++; });
+  const autoHours = new Array(24).fill(0);
+  const manualHours = new Array(24).fill(0);
+  groups.forEach(g=>{
+    if(!isValidDate(g.createdAt)) return;
+    if(g.pullType==='Auto') autoHours[g.createdAt.getHours()]++;
+    else if(g.pullType==='Manual') manualHours[g.createdAt.getHours()]++;
+  });
   destroyChart('perDay');
-  const opts = baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}});
+  const opts = baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}}, true);
   opts.layout = {padding:{top:20}};
-  opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:v=>v===0?'':v};
+  opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:9}, formatter:v=>v===0?'':v};
   charts.perDay = new Chart(document.getElementById('chartPerDay'), {
     type:'bar',
-    data:{ labels: hours.map((_,h)=>formatHour12(h)), datasets:[{ data:hours, backgroundColor:'#e2231a', borderRadius:4, maxBarThickness:26 }]},
+    data:{ labels: autoHours.map((_,h)=>formatHour12(h)), datasets:[
+      {label:'Auto', data:autoHours, backgroundColor:'#3d9fe8', borderRadius:4, maxBarThickness:14},
+      {label:'Manual', data:manualHours, backgroundColor:'#a78bfa', borderRadius:4, maxBarThickness:14}
+    ]},
     options: opts
   });
 }

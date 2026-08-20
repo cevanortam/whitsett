@@ -1322,6 +1322,7 @@ function renderTable(rangeGroups){
         <td>${l.targetQty}</td>
         <td style="${qtyStyle}">${l.actualQty}${result!=='Accurate' ? ' ('+result+')' : ''}</td>
         <td>${l.createdBy||'&mdash;'}</td>
+        <td>${formatDateTime(l.createdAt)}</td>
         <td>${l.confirmedBy||'&mdash;'}</td>
         <td>${formatDateTime(l.confirmedAt)}</td>
       </tr>
@@ -1347,7 +1348,7 @@ function renderTable(rangeGroups){
             <table>
               <thead><tr>
                 <th>Whse Task</th><th>SKU</th><th>Description</th><th>Source Bin</th><th>Bay Type</th><th>Dest Bin/HU</th>
-                <th>Target</th><th>Actual</th><th>Created By</th><th>Confirmed By</th><th>Confirmed At</th>
+                <th>Target</th><th>Actual</th><th>Created By</th><th>Created At</th><th>Confirmed By</th><th>Confirmed At</th>
               </tr></thead>
               <tbody>${detailRows}</tbody>
             </table>

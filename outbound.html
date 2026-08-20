@@ -214,6 +214,7 @@
   </header>
 
   <section class="kpi-grid" id="kpiGrid"></section>
+  <div id="bayNote" style="font-size:12px;color:var(--text-faint);margin:-12px 0 24px;"></div>
 
   <section class="charts-grid">
     <div class="chart-card">
@@ -240,6 +241,16 @@
       <h3>Picking Accuracy by Day</h3>
       <div class="chart-note">Share of lines where actual qty matched target qty</div>
       <div class="chart-holder"><canvas id="chartAccuracy"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Picks by Bay Type per Day</h3>
+      <div class="chart-note">Low Bay vs. High Bay pick volume</div>
+      <div class="chart-holder"><canvas id="chartBayVolume"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Picking Velocity by Bay Type</h3>
+      <div class="chart-note">Picks per hour, Low Bay vs. High Bay</div>
+      <div class="chart-holder"><canvas id="chartBayVelocity"></canvas></div>
     </div>
   </section>
 
@@ -345,6 +356,47 @@ let expandedPullIds = new Set();
    Date / time helpers
 --------------------------------------------------------------------- */
 function isValidDate(d){ return d instanceof Date && !isNaN(d.getTime()); }
+
+// Bay classification per the Whitsett aisle/level scheme:
+//   Aisles 1-5:   Level A = Low Bay, everything else = High Bay
+//   Aisles 8-23:  Level A = Low Bay, everything else = High Bay
+//   Aisles 6-7:   Levels A-D = Low Bay, everything else = High Bay
+// Bins that don't match the standard AA-BB-LevelN pattern (blank, HVP zones,
+// cages, aisles outside 1-23, etc.) are classified as "Other" rather than
+// guessed at, since the rule above doesn't cover them.
+function classifyBay(bin){
+  if(!bin) return 'Other';
+  const m = String(bin).trim().match(/^(\d{1,3})-\d{1,3}-([A-Za-z]+)\d*$/);
+  if(!m) return 'Other';
+  const aisle = parseInt(m[1],10);
+  const level = m[2].toUpperCase();
+  if(aisle>=1 && aisle<=5) return level==='A' ? 'Low Bay' : 'High Bay';
+  if(aisle>=8 && aisle<=23) return level==='A' ? 'Low Bay' : 'High Bay';
+  if(aisle===6 || aisle===7) return ['A','B','C','D'].includes(level) ? 'Low Bay' : 'High Bay';
+  return 'Other';
+}
+
+// Picks per hour, aggregated across days: for each day, sums the elapsed
+// time between the first and last confirmed pick of that type, then divides
+// total picks by total elapsed hours. Days with fewer than 2 picks
+// contribute to the pick count but not the hours (no span to measure).
+function computeVelocity(items){
+  const byDay = {};
+  items.forEach(r=>{
+    if(!isValidDate(r.confirmedAt)) return;
+    const k = dayKey(r.confirmedAt);
+    if(!byDay[k]) byDay[k] = [];
+    byDay[k].push(r.confirmedAt.getTime());
+  });
+  let totalPicks = 0, totalHours = 0;
+  Object.values(byDay).forEach(times=>{
+    totalPicks += times.length;
+    if(times.length > 1){
+      totalHours += (Math.max(...times) - Math.min(...times)) / 3600000;
+    }
+  });
+  return totalHours > 0 ? Math.round((totalPicks/totalHours)*10)/10 : null;
+}
 
 function combineDateAndTime(dateVal, timeVal){
   if(!isValidDate(dateVal) || !isValidDate(timeVal)) return null;
@@ -683,6 +735,14 @@ function renderKPIs(){
   const dayVals = Object.values(dayCounts);
   const avgPerDay = dayVals.length ? Math.round((dayVals.reduce((a,b)=>a+b,0)/dayVals.length)*10)/10 : null;
 
+  const lowItems = items.filter(r=>classifyBay(r.sourceBin)==='Low Bay');
+  const highItems = items.filter(r=>classifyBay(r.sourceBin)==='High Bay');
+  const otherBayCount = totalLines - lowItems.length - highItems.length;
+  const lowVelocity = computeVelocity(lowItems);
+  const highVelocity = computeVelocity(highItems);
+  const lowPct = totalLines ? Math.round((lowItems.length/totalLines)*1000)/10 : null;
+  const highPct = totalLines ? Math.round((highItems.length/totalLines)*1000)/10 : null;
+
   const cards = [
     {label:'Pull IDs', value: totalPulls.toLocaleString(), sub: totalLines.toLocaleString()+' line items', accent:'var(--accent)'},
     {label:'Units Confirmed', value: totalUnits.toLocaleString(), sub:'actual qty picked', accent:'var(--info)'},
@@ -691,7 +751,11 @@ function renderKPIs(){
     {label:'Avg Dispatch Delay', value: formatDuration(avgDispatch), sub:'created \u2192 start', accent:'var(--info)'},
     {label:'Pull IDs / Day', value: avgPerDay!==null ? avgPerDay : '&mdash;', sub:'average over range', accent:'var(--accent)'},
     {label:'Pending Confirmation', value: pendingLines.toLocaleString(), sub:'line items not yet confirmed', accent: pendingLines>0 ? 'var(--warn)' : 'var(--good)'},
-    {label:'Short-Pick Pulls', value: shortPickPulls.toLocaleString(), sub:'actual \u2260 target on \u22651 line', accent: shortPickPulls>0 ? 'var(--bad)' : 'var(--good)'}
+    {label:'Short-Pick Pulls', value: shortPickPulls.toLocaleString(), sub:'actual \u2260 target on \u22651 line', accent: shortPickPulls>0 ? 'var(--bad)' : 'var(--good)'},
+    {label:'Low Bay Picks', value: lowItems.length.toLocaleString(), sub: lowPct!==null ? lowPct+'% of classified picks' : '&mdash;', accent:'var(--good)'},
+    {label:'High Bay Picks', value: highItems.length.toLocaleString(), sub: highPct!==null ? highPct+'% of classified picks' : '&mdash;', accent:'var(--warn)'},
+    {label:'Low Bay Velocity', value: lowVelocity!==null ? lowVelocity+'/hr' : '&mdash;', sub:'picks per hour', accent:'var(--good)'},
+    {label:'High Bay Velocity', value: highVelocity!==null ? highVelocity+'/hr' : '&mdash;', sub:'picks per hour', accent:'var(--warn)'}
   ];
 
   grid.innerHTML = cards.map(c=>`
@@ -701,6 +765,11 @@ function renderKPIs(){
       <div class="sub">${c.sub}</div>
     </div>
   `).join('');
+
+  const noteEl = document.getElementById('bayNote');
+  noteEl.textContent = otherBayCount > 0
+    ? otherBayCount.toLocaleString()+' line item'+(otherBayCount===1?'':'s')+' in this range have a source bin outside the aisle 1\u201323 low/high bay scheme (blank, HVP zones, cages, etc.) and are excluded from the Low/High Bay figures above.'
+    : '';
 }
 
 /* ---------------------------------------------------------------------
@@ -734,6 +803,8 @@ function renderCharts(){
   renderHourlyChart(items);
   renderUsersChart(items);
   renderAccuracyChart(items);
+  renderBayVolumeChart(items);
+  renderBayVelocityChart(items);
 }
 
 function renderPerDayChart(groups){
@@ -851,6 +922,64 @@ function renderAccuracyChart(items){
   });
 }
 
+function renderBayVolumeChart(items){
+  const byDay = {};
+  items.forEach(r=>{
+    if(!isValidDate(r.confirmedAt)) return;
+    const bay = classifyBay(r.sourceBin);
+    if(bay==='Other') return;
+    const k = dayKey(r.confirmedAt);
+    if(!byDay[k]) byDay[k] = {'Low Bay':0, 'High Bay':0};
+    byDay[k][bay]++;
+  });
+  const labels = Object.keys(byDay).sort();
+  const low = labels.map(k=>byDay[k]['Low Bay']);
+  const high = labels.map(k=>byDay[k]['High Bay']);
+  destroyChart('bayVolume');
+  const opts = baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}}, true);
+  opts.layout = {padding:{top:20}};
+  opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:10}, formatter:v=>v||''};
+  charts.bayVolume = new Chart(document.getElementById('chartBayVolume'), {
+    type:'bar',
+    data:{ labels: labels.map(l=>formatShortDay(l)), datasets:[
+      {label:'Low Bay', data:low, backgroundColor:'#2fbf71', borderRadius:4, maxBarThickness:26},
+      {label:'High Bay', data:high, backgroundColor:'#e8a33d', borderRadius:4, maxBarThickness:26}
+    ]},
+    options: opts
+  });
+}
+
+function renderBayVelocityChart(items){
+  const grouped = {};
+  items.forEach(r=>{
+    if(!isValidDate(r.confirmedAt)) return;
+    const bay = classifyBay(r.sourceBin);
+    if(bay==='Other') return;
+    const k = dayKey(r.confirmedAt);
+    if(!grouped[k]) grouped[k] = {'Low Bay':[], 'High Bay':[]};
+    grouped[k][bay].push(r.confirmedAt.getTime());
+  });
+  const labels = Object.keys(grouped).sort();
+  const velocityFor = (times) => {
+    if(!times || times.length<2) return null;
+    const span = (Math.max(...times)-Math.min(...times))/3600000;
+    return span>0 ? Math.round((times.length/span)*10)/10 : null;
+  };
+  const low = labels.map(k=>velocityFor(grouped[k]['Low Bay']));
+  const high = labels.map(k=>velocityFor(grouped[k]['High Bay']));
+  destroyChart('bayVelocity');
+  const opts = baseChartOptions({y:{beginAtZero:true, ticks:{callback:v=>v+'/hr'}}}, true);
+  opts.plugins.tooltip = { callbacks:{ label: ctx => ctx.dataset.label+': '+(ctx.parsed.y===null?'\u2014':ctx.parsed.y+' picks/hr') } };
+  charts.bayVelocity = new Chart(document.getElementById('chartBayVelocity'), {
+    type:'line',
+    data:{ labels: labels.map(l=>formatShortDay(l)), datasets:[
+      { label:'Low Bay', data:low, borderColor:'#2fbf71', backgroundColor:'rgba(47,191,113,0.15)', tension:0.3, fill:true, spanGaps:true },
+      { label:'High Bay', data:high, borderColor:'#e8a33d', backgroundColor:'rgba(232,163,61,0.12)', tension:0.3, fill:true, spanGaps:true }
+    ]},
+    options: opts
+  });
+}
+
 function baseChartOptions(scalesExtra, showLegend, horizontal){
   return {
     responsive:true, maintainAspectRatio:false,
@@ -934,6 +1063,7 @@ function renderTable(){
         <td>${l.product||'&mdash;'}</td>
         <td style="white-space:normal;max-width:260px;">${l.productDesc||'&mdash;'}</td>
         <td>${l.sourceBin||'&mdash;'}</td>
+        <td>${classifyBay(l.sourceBin)}</td>
         <td>${l.destBin||l.destHU||'&mdash;'}</td>
         <td>${l.targetQty}</td>
         <td style="${(l.actualQty!==l.targetQty)?'color:var(--accent);font-weight:700;':''}">${l.actualQty}</td>
@@ -962,7 +1092,7 @@ function renderTable(){
           <div class="detail-inner">
             <table>
               <thead><tr>
-                <th>Whse Task</th><th>SKU</th><th>Description</th><th>Source Bin</th><th>Dest Bin/HU</th>
+                <th>Whse Task</th><th>SKU</th><th>Description</th><th>Source Bin</th><th>Bay Type</th><th>Dest Bin/HU</th>
                 <th>Target</th><th>Actual</th><th>Created By</th><th>Confirmed By</th><th>Confirmed At</th>
               </tr></thead>
               <tbody>${detailRows}</tbody>

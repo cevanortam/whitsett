@@ -248,7 +248,7 @@
     </div>
     <div class="chart-card">
       <h3 id="titleCycle">Avg Cycle Time by Day</h3>
-      <div class="chart-note">Created&rarr;Start (dashed) and Created&rarr;Confirmed (solid), Auto vs. Manual</div>
+      <div class="chart-note">Avg Created&rarr;Confirmed, Auto vs. Manual</div>
       <div class="chart-holder"><canvas id="chartCycle"></canvas></div>
     </div>
     <div class="chart-card">
@@ -983,19 +983,13 @@ function renderCycleChart(groups){
   groups.forEach(g=>{
     if(!g.createdAt || (g.pullType!=='Auto' && g.pullType!=='Manual')) return;
     const k = periodKey(g.createdAt);
-    if(!byDay[k]) byDay[k] = {
-      Auto:{dispatch:[], cycle:[]},
-      Manual:{dispatch:[], cycle:[]}
-    };
-    if(g.createToStartMin!==null && g.createToStartMin>=0) byDay[k][g.pullType].dispatch.push(g.createToStartMin);
-    if(g.createToConfirmMin!==null && g.createToConfirmMin>=0) byDay[k][g.pullType].cycle.push(g.createToConfirmMin);
+    if(!byDay[k]) byDay[k] = { Auto:[], Manual:[] };
+    if(g.createToConfirmMin!==null && g.createToConfirmMin>=0) byDay[k][g.pullType].push(g.createToConfirmMin);
   });
   const labels = Object.keys(byDay).sort();
   const avg = arr => arr.length ? Math.round(arr.reduce((a,b)=>a+b,0)/arr.length) : null;
-  const autoDispatch = labels.map(k=>avg(byDay[k].Auto.dispatch));
-  const autoCycle = labels.map(k=>avg(byDay[k].Auto.cycle));
-  const manualDispatch = labels.map(k=>avg(byDay[k].Manual.dispatch));
-  const manualCycle = labels.map(k=>avg(byDay[k].Manual.cycle));
+  const autoCycle = labels.map(k=>avg(byDay[k].Auto));
+  const manualCycle = labels.map(k=>avg(byDay[k].Manual));
   destroyChart('cycle');
   const cycleOpts = baseChartOptions({y:{beginAtZero:true, ticks:{callback:v=>formatDuration(v)}}}, true);
   cycleOpts.plugins.tooltip = {
@@ -1004,10 +998,8 @@ function renderCycleChart(groups){
   charts.cycle = new Chart(document.getElementById('chartCycle'), {
     type:'line',
     data:{ labels: labels.map(l=>formatPeriodLabel(l)), datasets:[
-      { label:'Auto Created\u2192Start', data:autoDispatch, borderColor:'#3d9fe8', backgroundColor:'transparent', borderDash:[6,4], tension:0.3, fill:false, spanGaps:true },
-      { label:'Auto Created\u2192Confirmed', data:autoCycle, borderColor:'#3d9fe8', backgroundColor:'rgba(61,159,232,0.12)', tension:0.3, fill:true, spanGaps:true },
-      { label:'Manual Created\u2192Start', data:manualDispatch, borderColor:'#a78bfa', backgroundColor:'transparent', borderDash:[6,4], tension:0.3, fill:false, spanGaps:true },
-      { label:'Manual Created\u2192Confirmed', data:manualCycle, borderColor:'#a78bfa', backgroundColor:'rgba(167,139,250,0.12)', tension:0.3, fill:true, spanGaps:true }
+      { label:'Auto Created\u2192Confirmed', data:autoCycle, borderColor:'#3d9fe8', backgroundColor:'rgba(61,159,232,0.15)', tension:0.3, fill:true, spanGaps:true },
+      { label:'Manual Created\u2192Confirmed', data:manualCycle, borderColor:'#a78bfa', backgroundColor:'rgba(167,139,250,0.15)', tension:0.3, fill:true, spanGaps:true }
     ]},
     options: cycleOpts
   });

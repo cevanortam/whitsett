@@ -1159,16 +1159,13 @@ function renderBayVolumeChart(items){
   const high = labels.map(k=>byDay[k]['High Bay']);
   const hv = labels.map(k=>byDay[k]['High Value']);
   destroyChart('bayVolume');
-  const step = labelSkipStep(labels.length);
   const opts = baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}}, true);
-  opts.layout = {padding:{top:30}};
-  opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:10}, formatter:(v,ctx)=> (v && ctx.dataIndex % step === 0) ? v : ''};
   charts.bayVolume = new Chart(document.getElementById('chartBayVolume'), {
-    type:'bar',
+    type:'line',
     data:{ labels: labels.map(l=>formatPeriodLabel(l)), datasets:[
-      {label:'Low Bay', data:low, backgroundColor:'#2fbf71', borderRadius:4, maxBarThickness:22},
-      {label:'High Bay', data:high, backgroundColor:'#e8a33d', borderRadius:4, maxBarThickness:22},
-      {label:'High Value', data:hv, backgroundColor:'#a78bfa', borderRadius:4, maxBarThickness:22}
+      { label:'Low Bay', data:low, borderColor:'#2fbf71', backgroundColor:'rgba(47,191,113,0.15)', tension:0.3, fill:true, spanGaps:true },
+      { label:'High Bay', data:high, borderColor:'#e8a33d', backgroundColor:'rgba(232,163,61,0.15)', tension:0.3, fill:true, spanGaps:true },
+      { label:'High Value', data:hv, borderColor:'#a78bfa', backgroundColor:'rgba(167,139,250,0.15)', tension:0.3, fill:true, spanGaps:true }
     ]},
     options: opts
   });

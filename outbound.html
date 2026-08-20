@@ -259,6 +259,11 @@
       <div class="chart-holder"><canvas id="chartCycle"></canvas></div>
     </div>
     <div class="chart-card">
+      <h3 id="titlePickDuration">Avg Time to Complete a Pick by Day</h3>
+      <div class="chart-note">Avg Start&rarr;Confirmed per Warehouse Task, Auto vs. Manual</div>
+      <div class="chart-holder"><canvas id="chartPickDuration"></canvas></div>
+    </div>
+    <div class="chart-card">
       <h3>Confirmations by Hour of Day</h3>
       <div class="chart-note">When work actually gets confirmed &mdash; useful for staffing (times shown in Eastern Time)</div>
       <div class="chart-holder"><canvas id="chartHourly"></canvas></div>
@@ -961,6 +966,7 @@ function renderCharts(items, groups){
   }
   renderPerDayChart(groups);
   renderCycleChart(groups);
+  renderPickDurationChart(items);
   renderHourlyChart(items);
   renderUsersChart(items);
   renderAccuracyChart(items);
@@ -1019,6 +1025,40 @@ function renderCycleChart(groups){
   });
 }
 
+// Time to complete an individual pick (Warehouse Task): Start Time -> Confirmation
+// Time, at the line-item level. Distinct from the Pull-ID-level "Avg Cycle Time"
+// chart, which measures Created -> Confirmed for the whole Pull ID.
+function renderPickDurationChart(items){
+  const byDay = {};
+  items.forEach(r=>{
+    if(!isValidDate(r.startAt) || !isValidDate(r.confirmedAt) || !isValidDate(r.createdAt)) return;
+    const dur = minutesBetween(r.startAt, r.confirmedAt);
+    if(dur===null || dur<0) return;
+    const pType = classifyPullType(r.pullId);
+    if(pType!=='Auto' && pType!=='Manual') return;
+    const k = periodKey(r.createdAt);
+    if(!byDay[k]) byDay[k] = { Auto:[], Manual:[] };
+    byDay[k][pType].push(dur);
+  });
+  const labels = Object.keys(byDay).sort();
+  const avg = arr => arr.length ? Math.round(arr.reduce((a,b)=>a+b,0)/arr.length) : null;
+  const autoPick = labels.map(k=>avg(byDay[k].Auto));
+  const manualPick = labels.map(k=>avg(byDay[k].Manual));
+  destroyChart('pickDuration');
+  const opts = baseChartOptions({y:{beginAtZero:true, ticks:{callback:v=>formatDuration(v)}}}, true);
+  opts.plugins.tooltip = {
+    callbacks:{ label: ctx => ctx.dataset.label + ': ' + (ctx.parsed.y===null?'\u2014':formatDuration(ctx.parsed.y)) }
+  };
+  charts.pickDuration = new Chart(document.getElementById('chartPickDuration'), {
+    type:'line',
+    data:{ labels: labels.map(l=>formatPeriodLabel(l)), datasets:[
+      { label:'Auto', data:autoPick, borderColor:'#3d9fe8', backgroundColor:'rgba(61,159,232,0.15)', tension:0.3, fill:true, spanGaps:true },
+      { label:'Manual', data:manualPick, borderColor:'#a78bfa', backgroundColor:'rgba(167,139,250,0.15)', tension:0.3, fill:true, spanGaps:true }
+    ]},
+    options: opts
+  });
+}
+
 function renderHourlyChart(items){
   const hours = new Array(24).fill(0);
   items.forEach(r=>{ if(isValidDate(r.confirmedAt)) hours[r.confirmedAt.getHours()]++; });
@@ -1073,6 +1113,7 @@ function granularityLabel(){
 function updateChartTitles(){
   const g = granularityLabel();
   document.getElementById('titleCycle').textContent = 'Avg Cycle Time by '+g;
+  document.getElementById('titlePickDuration').textContent = 'Avg Time to Complete a Pick by '+g;
   document.getElementById('titleAccuracy').textContent = 'Fill Rate by '+g;
   document.getElementById('titleBayVolume').textContent = 'Picks by Bay Type per '+g;
   document.getElementById('titleSla').textContent = 'SLA Adherence by '+g;
@@ -1324,6 +1365,7 @@ function renderTable(rangeGroups){
         : result==='Over' ? 'color:var(--info);font-weight:700;'
         : result==='Pending' ? 'color:var(--text-faint);'
         : '';
+      const pickDurationMin = (isValidDate(l.startAt) && isValidDate(l.confirmedAt)) ? minutesBetween(l.startAt, l.confirmedAt) : null;
       return `
       <tr>
         <td>${l.warehouseTask||'&mdash;'}</td>
@@ -1338,6 +1380,7 @@ function renderTable(rangeGroups){
         <td>${formatDateTime(l.createdAt)}</td>
         <td>${l.confirmedBy||'&mdash;'}</td>
         <td>${formatDateTime(l.confirmedAt)}</td>
+        <td>${pickDurationMin!==null && pickDurationMin>=0 ? formatDuration(pickDurationMin) : '&mdash;'}</td>
         <td><button type="button" class="delete-line-btn" data-key="${escapeAttr(l._key||'')}" title="Delete this line item">&#128465;</button></td>
       </tr>
     `;}).join('');
@@ -1362,7 +1405,7 @@ function renderTable(rangeGroups){
             <table>
               <thead><tr>
                 <th>Whse Task</th><th>SKU</th><th>Description</th><th>Source Bin</th><th>Bay Type</th><th>Dest Bin/HU</th>
-                <th>Target</th><th>Actual</th><th>Created By</th><th>Created At</th><th>Confirmed By</th><th>Confirmed At</th><th></th>
+                <th>Target</th><th>Actual</th><th>Created By</th><th>Created At</th><th>Confirmed By</th><th>Confirmed At</th><th>Pick Duration</th><th></th>
               </tr></thead>
               <tbody>${detailRows}</tbody>
             </table>

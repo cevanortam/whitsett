@@ -43,6 +43,15 @@
     border-bottom:1px solid var(--card-border);
   }
   .brand{display:flex;align-items:center;gap:14px;}
+  .brand-logo{height:40px;width:auto;object-fit:contain;flex-shrink:0;}
+  .date-range-inputs{display:none;align-items:center;gap:6px;}
+  .date-range-inputs.show{display:flex;}
+  .date-range-inputs span{color:var(--text-faint);font-size:12px;}
+  input[type=date]{
+    background:var(--card);border:1px solid var(--card-border-light);color:var(--text);
+    border-radius:8px;padding:8px 10px;font-size:13px;outline:none;color-scheme:dark;
+  }
+  input[type=date]:focus{border-color:var(--accent);}
   .brand-mark{
     width:44px;height:44px;border-radius:9px;
     background:linear-gradient(135deg,var(--accent),#a8160f);
@@ -169,7 +178,9 @@
   <header class="top">
     <div>
       <div class="brand">
-        <div class="brand-mark">CEVA</div>
+        <img class="brand-logo" src="https://www.cevalogistics.com/_ipx/w_1920&f_webp/images-spx/x_large_picture/CEVA_WhiteRed.png" alt="CEVA Logistics"
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <div class="brand-mark" style="display:none;">CEVA</div>
         <div>
           <h1>Whitsett Outbound Pull Dashboard</h1>
           <div class="sub">SAP outbound pull activity &mdash; Whitsett, NC</div>
@@ -188,7 +199,13 @@
         <option value="today">Today</option>
         <option value="7">Last 7 days</option>
         <option value="30">Last 30 days</option>
+        <option value="custom">Custom range&hellip;</option>
       </select>
+      <div class="date-range-inputs" id="dateRangeInputs">
+        <input type="date" id="dateFrom">
+        <span>&ndash;</span>
+        <input type="date" id="dateTo">
+      </div>
       <label class="btn" for="fileInput">&#8593; Upload SAP Export</label>
       <input type="file" id="fileInput" accept=".xlsx,.xls">
     </div>
@@ -531,14 +548,31 @@ uploadsRef.limitToLast(1).on('value', snap=>{
    Filtering
 --------------------------------------------------------------------- */
 document.getElementById('rangeFilter').addEventListener('change', e=>{
-  rangeMode = e.target.value; renderAll();
+  rangeMode = e.target.value;
+  document.getElementById('dateRangeInputs').classList.toggle('show', rangeMode==='custom');
+  renderAll();
 });
+document.getElementById('dateFrom').addEventListener('change', renderAll);
+document.getElementById('dateTo').addEventListener('change', renderAll);
 document.getElementById('searchBox').addEventListener('input', e=>{
   searchTerm = e.target.value.trim().toLowerCase(); renderTable();
 });
 
 function filterByRange(items){
   if(rangeMode==='all') return items;
+  if(rangeMode==='custom'){
+    const fromVal = document.getElementById('dateFrom').value;
+    const toVal = document.getElementById('dateTo').value;
+    if(!fromVal && !toVal) return items;
+    const from = fromVal ? new Date(fromVal+'T00:00:00') : null;
+    const to = toVal ? new Date(toVal+'T23:59:59') : null;
+    return items.filter(r=>{
+      if(!r.createdAt) return false;
+      if(from && r.createdAt < from) return false;
+      if(to && r.createdAt > to) return false;
+      return true;
+    });
+  }
   const now = new Date();
   let cutoff;
   if(rangeMode==='today'){

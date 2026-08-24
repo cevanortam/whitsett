@@ -198,10 +198,47 @@
   }
   ::-webkit-scrollbar{height:8px;width:8px;}
   ::-webkit-scrollbar-thumb{background:var(--card-border-light);border-radius:4px;}
+
+  .site-nav{display:flex;align-items:center;gap:4px;margin-bottom:18px;flex-wrap:wrap;}
+  .site-tab{
+    color:var(--text-dim);text-decoration:none;font-weight:700;font-size:12.5px;
+    letter-spacing:.4px;text-transform:uppercase;
+    padding:9px 18px;border-radius:8px;border:1px solid transparent;
+    transition:background .15s ease, color .15s ease, border-color .15s ease;
+  }
+  .site-tab:hover{color:var(--text);border-color:var(--card-border-light);}
+  .site-tab.active{background:var(--accent);color:#fff;}
+  .site-tab.disabled{color:var(--text-faint);cursor:default;}
+  .site-tab.disabled:hover{border-color:transparent;}
+  .site-tab .soon-tag{
+    font-size:9px;font-weight:800;letter-spacing:.3px;background:var(--card-border-light);
+    color:var(--text-dim);border-radius:4px;padding:2px 5px;margin-left:6px;vertical-align:1px;
+    text-transform:uppercase;
+  }
+
+  .placeholder-page{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:80px 24px;background:var(--card);border:1px solid var(--card-border);
+    border-radius:var(--radius);min-height:360px;
+  }
+  .placeholder-page .ph-icon{
+    width:56px;height:56px;border-radius:14px;background:linear-gradient(135deg,var(--accent),#a8160f);
+    display:flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:18px;
+    box-shadow:0 4px 14px rgba(226,35,26,0.35);
+  }
+  .placeholder-page h2{font-size:20px;margin:0 0 8px;font-weight:700;}
+  .placeholder-page p{color:var(--text-dim);font-size:13.5px;max-width:440px;line-height:1.6;margin:0;}
+  .placeholder-page .ph-note{margin-top:18px;font-size:11.5px;color:var(--text-faint);}
 </style>
 </head>
 <body>
 <div class="wrap">
+
+  <nav class="site-nav">
+    <a class="site-tab active" href="outbound.html">Outbound</a>
+    <a class="site-tab" href="inbound.html">Inbound<span class="soon-tag">Soon</span></a>
+    <a class="site-tab" href="inventory.html">Inventory<span class="soon-tag">Soon</span></a>
+  </nav>
 
   <header class="top">
     <div>
@@ -224,6 +261,7 @@
     <div class="controls">
       <div class="segmented" id="granularityToggle">
         <button type="button" class="seg-btn active" data-granularity="day">Day</button>
+        <button type="button" class="seg-btn" data-granularity="week">Week</button>
         <button type="button" class="seg-btn" data-granularity="month">Month</button>
         <button type="button" class="seg-btn" data-granularity="year">Year</button>
       </div>
@@ -367,28 +405,59 @@ const lineItemsRef = db.ref('outbound_pulls');
 const uploadsRef = db.ref('outbound_pull_uploads');
 
 /* ---------------------------------------------------------------------
-   Column map (0-based array index from SheetJS header:1 rows)
+   Column map — resolved by header NAME (not fixed position) each upload,
+   since SAP export column order can shift between exports. Each field
+   lists the header text(s) it may appear under (case/whitespace-insensitive
+   exact match); first match wins.
 --------------------------------------------------------------------- */
-const COL = {
-  pullId: 0,          // A
-  warehouseOrder: 2,  // C
-  destHU: 3,           // D
-  product: 4,          // E
-  sourceBin: 5,        // F
-  productDesc: 6,      // G
-  targetQty: 9,        // J
-  actualQty: 10,       // K
-  warehouseTask: 11,   // L
-  confirmDate: 13,      // N
-  confirmTime: 14,      // O
-  confirmedBy: 17,      // R
-  destBin: 18,           // S
-  createdBy: 21,          // V
-  sourceHU: 23,            // X
-  startTime: 30,            // AE
-  createdOnDate: 40,        // AO
-  createdAtTime: 41         // AP
+const COLUMN_HEADERS = {
+  pullId:        ['Pull header ID'],
+  warehouseOrder:['Warehouse Order'],
+  destHU:        ['Dest. Handling Unit'],
+  product:       ['Product'],
+  sourceBin:     ['Source Storage Bin'],
+  productDesc:   ['Product Short Description'],
+  targetQty:     ['Src Trgt Qty BUoM'],
+  actualQty:     ['Act. Qty Dest. BUoM'],
+  warehouseTask: ['Warehouse Task'],
+  confirmDate:   ['Confirmation Date'],
+  confirmTime:   ['Confirmation Time'],
+  confirmedBy:   ['Confirmed By'],
+  destBin:       ['Destination Bin'],
+  createdBy:     ['Created By'],
+  sourceHU:      ['Source Handling Unit'],
+  startTime:     ['Start Time'],
+  createdOnDate: ['Created On'],
+  createdAtTime: ['Created At']
 };
+// Fields the parser cannot function without — abort with a clear message if any are missing.
+const REQUIRED_COLUMNS = ['pullId','warehouseTask','targetQty'];
+
+function normalizeHeader(h){
+  return String(h==null?'':h).trim().toLowerCase().replace(/\s+/g,' ');
+}
+
+// Builds {fieldName: columnIndex} from the file's actual header row.
+// Returns {col, missing} — missing lists fields whose header text wasn't found.
+function resolveColumns(headerRow){
+  const lookup = {};
+  (headerRow||[]).forEach((h,i)=>{
+    const norm = normalizeHeader(h);
+    if(norm && !(norm in lookup)) lookup[norm] = i; // first occurrence wins
+  });
+  const col = {};
+  const missing = [];
+  for(const field of Object.keys(COLUMN_HEADERS)){
+    const candidates = COLUMN_HEADERS[field];
+    const found = candidates.map(normalizeHeader).find(c => c in lookup);
+    if(found !== undefined){
+      col[field] = lookup[found];
+    } else {
+      missing.push(field);
+    }
+  }
+  return {col, missing};
+}
 
 /* ---------------------------------------------------------------------
    State
@@ -398,7 +467,16 @@ let sortKey = 'createdAt';
 let sortDir = 'desc';
 let searchTerm = '';
 let rangeMode = '30';
-let granularity = 'day'; // 'day' | 'month' | 'year' — controls how time-series charts bucket data
+let granularity = 'day'; // 'day' | 'week' | 'month' | 'year' — controls how time-series charts bucket data
+
+function getWeekStart(d){
+  // Monday-based week start, date-only (local time)
+  const nd = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const day = nd.getDay(); // 0=Sun..6=Sat
+  const diff = (day===0 ? -6 : 1-day);
+  nd.setDate(nd.getDate()+diff);
+  return nd;
+}
 let charts = {};
 let expandedPullIds = new Set();
 let lastRenderedGroups = []; // the exact filtered/sorted Pull ID rows currently on screen — used for Excel export
@@ -550,6 +628,10 @@ function periodKey(d){
   if(!isValidDate(d)) return null;
   if(granularity==='year') return String(d.getFullYear());
   if(granularity==='month') return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  if(granularity==='week'){
+    const ws = getWeekStart(d);
+    return ws.getFullYear()+'-'+String(ws.getMonth()+1).padStart(2,'0')+'-'+String(ws.getDate()).padStart(2,'0');
+  }
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
 
@@ -571,6 +653,21 @@ async function parseSapExport(file){
   const sheet = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:null, raw:true});
 
+  if(rows.length === 0){
+    const err = new Error('The file has no rows.');
+    err.code = 'NO_ROWS';
+    throw err;
+  }
+
+  const {col: COL, missing} = resolveColumns(rows[0]);
+  const missingRequired = missing.filter(f => REQUIRED_COLUMNS.includes(f));
+  if(missingRequired.length){
+    const names = missingRequired.map(f => COLUMN_HEADERS[f][0]).join(', ');
+    const err = new Error('Missing required column(s): '+names+'. Check the export still includes these columns (name can shift position, but must be present).');
+    err.code = 'MISSING_COLUMNS';
+    throw err;
+  }
+
   const updates = {};
   let totalRows = 0, skippedZero = 0, skippedIncomplete = 0, imported = 0;
 
@@ -588,11 +685,11 @@ async function parseSapExport(file){
     const warehouseTask = row[COL.warehouseTask];
     if(!warehouseTask){ skippedIncomplete++; continue; } // no reliable dedupe key
 
-    const confirmDate = row[COL.confirmDate];
-    const confirmTime = row[COL.confirmTime];
-    const createdOnDate = row[COL.createdOnDate];
-    const createdAtTime = row[COL.createdAtTime];
-    const startTimeRaw = row[COL.startTime];
+    const confirmDate = COL.confirmDate!==undefined ? row[COL.confirmDate] : null;
+    const confirmTime = COL.confirmTime!==undefined ? row[COL.confirmTime] : null;
+    const createdOnDate = COL.createdOnDate!==undefined ? row[COL.createdOnDate] : null;
+    const createdAtTime = COL.createdAtTime!==undefined ? row[COL.createdAtTime] : null;
+    const startTimeRaw = COL.startTime!==undefined ? row[COL.startTime] : null;
 
     const confirmedAt = combineDateAndTime(confirmDate, confirmTime);
     const createdAt = combineDateAndTime(createdOnDate, createdAtTime);
@@ -600,18 +697,18 @@ async function parseSapExport(file){
 
     const record = {
       pullId: String(pullId).trim(),
-      warehouseOrder: row[COL.warehouseOrder] ?? null,
-      destHU: row[COL.destHU] ?? null,
-      product: row[COL.product] ?? null,
-      sourceBin: row[COL.sourceBin] ?? null,
-      productDesc: row[COL.productDesc] ?? null,
+      warehouseOrder: COL.warehouseOrder!==undefined ? (row[COL.warehouseOrder] ?? null) : null,
+      destHU: COL.destHU!==undefined ? (row[COL.destHU] ?? null) : null,
+      product: COL.product!==undefined ? (row[COL.product] ?? null) : null,
+      sourceBin: COL.sourceBin!==undefined ? (row[COL.sourceBin] ?? null) : null,
+      productDesc: COL.productDesc!==undefined ? (row[COL.productDesc] ?? null) : null,
       targetQty: targetQty,
-      actualQty: Number(row[COL.actualQty]) || 0,
+      actualQty: COL.actualQty!==undefined ? (Number(row[COL.actualQty]) || 0) : 0,
       warehouseTask: String(warehouseTask).trim(),
-      confirmedBy: row[COL.confirmedBy] ?? null,
-      destBin: row[COL.destBin] ?? null,
-      createdBy: row[COL.createdBy] ?? null,
-      sourceHU: row[COL.sourceHU] ?? null,
+      confirmedBy: COL.confirmedBy!==undefined ? (row[COL.confirmedBy] ?? null) : null,
+      destBin: COL.destBin!==undefined ? (row[COL.destBin] ?? null) : null,
+      createdBy: COL.createdBy!==undefined ? (row[COL.createdBy] ?? null) : null,
+      sourceHU: COL.sourceHU!==undefined ? (row[COL.sourceHU] ?? null) : null,
       pullType: classifyPullType(pullId),
       createdAt: createdAt ? createdAt.toISOString() : null,
       startAt: startAt ? startAt.toISOString() : null,
@@ -624,7 +721,7 @@ async function parseSapExport(file){
     imported++;
   }
 
-  return {updates, totalRows, skippedZero, skippedIncomplete, imported};
+  return {updates, totalRows, skippedZero, skippedIncomplete, imported, missingOptional: missing.filter(f=>!REQUIRED_COLUMNS.includes(f))};
 }
 
 function sanitizeKey(k){
@@ -639,7 +736,7 @@ document.getElementById('fileInput').addEventListener('change', async (e)=>{
   if(!file) return;
   setSyncStatus('busy','Reading file&hellip;');
   try{
-    const {updates, totalRows, skippedZero, skippedIncomplete, imported} = await parseSapExport(file);
+    const {updates, totalRows, skippedZero, skippedIncomplete, imported, missingOptional} = await parseSapExport(file);
     const keys = Object.keys(updates);
     if(keys.length===0){
       setSyncStatus('err','No importable rows found in that file');
@@ -655,12 +752,15 @@ document.getElementById('fileInput').addEventListener('change', async (e)=>{
     });
     setSyncStatus('ok','Connected');
     document.getElementById('lastUploadLine').style.display='inline';
-    document.getElementById('lastUploadTime').textContent =
-      new Date().toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
+    let summary = new Date().toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
       + ' (' + imported + ' lines, ' + skippedZero + ' zero-qty skipped)';
+    if(missingOptional && missingOptional.length){
+      summary += ' &mdash; note: column(s) not found, left blank: ' + missingOptional.map(f=>COLUMN_HEADERS[f][0]).join(', ');
+    }
+    document.getElementById('lastUploadTime').innerHTML = summary;
   }catch(err){
     console.error(err);
-    setSyncStatus('err','Upload failed: '+err.message);
+    setSyncStatus('err', err.code==='MISSING_COLUMNS' || err.code==='NO_ROWS' ? err.message : 'Upload failed: '+err.message);
   }
   e.target.value='';
 });
@@ -1098,11 +1198,20 @@ function formatPeriodLabel(k){
     return new Date(y,m-1,1).toLocaleDateString('en-US',{month:'short',year:'numeric'});
   }
   const [y,m,d] = k.split('-').map(Number);
+  if(granularity==='week'){
+    const start = new Date(y,m-1,d);
+    const end = new Date(y,m-1,d+6);
+    const startStr = start.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    const endStr = start.getMonth()===end.getMonth()
+      ? end.toLocaleDateString('en-US',{day:'numeric'})
+      : end.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    return startStr+'\u2013'+endStr;
+  }
   return new Date(y,m-1,d).toLocaleDateString('en-US',{month:'short',day:'numeric'});
 }
 
 function granularityLabel(){
-  return granularity==='year' ? 'Year' : granularity==='month' ? 'Month' : 'Day';
+  return granularity==='year' ? 'Year' : granularity==='month' ? 'Month' : granularity==='week' ? 'Week' : 'Day';
 }
 
 function updateChartTitles(){

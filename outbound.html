@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Whitsett Outbound Pull Dashboard</title>
+<title>Whitsett KPI Dashboard</title>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -208,13 +208,9 @@
   }
   .site-tab:hover{color:var(--text);border-color:var(--card-border-light);}
   .site-tab.active{background:var(--accent);color:#fff;}
-  .site-tab.disabled{color:var(--text-faint);cursor:default;}
-  .site-tab.disabled:hover{border-color:transparent;}
-  .site-tab .soon-tag{
-    font-size:9px;font-weight:800;letter-spacing:.3px;background:var(--card-border-light);
-    color:var(--text-dim);border-radius:4px;padding:2px 5px;margin-left:6px;vertical-align:1px;
-    text-transform:uppercase;
-  }
+
+  .tab-page{display:none;}
+  .tab-page.active{display:block;}
 
   .placeholder-page{
     display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -235,10 +231,12 @@
 <div class="wrap">
 
   <nav class="site-nav">
-    <a class="site-tab active" href="outbound.html">Outbound</a>
-    <a class="site-tab" href="inbound.html">Inbound<span class="soon-tag">Soon</span></a>
-    <a class="site-tab" href="inventory.html">Inventory<span class="soon-tag">Soon</span></a>
+    <a class="site-tab" data-tab="outbound" href="#outbound">Outbound</a>
+    <a class="site-tab" data-tab="inbound" href="#inbound">Inbound</a>
+    <a class="site-tab" data-tab="inventory" href="#inventory">Inventory</a>
   </nav>
+
+  <section id="tab-outbound" class="tab-page">
 
   <header class="top">
     <div>
@@ -381,6 +379,52 @@
     can be permanently deleted from the expandable detail view (click a Pull ID, then the trash icon on a row) &mdash;
     this is password-protected and cannot be undone.
   </footer>
+
+  </section>
+
+  <section id="tab-inbound" class="tab-page">
+    <header class="top" style="border-bottom:none;margin-bottom:0;padding-bottom:0;">
+      <div>
+        <div class="brand">
+          <img class="brand-logo" src="https://www.cevalogistics.com/_ipx/w_1920&f_webp/images-spx/x_large_picture/CEVA_WhiteRed.png" alt="CEVA Logistics"
+               onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+          <div class="brand-mark" style="display:none;">CEVA</div>
+          <div>
+            <h1>Whitsett Inbound Dashboard</h1>
+            <div class="sub">Inbound receiving activity &mdash; Whitsett, NC</div>
+          </div>
+        </div>
+      </div>
+    </header>
+    <div class="placeholder-page">
+      <div class="ph-icon">&#8681;</div>
+      <h2>Coming Soon</h2>
+      <p>Inbound KPIs and receiving activity will appear here soon.</p>
+      <div class="ph-note">This page will join the Whitsett KPI Dashboard once the data source and metrics are defined.</div>
+    </div>
+  </section>
+
+  <section id="tab-inventory" class="tab-page">
+    <header class="top" style="border-bottom:none;margin-bottom:0;padding-bottom:0;">
+      <div>
+        <div class="brand">
+          <img class="brand-logo" src="https://www.cevalogistics.com/_ipx/w_1920&f_webp/images-spx/x_large_picture/CEVA_WhiteRed.png" alt="CEVA Logistics"
+               onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+          <div class="brand-mark" style="display:none;">CEVA</div>
+          <div>
+            <h1>Whitsett Inventory Dashboard</h1>
+            <div class="sub">Inventory accuracy and on-hand metrics &mdash; Whitsett, NC</div>
+          </div>
+        </div>
+      </div>
+    </header>
+    <div class="placeholder-page">
+      <div class="ph-icon">&#128230;</div>
+      <h2>Coming Soon</h2>
+      <p>Inventory accuracy, on-hand, and cycle count KPIs will appear here soon.</p>
+      <div class="ph-note">This page will join the Whitsett KPI Dashboard once the data source and metrics are defined.</div>
+    </div>
+  </section>
 
 </div>
 
@@ -1661,6 +1705,43 @@ function applyDateFormat(sheet, rows, dateCols){
     }
   });
 }
+
+/* ---------------------------------------------------------------------
+   Site tabs — Outbound / Inbound / Inventory, one file, active tab
+   tracked in the URL hash (e.g. #inbound) so it's bookmarkable/shareable.
+--------------------------------------------------------------------- */
+const SITE_TABS = ['outbound','inbound','inventory'];
+const TAB_TITLES = {
+  outbound: 'Whitsett KPI Dashboard \u2014 Outbound',
+  inbound: 'Whitsett KPI Dashboard \u2014 Inbound',
+  inventory: 'Whitsett KPI Dashboard \u2014 Inventory'
+};
+
+function currentSiteTab(){
+  const h = (location.hash||'').replace('#','').toLowerCase();
+  return SITE_TABS.includes(h) ? h : 'outbound';
+}
+
+function showSiteTab(tab){
+  SITE_TABS.forEach(id=>{
+    const section = document.getElementById('tab-'+id);
+    if(section) section.classList.toggle('active', id===tab);
+  });
+  document.querySelectorAll('.site-tab').forEach(a=>{
+    a.classList.toggle('active', a.dataset.tab===tab);
+  });
+  document.title = TAB_TITLES[tab] || 'Whitsett KPI Dashboard';
+  if(tab==='outbound'){
+    // Charts built while this tab was hidden render into a zero-size canvas;
+    // resize them now that the container has real dimensions again.
+    requestAnimationFrame(()=>{
+      Object.values(charts).forEach(c=>{ try{ c.resize(); }catch(e){} });
+    });
+  }
+}
+
+window.addEventListener('hashchange', ()=> showSiteTab(currentSiteTab()));
+showSiteTab(currentSiteTab());
 </script>
 </body>
 </html>

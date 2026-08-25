@@ -225,6 +225,40 @@
   .placeholder-page h2{font-size:20px;margin:0 0 8px;font-weight:700;}
   .placeholder-page p{color:var(--text-dim);font-size:13.5px;max-width:440px;line-height:1.6;margin:0;}
   .placeholder-page .ph-note{margin-top:18px;font-size:11.5px;color:var(--text-faint);}
+
+  .kpi.clickable{cursor:pointer;transition:transform .1s ease, border-color .15s ease;}
+  .kpi.clickable:hover{border-color:var(--accent);transform:translateY(-1px);}
+  .kpi.clickable::after{
+    content:"\2192";position:absolute;bottom:9px;right:11px;font-size:11px;color:var(--text-faint);
+  }
+
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(5,12,22,0.75);z-index:1000;
+    display:flex;align-items:center;justify-content:center;padding:24px;
+  }
+  .modal-box{
+    background:var(--card);border:1px solid var(--card-border-light);border-radius:var(--radius);
+    max-width:1200px;width:100%;max-height:82vh;display:flex;flex-direction:column;overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,0.5);
+  }
+  .modal-head{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:16px 20px;border-bottom:1px solid var(--card-border);flex-shrink:0;
+  }
+  .modal-head h3{margin:0;font-size:14.5px;font-weight:700;}
+  .modal-close{
+    background:transparent;border:none;color:var(--text-dim);font-size:22px;line-height:1;
+    cursor:pointer;padding:2px 8px;border-radius:6px;
+  }
+  .modal-close:hover{color:var(--text);background:rgba(255,255,255,0.06);}
+  .modal-body{padding:16px 20px 20px;overflow-y:auto;}
+  .modal-body table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  .modal-body thead th{
+    text-align:left;padding:8px 10px;color:var(--text-faint);font-weight:600;
+    text-transform:uppercase;font-size:10px;letter-spacing:0.4px;
+    border-bottom:1px solid var(--card-border-light);white-space:nowrap;
+  }
+  .modal-body tbody td{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,0.05);white-space:nowrap;}
 </style>
 </head>
 <body>
@@ -265,7 +299,7 @@
       </div>
       <select id="rangeFilter">
         <option value="all">All time</option>
-        <option value="today">Today</option>
+        <option value="yesterday">Yesterday</option>
         <option value="7">Last 7 days</option>
         <option value="30" selected>Last 30 days</option>
         <option value="custom">Custom range&hellip;</option>
@@ -374,34 +408,172 @@
   </section>
 
   <footer class="note">
-    Rows with a 0.000 Target Quantity are excluded on upload. Repeat uploads merge into existing data and are
+    Rows with a 0.000 Target Quantity are excluded on upload. This tab and the Inbound tab share the same SAP
+    export &mdash; uploading a file here (or on the Inbound tab) updates both automatically, since the export
+    contains both picking and receiving/putaway activity together. Repeat uploads merge into existing data and are
     de-duplicated by Warehouse Task, so re-uploading an export that overlaps a previous one is safe. Line items
     can be permanently deleted from the expandable detail view (click a Pull ID, then the trash icon on a row) &mdash;
     this is password-protected and cannot be undone.
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--card-border);">
+      <button type="button" class="btn secondary" id="resetAllDataBtn" style="border-color:var(--accent);color:var(--accent);">&#9888; Reset All Data</button>
+      <span style="color:var(--text-faint);font-size:11px;margin-left:10px;">Permanently clears all Outbound and Inbound data (both tabs) so you can start with a fresh upload. Cycle count data is untouched. Password-protected, cannot be undone.</span>
+    </div>
   </footer>
 
   </section>
 
   <section id="tab-inbound" class="tab-page">
-    <header class="top" style="border-bottom:none;margin-bottom:0;padding-bottom:0;">
-      <div>
-        <div class="brand">
-          <img class="brand-logo" src="https://www.cevalogistics.com/_ipx/w_1920&f_webp/images-spx/x_large_picture/CEVA_WhiteRed.png" alt="CEVA Logistics"
-               onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-          <div class="brand-mark" style="display:none;">CEVA</div>
-          <div>
-            <h1>Whitsett Inbound Dashboard</h1>
-            <div class="sub">Inbound receiving activity &mdash; Whitsett, NC</div>
-          </div>
+
+  <header class="top">
+    <div>
+      <div class="brand">
+        <img class="brand-logo" src="https://www.cevalogistics.com/_ipx/w_1920&f_webp/images-spx/x_large_picture/CEVA_WhiteRed.png" alt="CEVA Logistics"
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <div class="brand-mark" style="display:none;">CEVA</div>
+        <div>
+          <h1>Whitsett Inbound Dashboard</h1>
+          <div class="sub">SAP inbound receiving &amp; putaway activity &mdash; Whitsett, NC</div>
         </div>
       </div>
-    </header>
-    <div class="placeholder-page">
-      <div class="ph-icon">&#8681;</div>
-      <h2>Coming Soon</h2>
-      <p>Inbound KPIs and receiving activity will appear here soon.</p>
-      <div class="ph-note">This page will join the Whitsett KPI Dashboard once the data source and metrics are defined.</div>
+      <div class="status-line">
+        <span id="ibSyncStatus"><span class="dot" id="ibSyncDot"></span><b id="ibSyncText">Connecting&hellip;</b></span>
+        <span><b id="ibRecordCount">0</b> line items on file</span>
+        <span><b id="ibHuCount">0</b> HUs tracked</span>
+        <span id="ibLastUploadLine" style="display:none;">Last upload: <b id="ibLastUploadTime">&mdash;</b></span>
+      </div>
     </div>
+    <div class="controls">
+      <div class="segmented" id="ibGranularityToggle">
+        <button type="button" class="seg-btn active" data-granularity="day">Day</button>
+        <button type="button" class="seg-btn" data-granularity="week">Week</button>
+        <button type="button" class="seg-btn" data-granularity="month">Month</button>
+        <button type="button" class="seg-btn" data-granularity="year">Year</button>
+      </div>
+      <select id="ibRangeFilter">
+        <option value="all">All time</option>
+        <option value="yesterday">Yesterday</option>
+        <option value="7">Last 7 days</option>
+        <option value="30" selected>Last 30 days</option>
+        <option value="custom">Custom range&hellip;</option>
+      </select>
+      <div class="date-range-inputs" id="ibDateRangeInputs">
+        <input type="date" id="ibDateFrom">
+        <span>&ndash;</span>
+        <input type="date" id="ibDateTo">
+      </div>
+      <label class="btn" for="ibFileInput">&#8593; Upload SAP Export</label>
+      <input type="file" id="ibFileInput" accept=".xlsx,.xls">
+    </div>
+  </header>
+
+  <section class="kpi-grid" id="ibKpiGrid"></section>
+  <div id="ibBayNote" style="font-size:12px;color:var(--text-faint);margin:-12px 0 24px;"></div>
+
+  <section class="charts-grid">
+    <div class="chart-card">
+      <h3>Received Lines by Hour Created</h3>
+      <div class="chart-note">When freight actually hits the dock &mdash; useful for receiving staffing (Eastern Time)</div>
+      <div class="chart-holder"><canvas id="ibChartReceivedHourly"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3 id="ibTitleDockToStock">Dock to Stock (Avg) by Day</h3>
+      <div class="chart-note">Avg Received&rarr;Putaway, completed HUs only</div>
+      <div class="chart-holder"><canvas id="ibChartDockToStock"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3 id="ibTitleSla">Dock to Stock SLA Adherence by Day</h3>
+      <div class="chart-note">Share of completed HUs putaway within 5hr. Sundays excluded from the clock.</div>
+      <div class="chart-holder"><canvas id="ibChartSla"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Putaway Confirmations by Hour of Day</h3>
+      <div class="chart-note">When putaway actually gets confirmed &mdash; useful for putaway crew staffing (Eastern Time)</div>
+      <div class="chart-holder"><canvas id="ibChartPutawayHourly"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Top Putaway By (Volume)</h3>
+      <div class="chart-note">HUs putaway, by associate</div>
+      <div class="chart-holder"><canvas id="ibChartTopPutaway"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3 id="ibTitleReceivedVolume">Received Lines by Day</h3>
+      <div class="chart-note">Receiving volume over time</div>
+      <div class="chart-holder"><canvas id="ibChartReceivedVolume"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3 id="ibTitleUnitsReceived">Units Received by Day</h3>
+      <div class="chart-note">Total confirmed receipt quantity over time</div>
+      <div class="chart-holder"><canvas id="ibChartUnitsReceived"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>GR Zone Aging (Live)</h3>
+      <div class="chart-note">How long items currently sitting in 9010-GR-ZONE have been waiting &mdash; not affected by the date range above</div>
+      <div class="chart-holder"><canvas id="ibChartAging"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Putaway Destination Bay Split</h3>
+      <div class="chart-note">Share of completed putaways by bay type, selected range</div>
+      <div class="chart-holder"><canvas id="ibChartBaySplit"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Dock to Stock Distribution</h3>
+      <div class="chart-note">Spread of completed Dock-to-Stock times, selected range</div>
+      <div class="chart-holder"><canvas id="ibChartDockDistribution"></canvas></div>
+    </div>
+  </section>
+
+  <section class="table-section">
+    <div class="table-section-head">
+      <div>
+        <h2>Inbound Lines</h2>
+        <div class="meta" id="ibTableMeta">&nbsp;</div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <input type="text" id="ibSearchBox" placeholder="Search HU, SKU, WO, or user&hellip;" style="min-width:260px;">
+        <button type="button" class="btn secondary" id="ibExportBtn">&#8595; Export to Excel</button>
+      </div>
+    </div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th data-ibkey="hu">HU</th>
+            <th data-ibkey="product">SKU</th>
+            <th data-ibkey="productDesc">Description</th>
+            <th data-ibkey="receivedQty">Qty</th>
+            <th data-ibkey="receivedAt">Received</th>
+            <th data-ibkey="receivedBy">Received By</th>
+            <th data-ibkey="status">Status</th>
+            <th data-ibkey="putawayAt">Putaway</th>
+            <th data-ibkey="putawayBy">Putaway By</th>
+            <th data-ibkey="putawayBin">Putaway Bin</th>
+            <th data-ibkey="bayType">Bay Type</th>
+            <th data-ibkey="dockToStockMin">Dock&rarr;Stock</th>
+          </tr>
+        </thead>
+        <tbody id="ibTableBody"></tbody>
+      </table>
+    </div>
+    <div class="empty-state" id="ibEmptyState" style="display:none;">
+      <div class="big">No data yet</div>
+      <div>Upload a SAP inbound export to get started.</div>
+    </div>
+  </section>
+
+  <footer class="note">
+    Dock-to-Stock is measured per Handling Unit: from the goods-receipt confirmation into 9010-GR-ZONE (Activity INTL,
+    process type 3040) to the final putaway confirmation into a real bin (Activity PTWY, process type 1010). Rows for
+    the intermediate putaway pick leg (process type 1012) and QC-Hold transfer moves (process type 3030) are parsed but
+    excluded from these figures &mdash; a future version could add QC-Hold dwell time as its own metric. This tab and the
+    Outbound tab share the same SAP export &mdash; uploading a file here (or on the Outbound tab) updates both
+    automatically. Repeat uploads merge into existing data and are de-duplicated by Warehouse Task, so re-uploading an
+    export that overlaps a previous one is safe.
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--card-border);">
+      <button type="button" class="btn secondary" id="ibResetAllDataBtn" style="border-color:var(--accent);color:var(--accent);">&#9888; Reset All Data</button>
+      <span style="color:var(--text-faint);font-size:11px;margin-left:10px;">Permanently clears all Outbound and Inbound data (both tabs) so you can start with a fresh upload. Cycle count data is untouched. Password-protected, cannot be undone.</span>
+    </div>
+  </footer>
+
   </section>
 
   <section id="tab-inventory" class="tab-page">
@@ -426,6 +598,16 @@
     </div>
   </section>
 
+</div>
+
+<div class="modal-overlay" id="kpiModalOverlay" style="display:none;">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3 id="kpiModalTitle"></h3>
+      <button type="button" class="modal-close" id="kpiModalClose" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body" id="kpiModalBody"></div>
+  </div>
 </div>
 
 <script>
@@ -658,9 +840,13 @@ function minutesBetweenExcludingSundays(a,b){
 function formatDuration(min){
   if(min===null || min===undefined || isNaN(min)) return '—';
   if(min<0) min = 0;
-  const h = Math.floor(min/60), m = Math.round(min%60);
-  if(h===0) return m+'m';
-  return h+'h '+m+'m';
+  const total = Math.round(min);
+  const d = Math.floor(total/1440);
+  const h = Math.floor((total%1440)/60);
+  const m = total%60;
+  if(d>0) return d+'d '+h+'h '+m+'m';
+  if(h>0) return h+'h '+m+'m';
+  return m+'m';
 }
 
 function formatDateTime(d){
@@ -773,39 +959,15 @@ function sanitizeKey(k){
 }
 
 /* ---------------------------------------------------------------------
-   Upload flow
+   Upload flow — a single uploaded SAP export is parsed for BOTH tabs
+   (see combinedUploadFromFile, defined near the bottom of the script).
+   The export is one unified Warehouse Task extract covering picking,
+   receiving, and putaway together, so one file legitimately feeds both.
 --------------------------------------------------------------------- */
 document.getElementById('fileInput').addEventListener('change', async (e)=>{
   const file = e.target.files[0];
   if(!file) return;
-  setSyncStatus('busy','Reading file&hellip;');
-  try{
-    const {updates, totalRows, skippedZero, skippedIncomplete, imported, missingOptional} = await parseSapExport(file);
-    const keys = Object.keys(updates);
-    if(keys.length===0){
-      setSyncStatus('err','No importable rows found in that file');
-      e.target.value='';
-      return;
-    }
-    setSyncStatus('busy','Syncing '+keys.length+' line items to Firebase&hellip;');
-    await lineItemsRef.update(updates);
-    await uploadsRef.push({
-      fileName: file.name,
-      uploadedAt: new Date().toISOString(),
-      totalRows, skippedZero, skippedIncomplete, imported
-    });
-    setSyncStatus('ok','Connected');
-    document.getElementById('lastUploadLine').style.display='inline';
-    let summary = new Date().toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
-      + ' (' + imported + ' lines, ' + skippedZero + ' zero-qty skipped)';
-    if(missingOptional && missingOptional.length){
-      summary += ' &mdash; note: column(s) not found, left blank: ' + missingOptional.map(f=>COLUMN_HEADERS[f][0]).join(', ');
-    }
-    document.getElementById('lastUploadTime').innerHTML = summary;
-  }catch(err){
-    console.error(err);
-    setSyncStatus('err', err.code==='MISSING_COLUMNS' || err.code==='NO_ROWS' ? err.message : 'Upload failed: '+err.message);
-  }
+  await combinedUploadFromFile(file);
   e.target.value='';
 });
 
@@ -873,29 +1035,52 @@ document.getElementById('searchBox').addEventListener('input', e=>{
   safeRender('table', ()=>renderTable(cachedRangeGroups));
 });
 
-function filterByRange(items){
-  if(rangeMode==='all') return items;
+// Filters Pull ID GROUPS by date range (not raw items) — this runs AFTER
+// grouping so a Pull ID's lines always travel together, and so an
+// in-progress Pull ID can be exempted from the date cutoff entirely: it
+// still shows up regardless of range, since it's actionable work, not a
+// finished number. Completed Pull IDs are subject to the selected range.
+// The rolling windows (Yesterday/7/30) always end at the start of today,
+// never including today itself — today's numbers are still in progress
+// and would read as an artificially low/incomplete day otherwise.
+function filterGroupsByRange(groups){
+  if(rangeMode==='all') return groups;
+
+  const todayStart = new Date();
+  todayStart.setHours(0,0,0,0);
+
   if(rangeMode==='custom'){
     const fromVal = document.getElementById('dateFrom').value;
     const toVal = document.getElementById('dateTo').value;
-    if(!fromVal && !toVal) return items;
+    if(!fromVal && !toVal) return groups;
     const from = fromVal ? new Date(fromVal+'T00:00:00') : null;
     const to = toVal ? new Date(toVal+'T23:59:59') : null;
-    return items.filter(r=>{
-      if(!r.createdAt) return false;
-      if(from && r.createdAt < from) return false;
-      if(to && r.createdAt > to) return false;
+    return groups.filter(g=>{
+      if(g.status==='In Progress') return true;
+      if(!g.createdAt) return false;
+      if(from && g.createdAt < from) return false;
+      if(to && g.createdAt > to) return false;
       return true;
     });
   }
-  const now = new Date();
-  let cutoff;
-  if(rangeMode==='today'){
-    cutoff = new Date(now.getFullYear(),now.getMonth(),now.getDate());
-  } else {
-    cutoff = new Date(now.getTime() - Number(rangeMode)*24*3600*1000);
+
+  if(rangeMode==='yesterday'){
+    const yStart = new Date(todayStart);
+    yStart.setDate(yStart.getDate()-1);
+    return groups.filter(g=>{
+      if(g.status==='In Progress') return true;
+      if(!g.createdAt) return false;
+      return g.createdAt >= yStart && g.createdAt < todayStart;
+    });
   }
-  return items.filter(r => r.createdAt && r.createdAt >= cutoff);
+
+  // rolling windows: '7' or '30' — N days ending yesterday (today excluded)
+  const cutoff = new Date(todayStart.getTime() - Number(rangeMode)*24*3600*1000);
+  return groups.filter(g=>{
+    if(g.status==='In Progress') return true;
+    if(!g.createdAt) return false;
+    return g.createdAt >= cutoff && g.createdAt < todayStart;
+  });
 }
 
 /* ---------------------------------------------------------------------
@@ -970,8 +1155,9 @@ function renderAll(){
   const pullIds = new Set(allLineItems.map(r=>r.pullId));
   document.getElementById('pullCount').textContent = pullIds.size.toLocaleString();
 
-  const items = filterByRange(allLineItems);
-  const groups = groupByPullId(items);
+  const allGroups = groupByPullId(allLineItems);
+  const groups = filterGroupsByRange(allGroups);
+  const items = groups.flatMap(g=>g.lines);
   cachedRangeGroups = groups;
 
   safeRender('KPIs', ()=>renderKPIs(items, groups));
@@ -1686,7 +1872,7 @@ function exportTableToExcel(){
   XLSX.utils.book_append_sheet(wb, lineSheet, 'Line Items');
 
   const rangeSuffix = rangeMode==='all' ? 'all-time'
-    : rangeMode==='today' ? 'today'
+    : rangeMode==='yesterday' ? 'yesterday'
     : rangeMode==='custom' ? 'custom-range'
     : 'last-'+rangeMode+'-days';
   const today = new Date().toISOString().slice(0,10);
@@ -1705,6 +1891,1001 @@ function applyDateFormat(sheet, rows, dateCols){
     }
   });
 }
+
+/* ---------------------------------------------------------------------
+   KPI card drill-down modal — generic chrome shared by any tab. A card
+   supplies a title and a pre-built HTML body (usually a small table);
+   this just handles showing/hiding/closing it.
+--------------------------------------------------------------------- */
+function openKpiModal(title, bodyHtml){
+  document.getElementById('kpiModalTitle').textContent = title;
+  document.getElementById('kpiModalBody').innerHTML = bodyHtml;
+  document.getElementById('kpiModalOverlay').style.display = 'flex';
+}
+function closeKpiModal(){
+  document.getElementById('kpiModalOverlay').style.display = 'none';
+}
+document.getElementById('kpiModalClose').addEventListener('click', closeKpiModal);
+document.getElementById('kpiModalOverlay').addEventListener('click', (e)=>{
+  if(e.target.id==='kpiModalOverlay') closeKpiModal();
+});
+document.addEventListener('keydown', (e)=>{
+  if(e.key==='Escape') closeKpiModal();
+});
+
+/* =======================================================================
+   INBOUND TAB
+   Fully separate state/functions from the Outbound tab above (all "ib"
+   prefixed) so the two never collide. Shares the same Firebase app/db
+   (already initialized above) but writes to its own top-level nodes:
+   /inbound_receipts and /inbound_receipt_uploads.
+======================================================================= */
+const ibReceiptsRef = db.ref('inbound_receipts');
+const ibUploadsRef = db.ref('inbound_receipt_uploads');
+
+/* Column map — resolved by header name each upload, same approach as
+   Outbound. Only rows for Activity INTL/PTWY with a relevant process type
+   are kept (see IB_KEEP_PROCESS_TYPES below); everything else in a raw SAP
+   export (PICK rows, other process types) is ignored on this tab. */
+const IB_COLUMN_HEADERS = {
+  warehouseTask: ['Warehouse Task'],
+  destHU:        ['Dest. Handling Unit'],
+  sourceHU:      ['Source Handling Unit'],
+  product:       ['Product'],
+  productDesc:   ['Product Short Description'],
+  sourceBin:     ['Source Storage Bin'],
+  destBin:       ['Destination Bin'],
+  targetQty:     ['Src Trgt Qty BUoM'],
+  actualQty:     ['Act. Qty Dest. BUoM'],
+  warehouseOrder:['Warehouse Order'],
+  confirmDate:   ['Confirmation Date'],
+  confirmTime:   ['Confirmation Time'],
+  confirmedBy:   ['Confirmed By'],
+  createdBy:     ['Created By'],
+  createdOnDate: ['Created On'],
+  createdAtTime: ['Created At'],
+  activity:      ['Activity'],
+  whseProcessType:['Whse Process Type'],
+  taskStatus:    ['Warehouse Task Status']
+};
+const IB_REQUIRED_COLUMNS = ['warehouseTask','destHU','activity','whseProcessType'];
+
+// Receipt into the GR zone (3040) and final putaway into a real bin (1010)
+// are what drive every KPI on this tab. 1012 (the putaway pick-from-GR-zone
+// leg) is kept only for context/debugging. Everything else — including QC
+// Hold transfer moves (3030), which sometimes reuse the same Warehouse Task
+// number for their pick/place legs — is dropped on import so it can never
+// collide with the Warehouse-Task dedupe key used for the rows that matter.
+const IB_KEEP_PROCESS_TYPES = new Set([3040, 1010, 1012]);
+const IB_RECEIVE_BIN = '9010-GR-ZONE';
+const IB_SLA_MINUTES = 300; // 5 hours, flat — no Auto/Manual split on inbound
+
+function ibResolveColumns(headerRow){
+  const lookup = {};
+  (headerRow||[]).forEach((h,i)=>{
+    const norm = normalizeHeader(h);
+    if(norm && !(norm in lookup)) lookup[norm] = i;
+  });
+  const col = {};
+  const missing = [];
+  for(const field of Object.keys(IB_COLUMN_HEADERS)){
+    const found = IB_COLUMN_HEADERS[field].map(normalizeHeader).find(c => c in lookup);
+    if(found !== undefined) col[field] = lookup[found];
+    else missing.push(field);
+  }
+  return {col, missing};
+}
+
+function ibFormatHU(v){
+  if(v===null || v===undefined || v==='') return null;
+  const n = Number(v);
+  return isNaN(n) ? String(v).trim() : String(Math.round(n));
+}
+
+/* ---------------------------------------------------------------------
+   State (independent of the Outbound tab's state)
+--------------------------------------------------------------------- */
+let ibAllRecords = [];
+let ibSortKey = 'receivedAt';
+let ibSortDir = 'desc';
+let ibSearchTerm = '';
+let ibRangeMode = '30';
+let ibGranularity = 'day';
+let ibCharts = {};
+let ibCachedRangeGroups = [];
+let ibLastRenderedGroups = [];
+
+function ibDestroyChart(id){ if(ibCharts[id]){ ibCharts[id].destroy(); delete ibCharts[id]; } }
+
+function ibPeriodKey(d){
+  if(!isValidDate(d)) return null;
+  if(ibGranularity==='year') return String(d.getFullYear());
+  if(ibGranularity==='month') return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  if(ibGranularity==='week'){
+    const ws = getWeekStart(d);
+    return ws.getFullYear()+'-'+String(ws.getMonth()+1).padStart(2,'0')+'-'+String(ws.getDate()).padStart(2,'0');
+  }
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function ibFormatPeriodLabel(k){
+  if(ibGranularity==='year') return k;
+  if(ibGranularity==='month'){
+    const [y,m] = k.split('-').map(Number);
+    return new Date(y,m-1,1).toLocaleDateString('en-US',{month:'short',year:'numeric'});
+  }
+  const [y,m,d] = k.split('-').map(Number);
+  if(ibGranularity==='week'){
+    const start = new Date(y,m-1,d);
+    const end = new Date(y,m-1,d+6);
+    const startStr = start.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    const endStr = start.getMonth()===end.getMonth()
+      ? end.toLocaleDateString('en-US',{day:'numeric'})
+      : end.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    return startStr+'\u2013'+endStr;
+  }
+  return new Date(y,m-1,d).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+}
+function ibGranularityLabel(){
+  return ibGranularity==='year' ? 'Year' : ibGranularity==='month' ? 'Month' : ibGranularity==='week' ? 'Week' : 'Day';
+}
+
+/* ---------------------------------------------------------------------
+   Excel parsing
+--------------------------------------------------------------------- */
+async function ibParseSapExport(file){
+  const buf = await readFileAsArrayBuffer(file);
+  const wb = XLSX.read(buf, {type:'array', cellDates:true});
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:null, raw:true});
+
+  if(rows.length === 0){
+    const err = new Error('The file has no rows.');
+    err.code = 'NO_ROWS';
+    throw err;
+  }
+
+  const {col: COL, missing} = ibResolveColumns(rows[0]);
+  const missingRequired = missing.filter(f => IB_REQUIRED_COLUMNS.includes(f));
+  if(missingRequired.length){
+    const names = missingRequired.map(f => IB_COLUMN_HEADERS[f][0]).join(', ');
+    const err = new Error('Missing required column(s): '+names+'. Check the export still includes these columns (name can shift position, but must be present).');
+    err.code = 'MISSING_COLUMNS';
+    throw err;
+  }
+
+  const updates = {};
+  let totalRows=0, skippedNotInbound=0, skippedOtherProcess=0, skippedZero=0, skippedIncomplete=0, imported=0;
+
+  for(let i=1;i<rows.length;i++){
+    const row = rows[i];
+    if(!row || row.length===0) continue;
+    totalRows++;
+
+    const activity = row[COL.activity] ? String(row[COL.activity]).trim().toUpperCase() : '';
+    if(activity !== 'INTL' && activity !== 'PTWY'){ skippedNotInbound++; continue; }
+
+    const whseProcessType = Number(row[COL.whseProcessType]);
+    if(!IB_KEEP_PROCESS_TYPES.has(whseProcessType)){ skippedOtherProcess++; continue; }
+
+    const targetQty = Number(row[COL.targetQty]) || 0;
+    if(targetQty === 0){ skippedZero++; continue; }
+
+    const destHU = ibFormatHU(row[COL.destHU]);
+    if(!destHU){ skippedIncomplete++; continue; }
+
+    const warehouseTask = row[COL.warehouseTask];
+    if(!warehouseTask){ skippedIncomplete++; continue; }
+
+    const confirmDate = COL.confirmDate!==undefined ? row[COL.confirmDate] : null;
+    const confirmTime = COL.confirmTime!==undefined ? row[COL.confirmTime] : null;
+    const createdOnDate = COL.createdOnDate!==undefined ? row[COL.createdOnDate] : null;
+    const createdAtTime = COL.createdAtTime!==undefined ? row[COL.createdAtTime] : null;
+
+    const confirmedAt = combineDateAndTime(confirmDate, confirmTime);
+    const createdAt = combineDateAndTime(createdOnDate, createdAtTime);
+
+    const record = {
+      warehouseTask: String(warehouseTask).trim(),
+      destHU,
+      sourceHU: COL.sourceHU!==undefined ? ibFormatHU(row[COL.sourceHU]) : null,
+      product: COL.product!==undefined ? (row[COL.product] ?? null) : null,
+      productDesc: COL.productDesc!==undefined ? (row[COL.productDesc] ?? null) : null,
+      sourceBin: COL.sourceBin!==undefined ? (row[COL.sourceBin] ?? null) : null,
+      destBin: COL.destBin!==undefined ? (row[COL.destBin] ?? null) : null,
+      targetQty,
+      actualQty: COL.actualQty!==undefined ? (Number(row[COL.actualQty]) || 0) : 0,
+      warehouseOrder: COL.warehouseOrder!==undefined ? (row[COL.warehouseOrder] ?? null) : null,
+      confirmedBy: COL.confirmedBy!==undefined ? (row[COL.confirmedBy] ?? null) : null,
+      createdBy: COL.createdBy!==undefined ? (row[COL.createdBy] ?? null) : null,
+      activity,
+      whseProcessType,
+      taskStatus: COL.taskStatus!==undefined ? (row[COL.taskStatus] ?? null) : null,
+      createdAt: createdAt ? createdAt.toISOString() : null,
+      confirmedAt: confirmedAt ? confirmedAt.toISOString() : null,
+      uploadedAt: new Date().toISOString()
+    };
+
+    const key = sanitizeKey(record.warehouseTask);
+    updates[key] = record;
+    imported++;
+  }
+
+  return {updates, totalRows, skippedNotInbound, skippedOtherProcess, skippedZero, skippedIncomplete, imported, missingOptional: missing.filter(f=>!IB_REQUIRED_COLUMNS.includes(f))};
+}
+
+/* ---------------------------------------------------------------------
+   Upload flow — see combinedUploadFromFile below; one uploaded file
+   updates both the Outbound and Inbound tabs.
+--------------------------------------------------------------------- */
+document.getElementById('ibFileInput').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  await combinedUploadFromFile(file);
+  e.target.value='';
+});
+
+function ibSetSyncStatus(kind, text){
+  const dot = document.getElementById('ibSyncDot');
+  const txt = document.getElementById('ibSyncText');
+  dot.className = 'dot' + (kind==='busy'?' busy':kind==='err'?' err':'');
+  txt.textContent = text;
+}
+
+/* ---------------------------------------------------------------------
+   Firebase live listener
+--------------------------------------------------------------------- */
+ibSetSyncStatus('busy','Connecting&hellip;');
+ibReceiptsRef.on('value', snap=>{
+  const val = snap.val() || {};
+  ibAllRecords = Object.keys(val).map(k=>{
+    const r = val[k];
+    return {
+      ...r,
+      _key: k,
+      createdAt: r.createdAt ? new Date(r.createdAt) : null,
+      confirmedAt: r.confirmedAt ? new Date(r.confirmedAt) : null
+    };
+  });
+  ibSetSyncStatus('ok','Connected');
+  ibRenderAll();
+}, err=>{
+  console.error(err);
+  ibSetSyncStatus('err','Connection error: '+err.message);
+});
+
+ibUploadsRef.limitToLast(1).on('value', snap=>{
+  const val = snap.val();
+  if(!val) return;
+  const entry = Object.values(val)[0];
+  document.getElementById('ibLastUploadLine').style.display='inline';
+  document.getElementById('ibLastUploadTime').textContent =
+    new Date(entry.uploadedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
+    + ' (' + entry.imported + ' lines)';
+});
+
+/* ---------------------------------------------------------------------
+   Filtering & controls
+--------------------------------------------------------------------- */
+document.querySelectorAll('#ibGranularityToggle .seg-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    ibGranularity = btn.dataset.granularity;
+    document.querySelectorAll('#ibGranularityToggle .seg-btn').forEach(b=>b.classList.toggle('active', b===btn));
+    ibRenderAll();
+  });
+});
+document.getElementById('ibRangeFilter').addEventListener('change', e=>{
+  ibRangeMode = e.target.value;
+  document.getElementById('ibDateRangeInputs').classList.toggle('show', ibRangeMode==='custom');
+  ibRenderAll();
+});
+document.getElementById('ibDateFrom').addEventListener('change', ibRenderAll);
+document.getElementById('ibDateTo').addEventListener('change', ibRenderAll);
+document.getElementById('ibSearchBox').addEventListener('input', e=>{
+  ibSearchTerm = e.target.value.trim().toLowerCase();
+  safeRender('inbound table', ()=>ibRenderTable(ibCachedRangeGroups));
+});
+
+// Filters HU groups by their receivedAt date (the "dock" event) — mirrors
+// the Outbound tab's filterGroupsByRange. HUs still sitting in the GR Zone
+// (status 'In GR Zone') are always shown regardless of range — they're
+// open, actionable backlog, not a finished number for some past day. Rolling
+// windows always end at the start of today, so today's partial numbers
+// never show under Yesterday/7/30 by default.
+function ibFilterByRange(groups){
+  if(ibRangeMode==='all') return groups;
+
+  const todayStart = new Date();
+  todayStart.setHours(0,0,0,0);
+
+  if(ibRangeMode==='custom'){
+    const fromVal = document.getElementById('ibDateFrom').value;
+    const toVal = document.getElementById('ibDateTo').value;
+    if(!fromVal && !toVal) return groups;
+    const from = fromVal ? new Date(fromVal+'T00:00:00') : null;
+    const to = toVal ? new Date(toVal+'T23:59:59') : null;
+    return groups.filter(g=>{
+      if(g.status==='In GR Zone') return true;
+      if(!g.receivedAt) return false;
+      if(from && g.receivedAt < from) return false;
+      if(to && g.receivedAt > to) return false;
+      return true;
+    });
+  }
+
+  if(ibRangeMode==='yesterday'){
+    const yStart = new Date(todayStart);
+    yStart.setDate(yStart.getDate()-1);
+    return groups.filter(g=>{
+      if(g.status==='In GR Zone') return true;
+      if(!g.receivedAt) return false;
+      return g.receivedAt >= yStart && g.receivedAt < todayStart;
+    });
+  }
+
+  // rolling windows: '7' or '30' — N days ending yesterday (today excluded)
+  const cutoff = new Date(todayStart.getTime() - Number(ibRangeMode)*24*3600*1000);
+  return groups.filter(g=>{
+    if(g.status==='In GR Zone') return true;
+    if(!g.receivedAt) return false;
+    return g.receivedAt >= cutoff && g.receivedAt < todayStart;
+  });
+}
+
+/* ---------------------------------------------------------------------
+   Aggregation: group line items into HU (Handling Unit) records
+--------------------------------------------------------------------- */
+function ibGroupByHU(items){
+  const map = new Map();
+  for(const r of items){
+    if(!map.has(r.destHU)) map.set(r.destHU, []);
+    map.get(r.destHU).push(r);
+  }
+  const groups = [];
+  const now = new Date();
+  for(const [hu, lines] of map.entries()){
+    const receivedRows = lines.filter(l=>l.activity==='INTL' && l.whseProcessType===3040);
+    if(receivedRows.length===0) continue; // no receipt on file for this HU — nothing to report
+
+    const putawayRows = lines.filter(l=>l.activity==='PTWY' && l.whseProcessType===1010 && l.destBin && l.destBin!==IB_RECEIVE_BIN);
+
+    const receivedTimes = receivedRows.map(l=>l.confirmedAt).filter(isValidDate);
+    const receivedAt = receivedTimes.length ? new Date(Math.min(...receivedTimes)) : null;
+    const receivedQty = receivedRows.reduce((s,l)=>s+(l.actualQty||0),0);
+    const product = receivedRows.map(l=>l.product).find(Boolean) || null;
+    const productDesc = receivedRows.map(l=>l.productDesc).find(Boolean) || null;
+    const warehouseOrder = lines.map(l=>l.warehouseOrder).find(Boolean) || null;
+    const receivedBy = [...new Set(receivedRows.map(l=>l.confirmedBy).filter(Boolean))].join(', ');
+
+    let putawayAt = null, putawayBin = null, putawayBy = '', bayType = null;
+    if(putawayRows.length){
+      const sorted = [...putawayRows].filter(l=>isValidDate(l.confirmedAt)).sort((a,b)=>b.confirmedAt-a.confirmedAt);
+      if(sorted.length){
+        putawayAt = sorted[0].confirmedAt;
+        putawayBin = sorted[0].destBin;
+        bayType = classifyBay(putawayBin);
+      }
+      putawayBy = [...new Set(putawayRows.map(l=>l.confirmedBy).filter(Boolean))].join(', ');
+    }
+
+    const status = putawayAt ? 'Putaway Complete' : 'In GR Zone';
+    const dockToStockMin = (receivedAt && putawayAt) ? minutesBetween(receivedAt, putawayAt) : null;
+    const dwellMin = (receivedAt && !putawayAt) ? minutesBetween(receivedAt, now) : null;
+
+    let slaStatus = 'N/A', slaElapsedMin = null;
+    if(receivedAt){
+      if(putawayAt){
+        slaElapsedMin = minutesBetweenExcludingSundays(receivedAt, putawayAt);
+        slaStatus = (slaElapsedMin!==null && slaElapsedMin<=IB_SLA_MINUTES) ? 'Met' : 'Breached';
+      } else {
+        slaElapsedMin = minutesBetweenExcludingSundays(receivedAt, now);
+        slaStatus = (slaElapsedMin!==null && slaElapsedMin>IB_SLA_MINUTES) ? 'At Risk' : 'Pending';
+      }
+    }
+
+    groups.push({
+      hu, product, productDesc, receivedQty, receivedAt, receivedBy, warehouseOrder,
+      status, putawayAt, putawayBin, putawayBy, bayType,
+      dockToStockMin, dwellMin, slaStatus, slaElapsedMin,
+      lineCount: receivedRows.length
+    });
+  }
+  return groups;
+}
+
+/* ---------------------------------------------------------------------
+   Render: orchestrator
+--------------------------------------------------------------------- */
+function ibRenderAll(){
+  document.getElementById('ibRecordCount').textContent = ibAllRecords.length.toLocaleString();
+  const allGroups = ibGroupByHU(ibAllRecords);
+  document.getElementById('ibHuCount').textContent = allGroups.length.toLocaleString();
+
+  const rangeGroups = ibFilterByRange(allGroups);
+  ibCachedRangeGroups = rangeGroups;
+  const backlogGroups = allGroups.filter(g=>g.status==='In GR Zone'); // always live, not range-filtered
+
+  safeRender('inbound KPIs', ()=>ibRenderKPIs(rangeGroups, backlogGroups));
+  safeRender('inbound charts', ()=>ibRenderCharts(rangeGroups, backlogGroups));
+  safeRender('inbound table', ()=>ibRenderTable(rangeGroups));
+}
+
+/* ---------------------------------------------------------------------
+   KPI cards
+--------------------------------------------------------------------- */
+// Builds the small drill-down table shown inside the KPI modal for any
+// GR-Zone-backlog-flavored card (Currently in GR Zone / Oldest / SLA Breached).
+function ibModalTableHtml(groups){
+  if(!groups.length) return '<div style="color:var(--text-faint);padding:10px 0 4px;">No matching HUs.</div>';
+  return `<div style="overflow-x:auto;"><table><thead><tr>
+      <th>HU</th><th>SKU</th><th>Description</th><th>Qty</th><th>Received</th><th>Received By</th>
+      <th>Status</th><th>Putaway Bin</th><th>Waiting / Dock&rarr;Stock</th>
+    </tr></thead><tbody>${groups.map(g=>`
+      <tr>
+        <td>${g.hu}</td>
+        <td>${g.product||'&mdash;'}</td>
+        <td style="white-space:normal;max-width:260px;">${g.productDesc||'&mdash;'}</td>
+        <td>${g.receivedQty.toLocaleString()}</td>
+        <td>${formatDateTime(g.receivedAt)}</td>
+        <td>${g.receivedBy||'&mdash;'}</td>
+        <td>${g.status==='Putaway Complete' ? '<span class="badge complete">Putaway Complete</span>' : '<span class="badge progress">In GR Zone</span>'}</td>
+        <td>${g.putawayBin||'&mdash;'}</td>
+        <td>${g.status==='Putaway Complete' ? formatDuration(g.dockToStockMin) : (g.dwellMin!==null ? formatDuration(g.dwellMin)+' so far' : '&mdash;')}</td>
+      </tr>
+    `).join('')}</tbody></table></div>`;
+}
+
+function ibRenderKPIs(groups, backlogGroups){
+  const grid = document.getElementById('ibKpiGrid');
+
+  const completed = groups.filter(g=>g.status==='Putaway Complete');
+  const avgDockToStock = average(completed.map(g=>g.dockToStockMin).filter(v=>v!==null && v>=0));
+
+  const resolved = groups.filter(g=>g.slaStatus==='Met' || g.slaStatus==='Breached');
+  const slaMet = resolved.filter(g=>g.slaStatus==='Met').length;
+  const slaPct = resolved.length ? Math.round((slaMet/resolved.length)*1000)/10 : null;
+
+  const totalLines = groups.reduce((s,g)=>s+g.lineCount,0);
+  const totalUnits = groups.reduce((s,g)=>s+g.receivedQty,0);
+  const avgUnitsPerLine = totalLines ? Math.round((totalUnits/totalLines)*10)/10 : null;
+
+  const putawayRate = groups.length ? Math.round((completed.length/groups.length)*1000)/10 : null;
+
+  const backlogUnits = backlogGroups.reduce((s,g)=>s+g.receivedQty,0);
+  const backlogAvgAge = average(backlogGroups.map(g=>g.dwellMin).filter(v=>v!==null && v>=0));
+  const backlogOldestFirst = [...backlogGroups].sort((a,b)=>(b.dwellMin||0)-(a.dwellMin||0));
+  const oldest = backlogOldestFirst[0] || null;
+  const breachedGroups = backlogOldestFirst.filter(g=>g.dwellMin!==null && g.dwellMin>IB_SLA_MINUTES);
+
+  const receivedDayCounts = {};
+  groups.forEach(g=>{ if(g.receivedAt){ const k=ibPeriodKey(g.receivedAt); receivedDayCounts[k]=(receivedDayCounts[k]||0)+1; } });
+  const receivedDayVals = Object.values(receivedDayCounts);
+  const avgReceivedPerPeriod = receivedDayVals.length ? Math.round((receivedDayVals.reduce((a,b)=>a+b,0)/receivedDayVals.length)*10)/10 : null;
+
+  const putawayDayCounts = {};
+  completed.forEach(g=>{ if(g.putawayAt){ const k=ibPeriodKey(g.putawayAt); putawayDayCounts[k]=(putawayDayCounts[k]||0)+1; } });
+  const putawayDayVals = Object.values(putawayDayCounts);
+  const avgPutawayPerPeriod = putawayDayVals.length ? Math.round((putawayDayVals.reduce((a,b)=>a+b,0)/putawayDayVals.length)*10)/10 : null;
+
+  const cards = [
+    {label:'Dock to Stock (Avg)', value: formatDuration(avgDockToStock), sub: completed.length+' completed HU'+(completed.length===1?'':'s')+' in range', accent:'var(--info)'},
+    {label:'Dock to Stock SLA', value: slaPct!==null ? slaPct+'%' : '&mdash;', sub: slaPct!==null ? (resolved.length-slaMet)+' breached (5hr SLA)' : 'no resolved HUs', accent: slaPct!==null && slaPct<95 ? 'var(--bad)' : 'var(--good)'},
+    {label:'Lines Received', value: totalLines.toLocaleString(), sub: totalUnits.toLocaleString()+' units received', accent:'var(--accent)'},
+    {label:'Units Received', value: totalUnits.toLocaleString(), sub: avgUnitsPerLine!==null ? avgUnitsPerLine+' avg per line' : '&mdash;', accent:'var(--accent)'},
+    {label:'Putaway Completion Rate', value: putawayRate!==null ? putawayRate+'%' : '&mdash;', sub: completed.length+' of '+groups.length+' HUs in range', accent: putawayRate!==null && putawayRate<90 ? 'var(--warn)' : 'var(--good)'},
+    {label:'Currently in GR Zone', value: backlogGroups.length.toLocaleString(), sub: backlogUnits.toLocaleString()+' units \u2014 live, all-time', accent: backlogGroups.length>0 ? 'var(--warn)' : 'var(--good)',
+      modalTitle: 'Currently in GR Zone \u2014 '+backlogGroups.length.toLocaleString()+' HU'+(backlogGroups.length===1?'':'s')+' (oldest first)',
+      modalBody: ibModalTableHtml(backlogOldestFirst)},
+    {label:'Avg GR Zone Age', value: formatDuration(backlogAvgAge), sub:'current backlog, live', accent:'var(--info)'},
+    {label:'Oldest in GR Zone', value: oldest ? formatDuration(oldest.dwellMin) : '&mdash;', sub: oldest ? (oldest.product||oldest.hu) : 'GR Zone is empty', accent: oldest && oldest.dwellMin>IB_SLA_MINUTES ? 'var(--bad)' : 'var(--warn)',
+      modalTitle: 'GR Zone Backlog \u2014 Oldest First',
+      modalBody: ibModalTableHtml(backlogOldestFirst)},
+    {label:'SLA Breached (Live)', value: breachedGroups.length.toLocaleString(), sub:'over 5hr, still not putaway', accent: breachedGroups.length>0 ? 'var(--bad)' : 'var(--good)',
+      modalTitle: 'SLA Breached \u2014 '+breachedGroups.length.toLocaleString()+' HU'+(breachedGroups.length===1?'':'s')+' over 5hr, still in GR Zone',
+      modalBody: ibModalTableHtml(breachedGroups)},
+    {label:'Received Lines / '+ibGranularityLabel(), value: avgReceivedPerPeriod!==null ? avgReceivedPerPeriod : '&mdash;', sub:'average over range', accent:'var(--accent)'},
+    {label:'Putaway Lines / '+ibGranularityLabel(), value: avgPutawayPerPeriod!==null ? avgPutawayPerPeriod : '&mdash;', sub:'average over range', accent:'var(--accent)'}
+  ];
+
+  grid.innerHTML = cards.map((c,i)=>`
+    <div class="kpi${c.modalBody?' clickable':''}" style="--kpi-accent:${c.accent}"${c.modalBody?` data-card-idx="${i}"`:''}>
+      <div class="label">${c.label}</div>
+      <div class="value">${c.value}</div>
+      <div class="sub">${c.sub}</div>
+    </div>
+  `).join('');
+
+  grid.querySelectorAll('[data-card-idx]').forEach(el=>{
+    const c = cards[Number(el.dataset.cardIdx)];
+    el.addEventListener('click', ()=> openKpiModal(c.modalTitle, c.modalBody));
+  });
+
+  const otherBayCount = completed.length - completed.filter(g=>g.bayType==='Low Bay'||g.bayType==='High Bay'||g.bayType==='High Value').length;
+  const noteEl = document.getElementById('ibBayNote');
+  noteEl.textContent = otherBayCount > 0
+    ? otherBayCount.toLocaleString()+' completed putaway'+(otherBayCount===1?'':'s')+' in this range landed in a bin outside the aisle 1\u201323 scheme (blank, cages, etc.) and are excluded from the Bay Split figures below.'
+    : '';
+}
+
+/* ---------------------------------------------------------------------
+   Charts
+--------------------------------------------------------------------- */
+function ibRenderCharts(groups, backlogGroups){
+  ibUpdateChartTitles();
+  if(typeof Chart === 'undefined'){
+    document.querySelectorAll('#tab-inbound .chart-holder').forEach(el=>{
+      el.innerHTML = '<div style="padding:20px;color:var(--text-faint);font-size:12px;">Chart library failed to load from CDN — check your network/firewall and reload.</div>';
+    });
+    throw new Error('Chart.js did not load (global "Chart" is undefined)');
+  }
+  ibRenderReceivedHourlyChart(groups);
+  ibRenderDockToStockChart(groups);
+  ibRenderSlaChart(groups);
+  ibRenderPutawayHourlyChart(groups);
+  ibRenderTopPutawayChart(groups);
+  ibRenderReceivedVolumeChart(groups);
+  ibRenderUnitsReceivedChart(groups);
+  ibRenderAgingChart(backlogGroups);
+  ibRenderBaySplitChart(groups);
+  ibRenderDockDistributionChart(groups);
+}
+
+function ibUpdateChartTitles(){
+  const g = ibGranularityLabel();
+  document.getElementById('ibTitleDockToStock').textContent = 'Dock to Stock (Avg) by '+g;
+  document.getElementById('ibTitleSla').textContent = 'Dock to Stock SLA Adherence by '+g;
+  document.getElementById('ibTitleReceivedVolume').textContent = 'Received Lines by '+g;
+  document.getElementById('ibTitleUnitsReceived').textContent = 'Units Received by '+g;
+}
+
+function ibRenderReceivedHourlyChart(groups){
+  const hours = new Array(24).fill(0);
+  groups.forEach(g=>{ if(isValidDate(g.receivedAt)) hours[g.receivedAt.getHours()]++; });
+  ibDestroyChart('receivedHourly');
+  const opts = baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}});
+  ibCharts.receivedHourly = new Chart(document.getElementById('ibChartReceivedHourly'), {
+    type:'line',
+    data:{ labels: hours.map((_,h)=>formatHour12(h)),
+           datasets:[{ data:hours, borderColor:'#3d9fe8', backgroundColor:'rgba(61,159,232,0.15)', tension:0.3, fill:true }]},
+    options: opts
+  });
+}
+
+function ibRenderDockToStockChart(groups){
+  const byPeriod = {};
+  groups.forEach(g=>{
+    if(g.status!=='Putaway Complete' || !g.putawayAt || g.dockToStockMin===null || g.dockToStockMin<0) return;
+    const k = ibPeriodKey(g.putawayAt);
+    if(!byPeriod[k]) byPeriod[k] = [];
+    byPeriod[k].push(g.dockToStockMin);
+  });
+  const labels = Object.keys(byPeriod).sort();
+  const data = labels.map(k=>average(byPeriod[k]));
+  ibDestroyChart('dockToStock');
+  const opts = baseChartOptions({y:{beginAtZero:true, ticks:{callback:v=>formatDuration(v)}}});
+  opts.plugins.tooltip = { callbacks:{ label: ctx => 'Avg: '+(ctx.parsed.y===null?'\u2014':formatDuration(ctx.parsed.y)) } };
+  ibCharts.dockToStock = new Chart(document.getElementById('ibChartDockToStock'), {
+    type:'line',
+    data:{ labels: labels.map(l=>ibFormatPeriodLabel(l)), datasets:[
+      { label:'Avg Dock\u2192Stock', data, borderColor:'#3d9fe8', backgroundColor:'rgba(61,159,232,0.15)', tension:0.3, fill:true, spanGaps:true }
+    ]},
+    options: opts
+  });
+}
+
+function ibRenderSlaChart(groups){
+  const byPeriod = {};
+  groups.forEach(g=>{
+    if(g.slaStatus!=='Met' && g.slaStatus!=='Breached') return;
+    if(!g.putawayAt) return;
+    const k = ibPeriodKey(g.putawayAt);
+    if(!byPeriod[k]) byPeriod[k] = {met:0, total:0};
+    byPeriod[k].total++;
+    if(g.slaStatus==='Met') byPeriod[k].met++;
+  });
+  const labels = Object.keys(byPeriod).sort();
+  const data = labels.map(k=>{
+    const d = byPeriod[k];
+    return d.total ? Math.round((d.met/d.total)*1000)/10 : null;
+  });
+  ibDestroyChart('sla');
+  const step = labelSkipStep(labels.length);
+  const opts = baseChartOptions({y:{beginAtZero:true, suggestedMax:112, max:112, ticks:{callback:v=>v<=100?v+'%':'', stepSize:20}}});
+  opts.layout = {padding:{top:20}};
+  opts.plugins.tooltip = { callbacks:{ label: ctx => {
+    const k = labels[ctx.dataIndex];
+    const d = byPeriod[k];
+    return ctx.parsed.y===null ? 'no completed HUs' : ctx.parsed.y+'% ('+d.met+'/'+d.total+')';
+  }}};
+  opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:(v,ctx)=> (v===null || ctx.dataIndex % step !== 0) ? '' : v+'%'};
+  ibCharts.sla = new Chart(document.getElementById('ibChartSla'), {
+    type:'bar',
+    data:{ labels: labels.map(l=>ibFormatPeriodLabel(l)), datasets:[{ data, backgroundColor:'#2fbf71', borderRadius:4, maxBarThickness:36 }]},
+    options: opts
+  });
+}
+
+function ibRenderPutawayHourlyChart(groups){
+  const hours = new Array(24).fill(0);
+  groups.forEach(g=>{ if(isValidDate(g.putawayAt)) hours[g.putawayAt.getHours()]++; });
+  ibDestroyChart('putawayHourly');
+  const opts = baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}});
+  ibCharts.putawayHourly = new Chart(document.getElementById('ibChartPutawayHourly'), {
+    type:'line',
+    data:{ labels: hours.map((_,h)=>formatHour12(h)),
+           datasets:[{ data:hours, borderColor:'#2fbf71', backgroundColor:'rgba(47,191,113,0.15)', tension:0.3, fill:true }]},
+    options: opts
+  });
+}
+
+function ibRenderTopPutawayChart(groups){
+  const counts = {};
+  groups.forEach(g=>{ if(g.status==='Putaway Complete' && g.putawayBy){ g.putawayBy.split(', ').forEach(u=>{ if(u) counts[u]=(counts[u]||0)+1; }); } });
+  const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  ibDestroyChart('topPutaway');
+  const opts = baseChartOptions({x:{beginAtZero:true, ticks:{precision:0}}}, false, true);
+  opts.layout = {padding:{right:26}};
+  opts.plugins.datalabels = {display:true, anchor:'end', align:'right', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:v=>v};
+  ibCharts.topPutaway = new Chart(document.getElementById('ibChartTopPutaway'), {
+    type:'bar',
+    data:{ labels: sorted.map(s=>s[0]), datasets:[{ data: sorted.map(s=>s[1]), backgroundColor:'#e2231a', borderRadius:4, maxBarThickness:18 }]},
+    options: opts
+  });
+}
+
+function ibRenderReceivedVolumeChart(groups){
+  const byPeriod = {};
+  groups.forEach(g=>{ if(g.receivedAt){ const k=ibPeriodKey(g.receivedAt); byPeriod[k]=(byPeriod[k]||0)+g.lineCount; } });
+  const labels = Object.keys(byPeriod).sort();
+  const data = labels.map(k=>byPeriod[k]);
+  ibDestroyChart('receivedVolume');
+  const step = labelSkipStep(labels.length);
+  const opts = baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}});
+  opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:(v,ctx)=> ctx.dataIndex % step === 0 ? v : ''};
+  ibCharts.receivedVolume = new Chart(document.getElementById('ibChartReceivedVolume'), {
+    type:'bar',
+    data:{ labels: labels.map(l=>ibFormatPeriodLabel(l)), datasets:[{ data, backgroundColor:'#e2231a', borderRadius:4, maxBarThickness:36 }]},
+    options: opts
+  });
+}
+
+function ibRenderUnitsReceivedChart(groups){
+  const byPeriod = {};
+  groups.forEach(g=>{ if(g.receivedAt){ const k=ibPeriodKey(g.receivedAt); byPeriod[k]=(byPeriod[k]||0)+g.receivedQty; } });
+  const labels = Object.keys(byPeriod).sort();
+  const data = labels.map(k=>byPeriod[k]);
+  ibDestroyChart('unitsReceived');
+  const opts = baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}});
+  ibCharts.unitsReceived = new Chart(document.getElementById('ibChartUnitsReceived'), {
+    type:'line',
+    data:{ labels: labels.map(l=>ibFormatPeriodLabel(l)), datasets:[
+      { data, borderColor:'#a78bfa', backgroundColor:'rgba(167,139,250,0.15)', tension:0.3, fill:true }
+    ]},
+    options: opts
+  });
+}
+
+// Live snapshot — always the full current backlog, not filtered by the date-range control above.
+function ibRenderAgingChart(backlogGroups){
+  const buckets = ['0\u20131hr','1\u20132hr','2\u20133hr','3\u20134hr','4\u20135hr','5hr+'];
+  const counts = new Array(6).fill(0);
+  backlogGroups.forEach(g=>{
+    if(g.dwellMin===null) return;
+    const hrs = g.dwellMin/60;
+    let idx = Math.floor(hrs);
+    if(idx > 5) idx = 5;
+    if(idx < 0) idx = 0;
+    counts[idx]++;
+  });
+  ibDestroyChart('aging');
+  const opts = baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}});
+  opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:v=>v>0?v:''};
+  const colors = ['#2fbf71','#2fbf71','#e8a33d','#e8a33d','#e2231a','#e2231a'];
+  ibCharts.aging = new Chart(document.getElementById('ibChartAging'), {
+    type:'bar',
+    data:{ labels: buckets, datasets:[{ data: counts, backgroundColor: colors, borderRadius:4, maxBarThickness:48 }]},
+    options: opts
+  });
+}
+
+function ibRenderBaySplitChart(groups){
+  const completed = groups.filter(g=>g.status==='Putaway Complete');
+  const low = completed.filter(g=>g.bayType==='Low Bay').length;
+  const high = completed.filter(g=>g.bayType==='High Bay').length;
+  const hv = completed.filter(g=>g.bayType==='High Value').length;
+  const total = low + high + hv;
+  const data = [low, high, hv];
+  ibDestroyChart('baySplit');
+  ibCharts.baySplit = new Chart(document.getElementById('ibChartBaySplit'), {
+    type:'doughnut',
+    data:{
+      labels:['Low Bay','High Bay','High Value'],
+      datasets:[{ data, backgroundColor:['#2fbf71','#e8a33d','#a78bfa'], borderColor:'#122A47', borderWidth:2 }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ display:true, position:'bottom', labels:{boxWidth:10, padding:16, color:'#93a8c4'} },
+        tooltip:{ callbacks:{ label: ctx => {
+          const pct = total ? Math.round((ctx.parsed/total)*1000)/10 : 0;
+          return ctx.label+': '+pct+'% ('+ctx.parsed.toLocaleString()+' putaways)';
+        }}},
+        datalabels:{
+          display:true, color:'#0a1626', font:{weight:700, size:11},
+          formatter:(v)=> total ? Math.round((v/total)*1000)/10+'%' : ''
+        }
+      }
+    }
+  });
+}
+
+function ibRenderDockDistributionChart(groups){
+  const buckets = ['<1hr','1\u20132hr','2\u20133hr','3\u20134hr','4\u20135hr','5hr+'];
+  const counts = new Array(6).fill(0);
+  groups.forEach(g=>{
+    if(g.status!=='Putaway Complete' || g.dockToStockMin===null || g.dockToStockMin<0) return;
+    const hrs = g.dockToStockMin/60;
+    let idx = Math.floor(hrs);
+    if(idx > 5) idx = 5;
+    counts[idx]++;
+  });
+  ibDestroyChart('dockDistribution');
+  const opts = baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}});
+  opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:v=>v>0?v:''};
+  const colors = ['#2fbf71','#2fbf71','#2fbf71','#e8a33d','#e8a33d','#e2231a'];
+  ibCharts.dockDistribution = new Chart(document.getElementById('ibChartDockDistribution'), {
+    type:'bar',
+    data:{ labels: buckets, datasets:[{ data: counts, backgroundColor: colors, borderRadius:4, maxBarThickness:48 }]},
+    options: opts
+  });
+}
+
+/* ---------------------------------------------------------------------
+   Table
+--------------------------------------------------------------------- */
+document.querySelectorAll('#tab-inbound thead th').forEach(th=>{
+  th.addEventListener('click', ()=>{
+    const key = th.dataset.ibkey;
+    if(ibSortKey===key){ ibSortDir = ibSortDir==='asc'?'desc':'asc'; }
+    else { ibSortKey = key; ibSortDir = 'desc'; }
+    safeRender('inbound table', ()=>ibRenderTable(ibCachedRangeGroups));
+  });
+});
+
+function ibRenderTable(rangeGroups){
+  let groups = rangeGroups;
+
+  if(ibSearchTerm){
+    groups = groups.filter(g=>{
+      const hay = [g.hu, g.product, g.productDesc, g.warehouseOrder, g.receivedBy, g.putawayBy].join(' ').toLowerCase();
+      return hay.includes(ibSearchTerm);
+    });
+  }
+
+  groups = [...groups].sort((a,b)=>{
+    let av = a[ibSortKey], bv = b[ibSortKey];
+    if(av instanceof Date) av = av.getTime()||0;
+    if(bv instanceof Date) bv = bv.getTime()||0;
+    if(av===null||av===undefined) av = ibSortDir==='asc' ? Infinity : -Infinity;
+    if(bv===null||bv===undefined) bv = ibSortDir==='asc' ? Infinity : -Infinity;
+    if(typeof av==='string') av = av.toLowerCase();
+    if(typeof bv==='string') bv = bv.toLowerCase();
+    if(av<bv) return ibSortDir==='asc'?-1:1;
+    if(av>bv) return ibSortDir==='asc'?1:-1;
+    return 0;
+  });
+
+  document.querySelectorAll('#tab-inbound thead th').forEach(th=>{
+    th.classList.remove('sorted','sorted-asc');
+    if(th.dataset.ibkey===ibSortKey) th.classList.add(ibSortDir==='asc'?'sorted-asc':'sorted');
+  });
+
+  ibLastRenderedGroups = groups;
+
+  document.getElementById('ibTableMeta').textContent =
+    groups.length.toLocaleString() + ' HU' + (groups.length===1?'':'s') +
+    (ibRangeMode!=='all' ? ' in selected range' : '');
+
+  const tbody = document.getElementById('ibTableBody');
+  const emptyState = document.getElementById('ibEmptyState');
+
+  if(groups.length===0){
+    tbody.innerHTML = '';
+    emptyState.style.display = 'block';
+    return;
+  }
+  emptyState.style.display = 'none';
+
+  tbody.innerHTML = groups.map(g=>{
+    const statusBadge = g.status==='Putaway Complete'
+      ? '<span class="badge complete">Putaway Complete</span>'
+      : '<span class="badge progress">In GR Zone</span>';
+    const slaBadgeClass = g.slaStatus==='Met' ? 'sla-met' : g.slaStatus==='Breached' ? 'sla-breached' : g.slaStatus==='At Risk' ? 'sla-risk' : '';
+    const slaBadge = slaBadgeClass ? `<span class="badge ${slaBadgeClass}">SLA ${g.slaStatus}</span>` : '';
+    return `
+      <tr>
+        <td>${g.hu}</td>
+        <td>${g.product||'&mdash;'}</td>
+        <td style="white-space:normal;max-width:260px;">${g.productDesc||'&mdash;'}</td>
+        <td>${g.receivedQty.toLocaleString()}</td>
+        <td>${formatDateTime(g.receivedAt)}</td>
+        <td>${g.receivedBy||'&mdash;'}</td>
+        <td>${statusBadge}${slaBadge}</td>
+        <td>${formatDateTime(g.putawayAt)}</td>
+        <td>${g.putawayBy||'&mdash;'}</td>
+        <td>${g.putawayBin||'&mdash;'}</td>
+        <td>${g.bayType||'&mdash;'}</td>
+        <td>${g.status==='Putaway Complete' ? formatDuration(g.dockToStockMin) : (g.dwellMin!==null ? formatDuration(g.dwellMin)+' so far' : '&mdash;')}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+/* ---------------------------------------------------------------------
+   Export to Excel
+--------------------------------------------------------------------- */
+document.getElementById('ibExportBtn').addEventListener('click', ibExportTableToExcel);
+
+function ibExportTableToExcel(){
+  if(typeof XLSX === 'undefined'){
+    ibSetSyncStatus('err', 'Excel export library failed to load from CDN — check your network/firewall and reload.');
+    return;
+  }
+  if(ibLastRenderedGroups.length===0){
+    ibSetSyncStatus('err', 'Nothing to export — no HUs match the current filters.');
+    return;
+  }
+
+  const rows = ibLastRenderedGroups.map(g=>({
+    'HU': g.hu,
+    'SKU': g.product,
+    'Description': g.productDesc,
+    'Warehouse Order': g.warehouseOrder,
+    'Qty Received': g.receivedQty,
+    'Received At': isValidDate(g.receivedAt) ? g.receivedAt : '',
+    'Received By': g.receivedBy,
+    'Status': g.status,
+    'Putaway At': isValidDate(g.putawayAt) ? g.putawayAt : '',
+    'Putaway By': g.putawayBy,
+    'Putaway Bin': g.putawayBin,
+    'Bay Type': g.bayType,
+    'Dock\u2192Stock (min)': g.dockToStockMin ?? '',
+    'Currently Waiting (min)': g.dwellMin ?? '',
+    'SLA Status': g.slaStatus
+  }));
+
+  const sheet = XLSX.utils.json_to_sheet(rows, {cellDates:true});
+  sheet['!cols'] = [
+    {wch:14},{wch:12},{wch:32},{wch:16},{wch:12},{wch:18},{wch:14},
+    {wch:16},{wch:18},{wch:14},{wch:12},{wch:11},{wch:14},{wch:16},{wch:11}
+  ];
+  const headerRow = Object.keys(rows[0]||{});
+  ['Received At','Putaway At'].forEach(col=>{
+    const colIdx = headerRow.indexOf(col);
+    if(colIdx===-1) return;
+    for(let r=0;r<rows.length;r++){
+      const addr = XLSX.utils.encode_cell({r:r+1, c:colIdx});
+      if(sheet[addr] && sheet[addr].t==='d') sheet[addr].z = 'mm/dd/yyyy hh:mm AM/PM';
+    }
+  });
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, sheet, 'Inbound Lines');
+
+  const rangeSuffix = ibRangeMode==='all' ? 'all-time'
+    : ibRangeMode==='yesterday' ? 'yesterday'
+    : ibRangeMode==='custom' ? 'custom-range'
+    : 'last-'+ibRangeMode+'-days';
+  const today = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, 'whitsett-inbound_'+rangeSuffix+'_'+today+'.xlsx');
+}
+
+/* ---------------------------------------------------------------------
+   Combined upload — one uploaded file is parsed independently by both
+   the Outbound parser (parseSapExport, requires a Pull header ID) and
+   the Inbound parser (ibParseSapExport, requires Activity INTL/PTWY),
+   since the current SAP export is a single unified Warehouse Task
+   extract covering both. Each side only writes to Firebase if it found
+   matching rows, so uploading a file that happens to contain only one
+   side's activity (e.g. an older outbound-only export) still works
+   fine — the other side is just reported as "no matching rows," not
+   an error. Triggered from either tab's Upload button; updates the
+   status line on both tabs so it's clear from wherever you're standing.
+--------------------------------------------------------------------- */
+async function combinedUploadFromFile(file){
+  setSyncStatus('busy','Reading file\u2026');
+  ibSetSyncStatus('busy','Reading file\u2026');
+
+  let ob = null, obErr = null;
+  try{ ob = await parseSapExport(file); }catch(err){ obErr = err; }
+
+  let ib = null, ibErr = null;
+  try{ ib = await ibParseSapExport(file); }catch(err){ ibErr = err; }
+
+  if(obErr && ibErr){
+    const msg = 'Upload failed: '+obErr.message;
+    setSyncStatus('err', msg);
+    ibSetSyncStatus('err', msg);
+    return;
+  }
+
+  const parts = [];
+  const now = new Date().toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+
+  if(ob){
+    const keys = Object.keys(ob.updates);
+    if(keys.length){
+      await lineItemsRef.update(ob.updates);
+      await uploadsRef.push({ fileName:file.name, uploadedAt:new Date().toISOString(),
+        totalRows:ob.totalRows, skippedZero:ob.skippedZero, skippedIncomplete:ob.skippedIncomplete, imported:ob.imported });
+      parts.push('Outbound: '+ob.imported+' line'+(ob.imported===1?'':'s'));
+      document.getElementById('lastUploadLine').style.display='inline';
+      document.getElementById('lastUploadTime').innerHTML = now+' ('+ob.imported+' lines, '+ob.skippedZero+' zero-qty skipped)';
+    } else {
+      parts.push('Outbound: no matching rows');
+    }
+  } else if(obErr){
+    parts.push('Outbound: skipped ('+obErr.message+')');
+  }
+
+  if(ib){
+    const keys = Object.keys(ib.updates);
+    if(keys.length){
+      await ibReceiptsRef.update(ib.updates);
+      await ibUploadsRef.push({ fileName:file.name, uploadedAt:new Date().toISOString(),
+        totalRows:ib.totalRows, skippedNotInbound:ib.skippedNotInbound, skippedOtherProcess:ib.skippedOtherProcess,
+        skippedZero:ib.skippedZero, skippedIncomplete:ib.skippedIncomplete, imported:ib.imported });
+      parts.push('Inbound: '+ib.imported+' line'+(ib.imported===1?'':'s'));
+      document.getElementById('ibLastUploadLine').style.display='inline';
+      document.getElementById('ibLastUploadTime').innerHTML = now+' ('+ib.imported+' lines)';
+    } else {
+      parts.push('Inbound: no matching rows');
+    }
+  } else if(ibErr){
+    parts.push('Inbound: skipped ('+ibErr.message+')');
+  }
+
+  const summary = parts.join('  \u2014  ');
+  setSyncStatus('ok', summary);
+  ibSetSyncStatus('ok', summary);
+}
+
+/* ---------------------------------------------------------------------
+   Reset All Data — wipes both tabs' data (Outbound + Inbound, plus
+   their upload logs) so the dashboard can start from a fresh upload.
+   Reuses the same password as line-item deletion. Deliberately only
+   touches this dashboard's own Firebase nodes — cycle count data lives
+   in a separate node in the same project and is never touched.
+--------------------------------------------------------------------- */
+async function resetAllDataPrompt(){
+  const pw = prompt('This permanently deletes ALL Outbound and Inbound data on this dashboard (cycle count data is untouched). Enter the password to continue:');
+  if(pw === null) return; // cancelled
+  if(pw !== DELETE_LINE_PASSWORD){
+    alert('Incorrect password. No data was deleted.');
+    return;
+  }
+  if(!confirm('Are you absolutely sure? This deletes every Outbound Pull ID and every Inbound HU record, plus upload history, on BOTH tabs. This cannot be undone.')) return;
+
+  setSyncStatus('busy','Deleting all data\u2026');
+  ibSetSyncStatus('busy','Deleting all data\u2026');
+  try{
+    await Promise.all([
+      lineItemsRef.remove(),
+      uploadsRef.remove(),
+      ibReceiptsRef.remove(),
+      ibUploadsRef.remove()
+    ]);
+    setSyncStatus('ok','All data cleared \u2014 ready for a fresh upload');
+    ibSetSyncStatus('ok','All data cleared \u2014 ready for a fresh upload');
+    document.getElementById('lastUploadLine').style.display='none';
+    document.getElementById('ibLastUploadLine').style.display='none';
+  }catch(err){
+    console.error(err);
+    setSyncStatus('err','Failed to clear data: '+err.message);
+    ibSetSyncStatus('err','Failed to clear data: '+err.message);
+  }
+}
+document.getElementById('resetAllDataBtn').addEventListener('click', resetAllDataPrompt);
+document.getElementById('ibResetAllDataBtn').addEventListener('click', resetAllDataPrompt);
 
 /* ---------------------------------------------------------------------
    Site tabs — Outbound / Inbound / Inventory, one file, active tab
@@ -1731,11 +2912,15 @@ function showSiteTab(tab){
     a.classList.toggle('active', a.dataset.tab===tab);
   });
   document.title = TAB_TITLES[tab] || 'Whitsett KPI Dashboard';
+  // Charts built while their tab was hidden render into a zero-size canvas;
+  // resize them now that the container has real dimensions again.
   if(tab==='outbound'){
-    // Charts built while this tab was hidden render into a zero-size canvas;
-    // resize them now that the container has real dimensions again.
     requestAnimationFrame(()=>{
       Object.values(charts).forEach(c=>{ try{ c.resize(); }catch(e){} });
+    });
+  } else if(tab==='inbound'){
+    requestAnimationFrame(()=>{
+      Object.values(ibCharts).forEach(c=>{ try{ c.resize(); }catch(e){} });
     });
   }
 }

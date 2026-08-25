@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Inventory Discrepancy Report — Whitsett, NC</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&family=Barlow+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -116,6 +117,26 @@
   .btn-new:hover { background: var(--red-hover); box-shadow: 0 2px 8px rgba(200,16,46,0.35); }
   .btn-new svg { flex-shrink: 0; }
 
+  .btn-export {
+    background: var(--white);
+    color: var(--navy);
+    border: 1.5px solid var(--gray-200);
+    border-radius: var(--radius);
+    padding: 7.5px 14px;
+    font-family: 'Barlow', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    letter-spacing: 0.01em;
+    transition: background var(--transition), border-color var(--transition);
+    white-space: nowrap;
+  }
+  .btn-export:hover { background: var(--gray-100); border-color: var(--gray-400); }
+  .btn-export svg { flex-shrink: 0; }
+
   /* ── MAIN LAYOUT ── */
   .main { max-width: 1400px; margin: 0 auto; padding: 24px 28px 48px; }
 
@@ -178,7 +199,7 @@
   /* ── CHARTS ROW ── */
   .charts-row {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 16px;
     margin-bottom: 24px;
   }
@@ -601,6 +622,9 @@
   .toast.success { background: #065F46; }
   .toast.error { background: var(--red); }
 
+  @media (max-width: 1200px) {
+    .charts-row { grid-template-columns: 1fr 1fr; }
+  }
   @media (max-width: 900px) {
     .kpi-strip { grid-template-columns: repeat(3, 1fr); }
     .charts-row { grid-template-columns: 1fr; }
@@ -703,6 +727,10 @@
         <div class="donut-legend" id="donutLegend"></div>
       </div>
     </div>
+    <div class="chart-card">
+      <div class="chart-title">Issues by Picker</div>
+      <div class="bar-chart" id="pickerChart"></div>
+    </div>
   </div>
 
   <!-- TOOLBAR -->
@@ -727,6 +755,10 @@
       <option value="Broken Seal (Open Carton)">Broken Seal</option>
     </select>
     <div class="record-count" id="recordCount"></div>
+    <button class="btn-export" onclick="exportToExcel()" title="Export the currently filtered table rows to an Excel file">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+      Export to Excel
+    </button>
   </div>
 
   <!-- TABLE -->
@@ -1157,6 +1189,7 @@ function renderKpis() {
 function renderCharts() {
   renderTypeChart();
   renderDonut();
+  renderPickerChart();
 }
 
 function renderTypeChart() {
@@ -1237,6 +1270,85 @@ function renderDonut() {
       <div class="legend-name">${key}</div>
       <div class="legend-pct">${count} <span style="color:var(--gray-400);font-weight:400">(${Math.round(count/total*100)}%)</span></div>
     </div>`).join('');
+}
+
+function renderPickerChart() {
+  const counts = {};
+  allRecords.forEach(r => {
+    const name = (r.picker || '').trim();
+    if (!name) return; // only picking-related issues have a picker
+    counts[name] = (counts[name] || 0) + 1;
+  });
+  const container = document.getElementById('pickerChart');
+  const entries = Object.entries(counts);
+  if (entries.length === 0) {
+    container.innerHTML = `<div style="font-size:12px;color:var(--gray-400);padding:8px 0">No picking-related issues reported yet.</div>`;
+    return;
+  }
+  const sorted = entries.sort((a,b) => b[1]-a[1]).slice(0, 12);
+  const max = sorted[0]?.[1] || 1;
+  const palette = ['#0070C0','#C8102E','#D97706','#7C3AED','#065F46','#00204E','#B45309','#1B6B3A','#5B21B6','#0EA5A5','#9333EA','#EA580C'];
+  container.innerHTML = sorted.map(([name, count], i) => `
+    <div class="bar-row">
+      <div class="bar-label" title="${esc(name)}">${esc(name)}</div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:${(count/max*100)}%;background:${palette[i % palette.length]}">
+          <span class="bar-count">${count}</span>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+// ───────────── EXPORT TO EXCEL ─────────────
+function exportToExcel() {
+  if (typeof XLSX === 'undefined') {
+    showToast('Excel export library failed to load. Check your connection.', 'error');
+    return;
+  }
+  const rows = filtered.length ? filtered : allRecords;
+  if (!rows.length) {
+    showToast('No records to export.', 'error');
+    return;
+  }
+
+  const data = rows.map(r => ({
+    'ID': r.id,
+    'Reporter': r.reporter || '',
+    'Date': formatDate(r.date),
+    'Issue Type': typeToLabel(r.issueType),
+    'PO Number': r.poNumber || '',
+    'Inbound Delivery': r.inboundDelivery || '',
+    'Picker': r.picker || '',
+    'Pull ID': r.pullId || '',
+    'Location': r.location || '',
+    'Warehouse Task #': r.warehouseTask || '',
+    'SKU': r.sku || '',
+    'Quantity': r.quantity || '',
+    'Category': r.category || '',
+    'Notes': r.notes || '',
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(data);
+  ws['!cols'] = [
+    {wch:6},{wch:18},{wch:12},{wch:22},{wch:14},{wch:16},
+    {wch:16},{wch:10},{wch:16},{wch:16},{wch:16},{wch:10},{wch:20},{wch:40}
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Inventory Discrepancies');
+
+  const stamp = new Date().toISOString().split('T')[0];
+  XLSX.writeFile(wb, `Inventory_Discrepancy_Report_${stamp}.xlsx`);
+  showToast(`Exported ${rows.length} record${rows.length === 1 ? '' : 's'} to Excel.`, 'success');
+}
+
+function typeToLabel(type) {
+  const map = {
+    'This is a receiving issue.': 'Receiving Issue',
+    'This issue is with existing inventory.': 'Existing Inventory',
+    'This issue was found during picking.': 'Found During Picking',
+    'This issue was found during an audit.': 'Found During Audit',
+  };
+  return map[type] || (type || '');
 }
 
 // ───────────── DETAIL MODAL ─────────────

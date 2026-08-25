@@ -353,6 +353,83 @@
   .modal-actions{display:flex; justify-content:flex-end; gap:10px; margin-top:22px;}
   .error-msg{color:var(--red-bright); font-size:0.82rem; margin-top:4px; display:none;}
 
+  .modal-wide{max-width:620px;}
+  .bulk-rows{display:flex; flex-direction:column; gap:10px; max-height:42vh; overflow-y:auto; padding-right:4px; margin-bottom:8px;}
+  .bulk-row{
+    display:grid;
+    grid-template-columns:1fr 1fr auto;
+    gap:8px;
+    align-items:center;
+  }
+  .bulk-row input[type=text]{
+    width:100%;
+    background:var(--navy-deep);
+    border:1px solid var(--navy-border);
+    color:var(--text);
+    padding:9px 11px;
+    border-radius:6px;
+    font-size:0.9rem;
+    font-family:'Barlow', sans-serif;
+  }
+  .bulk-row input[type=text]:focus{outline:none; border-color:var(--red);}
+  .bulk-row-remove{
+    width:32px; height:32px;
+    display:flex; align-items:center; justify-content:center;
+    border:1px solid var(--navy-border);
+    background:var(--navy-deep);
+    color:var(--text-faint);
+    border-radius:6px;
+    cursor:pointer;
+    font-size:1rem;
+    line-height:1;
+    transition:all .15s;
+  }
+  .bulk-row-remove:hover{border-color:var(--red); color:var(--red-bright);}
+  .bulk-row-remove:disabled{opacity:0.35; cursor:not-allowed;}
+  .bulk-row-header{
+    display:grid;
+    grid-template-columns:1fr 1fr auto;
+    gap:8px;
+    font-size:0.72rem;
+    font-weight:600;
+    text-transform:uppercase;
+    letter-spacing:0.05em;
+    color:var(--text-dim);
+    margin-bottom:8px;
+  }
+  .bulk-row-header .spacer{width:32px;}
+  .add-row-btn{
+    background:none;
+    border:1px dashed var(--navy-border);
+    color:var(--text-dim);
+    padding:9px 12px;
+    border-radius:6px;
+    cursor:pointer;
+    font-size:0.85rem;
+    width:100%;
+    text-align:center;
+    transition:all .15s;
+    margin-bottom:16px;
+  }
+  .add-row-btn:hover{border-color:var(--red); color:var(--red-bright);}
+  .bulk-fill-row{display:flex; gap:8px; margin:-4px 0 16px; align-items:center;}
+  .bulk-fill-row input[type=text]{
+    flex:1;
+    background:var(--navy-deep);
+    border:1px solid var(--navy-border);
+    color:var(--text);
+    padding:8px 11px;
+    border-radius:6px;
+    font-size:0.85rem;
+    font-family:'Barlow', sans-serif;
+  }
+  .bulk-fill-row .btn{padding:8px 12px; font-size:0.82rem;}
+  .bulk-count-badge{
+    font-size:0.76rem;
+    color:var(--text-faint);
+    margin-top:2px;
+  }
+
   /* Confirm modal */
   .confirm-body{font-size:0.95rem; color:var(--text-dim); line-height:1.5; margin-bottom:4px;}
   .confirm-body strong{color:var(--text);}
@@ -500,6 +577,7 @@
       <button class="btn btn-tab tab-btn" id="tabArchiveBtn">Archive</button>
     </div>
     <button class="btn" id="exportExcelBtn" style="display:none;">&#128190; Export to Excel</button>
+    <button class="btn" id="openBulkModalBtn">+ Bulk Assign</button>
     <button class="btn btn-primary" id="openAddModalBtn">+ Add Warehouse Order</button>
   </div>
 </header>
@@ -556,6 +634,51 @@
     <div class="modal-actions">
       <button class="btn btn-ghost" id="cancelAddBtn">Cancel</button>
       <button class="btn btn-primary" id="saveAddBtn">Add Warehouse Order</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bulk Assign Modal -->
+<div class="modal-overlay" id="bulkModalOverlay">
+  <div class="modal modal-wide">
+    <h2>Bulk Assign Warehouse Orders</h2>
+    <p class="sub">Attach several Warehouse Orders to a Pull ID and assign a picker to each in one go.</p>
+
+    <div class="field">
+      <label for="bulkPullIdInput">Pull ID</label>
+      <input type="text" id="bulkPullIdInput" list="pullIdList" placeholder="e.g. P-10432" autocomplete="off">
+      <div class="field-hint" id="bulkPullIdHint">New Pull ID — set its type below. Its timer starts now.</div>
+    </div>
+
+    <div class="field" id="bulkTypeField">
+      <label>Type of Pull</label>
+      <div class="type-toggle">
+        <div class="type-opt active" data-type="Manual" id="bulkTypeManualOpt">Manual<span class="sla-note">1 hour SLA</span></div>
+        <div class="type-opt" data-type="Auto" id="bulkTypeAutoOpt">Auto<span class="sla-note">5 hour SLA</span></div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Warehouse Orders &amp; Pickers</label>
+      <div class="bulk-fill-row">
+        <input type="text" id="bulkFillPickerInput" list="pickerList" placeholder="Fill all empty picker fields with..." autocomplete="off">
+        <button class="btn" id="bulkFillPickerBtn" type="button">Fill All</button>
+      </div>
+      <div class="bulk-row-header">
+        <span>Warehouse Order #</span>
+        <span>Assigned Picker</span>
+        <span class="spacer"></span>
+      </div>
+      <div class="bulk-rows" id="bulkRowsContainer"></div>
+      <button class="add-row-btn" id="bulkAddRowBtn" type="button">+ Add Another Row</button>
+      <div class="bulk-count-badge" id="bulkCountBadge"></div>
+    </div>
+
+    <div class="error-msg" id="bulkErrorMsg"></div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="cancelBulkBtn">Cancel</button>
+      <button class="btn btn-primary" id="saveBulkBtn">Assign All</button>
     </div>
   </div>
 </div>
@@ -1191,6 +1314,208 @@ document.getElementById('saveAddBtn').addEventListener('click', async () => {
     saveBtn.disabled = false;
     cancelBtn.disabled = false;
     saveBtn.textContent = 'Add Warehouse Order';
+  }
+});
+
+/* ---- Bulk Assign modal ---- */
+const bulkModalOverlay = document.getElementById('bulkModalOverlay');
+const bulkRowsContainer = document.getElementById('bulkRowsContainer');
+let bulkSelectedType = 'Manual';
+let bulkMatchedExistingPullKey = null;
+let bulkRowSeq = 0;
+
+function createBulkRow(){
+  bulkRowSeq++;
+  const id = bulkRowSeq;
+  const row = document.createElement('div');
+  row.className = 'bulk-row';
+  row.dataset.rowId = id;
+  row.innerHTML = `
+    <input type="text" class="bulk-wo-input" placeholder="e.g. WO-88213" autocomplete="off">
+    <input type="text" class="bulk-picker-input" list="pickerList" placeholder="Picker name" autocomplete="off">
+    <button type="button" class="bulk-row-remove" title="Remove row">&times;</button>
+  `;
+  row.querySelector('.bulk-row-remove').addEventListener('click', () => {
+    row.remove();
+    updateBulkRemoveState();
+    updateBulkCountBadge();
+  });
+  bulkRowsContainer.appendChild(row);
+  updateBulkRemoveState();
+  updateBulkCountBadge();
+  return row;
+}
+
+function updateBulkRemoveState(){
+  const rows = bulkRowsContainer.querySelectorAll('.bulk-row');
+  rows.forEach(r => {
+    r.querySelector('.bulk-row-remove').disabled = rows.length <= 1;
+  });
+}
+
+function updateBulkCountBadge(){
+  const rows = bulkRowsContainer.querySelectorAll('.bulk-row');
+  const filled = [...rows].filter(r =>
+    r.querySelector('.bulk-wo-input').value.trim() && r.querySelector('.bulk-picker-input').value.trim()
+  ).length;
+  document.getElementById('bulkCountBadge').textContent =
+    `${rows.length} row${rows.length!==1?'s':''} · ${filled} ready to assign`;
+}
+bulkRowsContainer.addEventListener('input', updateBulkCountBadge);
+
+document.getElementById('bulkAddRowBtn').addEventListener('click', () => {
+  const row = createBulkRow();
+  row.querySelector('.bulk-wo-input').focus();
+});
+
+document.getElementById('bulkFillPickerBtn').addEventListener('click', () => {
+  const fillVal = document.getElementById('bulkFillPickerInput').value.trim();
+  if (!fillVal) return;
+  bulkRowsContainer.querySelectorAll('.bulk-row').forEach(r => {
+    const pInput = r.querySelector('.bulk-picker-input');
+    if (!pInput.value.trim()) pInput.value = fillVal;
+  });
+  updateBulkCountBadge();
+});
+
+function updateBulkTypeUI(){
+  document.getElementById('bulkTypeManualOpt').classList.toggle('active', bulkSelectedType==='Manual');
+  document.getElementById('bulkTypeAutoOpt').classList.toggle('active', bulkSelectedType==='Auto');
+  document.getElementById('bulkTypeField').querySelector('.type-toggle').style.display = 'flex';
+  const locked = document.getElementById('bulkTypeField').querySelector('.type-locked');
+  if (locked) locked.remove();
+}
+document.getElementById('bulkTypeManualOpt').addEventListener('click', () => { bulkSelectedType='Manual'; updateBulkTypeUI(); });
+document.getElementById('bulkTypeAutoOpt').addEventListener('click', () => { bulkSelectedType='Auto'; updateBulkTypeUI(); });
+
+document.getElementById('bulkPullIdInput').addEventListener('input', e => {
+  const val = e.target.value.trim().toLowerCase();
+  const match = Object.entries(pullIds).find(([k,p]) => !p.closedAt && String(p.pullId).toLowerCase() === val);
+  const hint = document.getElementById('bulkPullIdHint');
+  const typeField = document.getElementById('bulkTypeField');
+  if (match){
+    bulkMatchedExistingPullKey = match[0];
+    bulkSelectedType = match[1].type;
+    const inQA = !!(match[1].cevaQAAt || match[1].lenovoQAAt);
+    hint.textContent = inQA
+      ? `Existing Pull ID already in QA · type locked to ${match[1].type} (${match[1].type==='Auto'?5:1}h SLA) · adding these WOs will reopen it for picking and reset CEVA/Lenovo QA sign-off`
+      : `Existing open Pull ID · type locked to ${match[1].type} (${match[1].type==='Auto'?5:1}h SLA) · timer already running`;
+    typeField.querySelector('.type-toggle').style.display = 'none';
+    let locked = typeField.querySelector('.type-locked');
+    if (!locked){
+      locked = document.createElement('div');
+      locked.className = 'type-locked';
+      typeField.appendChild(locked);
+    }
+    locked.textContent = `${match[1].type} · ${match[1].type==='Auto'?5:1} hour SLA`;
+  } else {
+    bulkMatchedExistingPullKey = null;
+    hint.textContent = 'New Pull ID — set its type below. Its timer starts now.';
+    typeField.querySelector('.type-toggle').style.display = 'flex';
+    const locked = typeField.querySelector('.type-locked');
+    if (locked) locked.remove();
+  }
+});
+
+document.getElementById('openBulkModalBtn').addEventListener('click', () => {
+  document.getElementById('bulkPullIdInput').value = '';
+  document.getElementById('bulkFillPickerInput').value = '';
+  document.getElementById('bulkErrorMsg').style.display = 'none';
+  bulkSelectedType = 'Manual';
+  bulkMatchedExistingPullKey = null;
+  updateBulkTypeUI();
+  document.getElementById('bulkPullIdHint').textContent = 'New Pull ID — set its type below. Its timer starts now.';
+  bulkRowsContainer.innerHTML = '';
+  bulkRowSeq = 0;
+  createBulkRow();
+  createBulkRow();
+  bulkModalOverlay.classList.add('open');
+  setTimeout(() => document.getElementById('bulkPullIdInput').focus(), 50);
+});
+document.getElementById('cancelBulkBtn').addEventListener('click', () => bulkModalOverlay.classList.remove('open'));
+bulkModalOverlay.addEventListener('click', e => { if (e.target === bulkModalOverlay) bulkModalOverlay.classList.remove('open'); });
+
+document.getElementById('saveBulkBtn').addEventListener('click', async () => {
+  const pullIdVal = document.getElementById('bulkPullIdInput').value.trim();
+  const errEl = document.getElementById('bulkErrorMsg');
+  const saveBtn = document.getElementById('saveBulkBtn');
+  const cancelBtn = document.getElementById('cancelBulkBtn');
+
+  if (!pullIdVal){
+    errEl.textContent = 'A Pull ID is required.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const rowEls = [...bulkRowsContainer.querySelectorAll('.bulk-row')];
+  const rows = rowEls.map(r => ({
+    el: r,
+    woNumber: r.querySelector('.bulk-wo-input').value.trim(),
+    assignedPicker: r.querySelector('.bulk-picker-input').value.trim()
+  }));
+
+  // Only keep rows where at least one field was touched; require both fields on those.
+  const touchedRows = rows.filter(r => r.woNumber || r.assignedPicker);
+  const incomplete = touchedRows.find(r => !r.woNumber || !r.assignedPicker);
+  if (touchedRows.length === 0){
+    errEl.textContent = 'Add at least one Warehouse Order # and picker.';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (incomplete){
+    incomplete.el.style.outline = '1px solid var(--red-bright)';
+    errEl.textContent = 'Every row needs both a Warehouse Order # and a picker.';
+    errEl.style.display = 'block';
+    return;
+  }
+  const woNumbers = touchedRows.map(r => r.woNumber.toLowerCase());
+  const dupe = woNumbers.find((w, i) => woNumbers.indexOf(w) !== i);
+  if (dupe){
+    errEl.textContent = `Duplicate Warehouse Order # in this batch: ${dupe}`;
+    errEl.style.display = 'block';
+    return;
+  }
+
+  errEl.style.display = 'none';
+  saveBtn.disabled = true;
+  cancelBtn.disabled = true;
+
+  const now = Date.now();
+  try {
+    let pullKey = bulkMatchedExistingPullKey;
+    if (!pullKey){
+      saveBtn.innerHTML = '<span class="inline-spinner"></span>Creating Pull ID...';
+      const pullRes = await postAction('addPullId', { pullId: pullIdVal, type: bulkSelectedType, createdAt: now });
+      pullKey = pullRes.key;
+    } else {
+      const existing = pullIds[pullKey];
+      if (existing && (existing.cevaQAAt || existing.lenovoQAAt)){
+        saveBtn.innerHTML = '<span class="inline-spinner"></span>Reopening Pull ID...';
+        await postAction('reopenPullId', { key: pullKey });
+      }
+    }
+
+    for (let i = 0; i < touchedRows.length; i++){
+      const r = touchedRows[i];
+      saveBtn.innerHTML = `<span class="inline-spinner"></span>Assigning ${i+1} of ${touchedRows.length}...`;
+      await postAction('addWarehouseOrder', {
+        pullIdKey: pullKey,
+        pullId: pullIdVal,
+        woNumber: r.woNumber,
+        assignedPicker: r.assignedPicker,
+        addedAt: now
+      });
+    }
+
+    await fetchData();
+    bulkModalOverlay.classList.remove('open');
+  } catch (err) {
+    errEl.textContent = 'Could not save: ' + err.message;
+    errEl.style.display = 'block';
+  } finally {
+    saveBtn.disabled = false;
+    cancelBtn.disabled = false;
+    saveBtn.textContent = 'Assign All';
   }
 });
 

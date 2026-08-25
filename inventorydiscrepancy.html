@@ -961,6 +961,10 @@
           <div class="form-section-title">Audit Details</div>
           <div class="form-grid">
             <div class="form-group">
+              <label class="form-label">Who was the picker?</label>
+              <input class="form-input" id="f_auditPicker" type="text" placeholder="Picker's name">
+            </div>
+            <div class="form-group">
               <label class="form-label">What is the Pull ID?</label>
               <input class="form-input" id="f_auditPullId" type="text" placeholder="e.g. 522">
             </div>
@@ -1662,11 +1666,12 @@ function openDetail(id) {
     </div>`;
   }
 
-  if (isAuditRecord && (r.pullId || r.datePulled)) {
+  if (isAuditRecord && (r.picker || r.pullId || r.datePulled)) {
     html += `
     <div class="detail-section">
       <div class="detail-section-label">Audit Details</div>
       <div class="detail-grid">
+        <div class="detail-field"><div class="detail-field-label">Picker</div>${val(r.picker)}</div>
         <div class="detail-field"><div class="detail-field-label">Pull ID</div>${val(r.pullId)}</div>
         <div class="detail-field"><div class="detail-field-label">Date Pulled</div>${val(formatDate(r.datePulled))}</div>
       </div>
@@ -1746,6 +1751,7 @@ async function submitForm(e) {
 
   const isAudit = document.getElementById('f_issueType').value === 'This issue was found during an audit.';
   const auditPullId = document.getElementById('f_auditPullId').value.trim();
+  const auditPicker = document.getElementById('f_auditPicker').value.trim();
 
   const record = {
     id: getNextId(),
@@ -1754,7 +1760,7 @@ async function submitForm(e) {
     issueType: document.getElementById('f_issueType').value,
     poNumber: document.getElementById('f_poNumber').value.trim(),
     inboundDelivery: document.getElementById('f_inboundDelivery').value.trim(),
-    picker: document.getElementById('f_picker').value.trim(),
+    picker: isAudit ? auditPicker : document.getElementById('f_picker').value.trim(),
     pullId: isAudit ? auditPullId : document.getElementById('f_pullId').value.trim(),
     datePulled: document.getElementById('f_datePulled').value,
     location: document.getElementById('f_location').value.trim(),

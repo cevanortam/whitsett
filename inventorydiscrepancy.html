@@ -33,6 +33,8 @@
     --packaging-bg: #F5F3FF;
     --seal: #065F46;
     --seal-bg: #ECFDF5;
+    --incorrectpart: #0D9488;
+    --incorrectpart-bg: #F0FDFA;
     --shadow-sm: 0 1px 3px rgba(0,0,20,0.08), 0 1px 2px rgba(0,0,20,0.04);
     --shadow-md: 0 4px 12px rgba(0,0,20,0.10), 0 2px 4px rgba(0,0,20,0.06);
     --shadow-lg: 0 12px 32px rgba(0,0,20,0.14);
@@ -427,6 +429,7 @@
   .cat-badge.damaged { background: var(--damaged-bg); color: var(--damaged); }
   .cat-badge.packaging { background: var(--packaging-bg); color: var(--packaging); }
   .cat-badge.seal { background: var(--seal-bg); color: var(--seal); }
+  .cat-badge.incorrectpart { background: var(--incorrectpart-bg); color: var(--incorrectpart); }
   .cat-badge.unknown { background: var(--gray-100); color: var(--gray-600); }
 
   .type-badge {
@@ -856,6 +859,7 @@
       <option value="Improper Packaging">Improper Packaging</option>
       <option value="Damaged Inventory">Damaged Inventory</option>
       <option value="Broken Seal (Open Carton)">Broken Seal</option>
+      <option value="Incorrect Part">Incorrect Part</option>
     </select>
     <div class="record-count" id="recordCount"></div>
     <button class="btn-export" onclick="exportToExcel()" title="Export the currently filtered table rows to an Excel file">
@@ -1005,6 +1009,7 @@
                 <option value="Damaged Inventory">Damaged Inventory</option>
                 <option value="Improper Packaging">Improper Packaging</option>
                 <option value="Broken Seal (Open Carton)">Broken Seal (Open Carton)</option>
+                <option value="Incorrect Part">Incorrect Part</option>
               </select>
               <span class="form-error" id="err_category"></span>
             </div>
@@ -1073,9 +1078,10 @@ const CATEGORY_COLORS = {
   'Improper Packaging': '#7C3AED',
   'Damaged Inventory': '#D97706',
   'Broken Seal (Open Carton)': '#065F46',
+  'Incorrect Part': '#0D9488',
   'Uncategorized': '#9AA5B4',
 };
-const CATEGORY_ORDER = ['Inventory Shortage','Inventory Overage','Improper Packaging','Damaged Inventory','Broken Seal (Open Carton)','Uncategorized'];
+const CATEGORY_ORDER = ['Inventory Shortage','Inventory Overage','Improper Packaging','Damaged Inventory','Broken Seal (Open Carton)','Incorrect Part','Uncategorized'];
 
 // ───────────── INIT ─────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -1889,6 +1895,7 @@ function catChip(cat) {
     'Damaged Inventory': ['damaged','Damaged'],
     'Improper Packaging': ['packaging','Packaging'],
     'Broken Seal (Open Carton)': ['seal','Broken Seal'],
+    'Incorrect Part': ['incorrectpart','Incorrect Part'],
   };
   const [cls, label] = map[cat] || ['unknown', cat || 'Uncategorized'];
   return `<span class="cat-badge ${cls}">${label}</span>`;

@@ -234,6 +234,78 @@
   .legend-name { font-size: 12px; color: var(--gray-600); flex: 1; }
   .legend-pct { font-size: 12px; font-weight: 600; color: var(--text); }
 
+  /* Trend chart */
+  .trend-row { margin-bottom: 24px; }
+  .chart-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .chart-title-row .chart-title { margin-bottom: 0; }
+  .trend-legend { display: flex; flex-wrap: wrap; gap: 12px; }
+  .trend-legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--gray-600); }
+  .trend-legend-dot { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
+  .trend-svg-wrap { overflow-x: auto; padding-bottom: 4px; }
+  .trend-bar-seg { transition: opacity var(--transition); cursor: pointer; }
+  .trend-bar-seg:hover { opacity: 0.75; }
+  .trend-empty { font-size: 12px; color: var(--gray-400); padding: 24px 0; text-align: center; }
+
+  /* ── PAGE FILTER BAR ── */
+  .page-filter-bar {
+    background: var(--navy);
+    border-radius: var(--radius-lg);
+    padding: 12px 18px;
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    color: #fff;
+  }
+  .page-filter-bar svg { flex-shrink: 0; opacity: 0.85; }
+  .page-filter-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: rgba(255,255,255,0.85);
+    white-space: nowrap;
+  }
+  .page-filter-bar .filter-select {
+    background: rgba(255,255,255,0.95);
+    min-width: 220px;
+  }
+  .page-filter-clear {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255,255,255,0.12);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: var(--radius);
+    padding: 6px 12px;
+    font-family: 'Barlow', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background var(--transition);
+  }
+  .page-filter-clear:hover { background: rgba(255,255,255,0.22); }
+  .page-filter-note {
+    font-size: 11px;
+    color: rgba(255,255,255,0.55);
+    margin-left: auto;
+    white-space: nowrap;
+  }
+  @media (max-width: 700px) {
+    .page-filter-note { display: none; }
+  }
+
   /* ── TOOLBAR ── */
   .toolbar {
     background: var(--white);
@@ -685,6 +757,24 @@
 <!-- MAIN -->
 <main class="main">
 
+  <!-- PAGE FILTER -->
+  <div class="page-filter-bar">
+    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+    <div class="page-filter-label">Filter by Issue Type</div>
+    <select class="filter-select" id="pageFilterType" onchange="applyPageFilter()">
+      <option value="">All Issue Types</option>
+      <option value="This is a receiving issue.">Receiving Issue</option>
+      <option value="This issue is with existing inventory.">Existing Inventory</option>
+      <option value="This issue was found during picking.">Found During Picking</option>
+      <option value="This issue was found during an audit.">Found During Audit</option>
+    </select>
+    <button class="page-filter-clear" id="pageFilterClear" onclick="clearPageFilter()" style="display:none">
+      Clear filter
+      <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <div class="page-filter-note">Applies to the KPIs, charts, and table below</div>
+  </div>
+
   <!-- KPI STRIP -->
   <div class="kpi-strip" id="kpiStrip">
     <div class="kpi-card active" data-cat="all" onclick="filterByKpi(this)">
@@ -733,13 +823,26 @@
     </div>
   </div>
 
+  <!-- TREND ROW -->
+  <div class="trend-row">
+    <div class="chart-card">
+      <div class="chart-title-row">
+        <div class="chart-title">Discrepancies by Day &amp; Category</div>
+        <div class="trend-legend" id="trendLegend"></div>
+      </div>
+      <div class="trend-svg-wrap" id="trendSvgWrap">
+        <svg id="trendSvg"></svg>
+      </div>
+    </div>
+  </div>
+
   <!-- TOOLBAR -->
   <div class="toolbar">
     <div class="search-wrap">
       <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
       <input class="search-input" id="searchInput" type="text" placeholder="Search by reporter, SKU, notes, location…" oninput="applyFilters()">
     </div>
-    <select class="filter-select" id="filterType" onchange="applyFilters()">
+    <select class="filter-select" id="filterType" onchange="handleToolbarTypeChange()">
       <option value="">All Issue Types</option>
       <option value="This is a receiving issue.">Receiving Issue</option>
       <option value="This issue is with existing inventory.">Existing Inventory</option>
@@ -854,6 +957,20 @@
           </div>
         </div>
 
+        <div class="form-section" id="section_audit" style="display:none">
+          <div class="form-section-title">Audit Details</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">What is the Pull ID?</label>
+              <input class="form-input" id="f_auditPullId" type="text" placeholder="e.g. 522">
+            </div>
+            <div class="form-group">
+              <label class="form-label">What date was it pulled?</label>
+              <input class="form-input" id="f_datePulled" type="date">
+            </div>
+          </div>
+        </div>
+
         <div class="form-section">
           <div class="form-section-title">Inventory Details</div>
           <div class="form-grid">
@@ -945,6 +1062,16 @@ let currentPage = 1;
 const PAGE_SIZE = 25;
 let activeCatFilter = '';
 let gasConnected = false;
+
+const CATEGORY_COLORS = {
+  'Inventory Shortage': '#C8102E',
+  'Inventory Overage': '#0070C0',
+  'Improper Packaging': '#7C3AED',
+  'Damaged Inventory': '#D97706',
+  'Broken Seal (Open Carton)': '#065F46',
+  'Uncategorized': '#9AA5B4',
+};
+const CATEGORY_ORDER = ['Inventory Shortage','Inventory Overage','Improper Packaging','Damaged Inventory','Broken Seal (Open Carton)','Uncategorized'];
 
 // ───────────── INIT ─────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -1046,6 +1173,38 @@ function getNextId() {
 }
 
 // ───────────── FILTERS & SORT ─────────────
+function getScopedRecords() {
+  const typeF = document.getElementById('filterType')?.value || '';
+  return typeF ? allRecords.filter(r => r.issueType === typeF) : allRecords;
+}
+
+function applyPageFilter() {
+  const val = document.getElementById('pageFilterType').value;
+  document.getElementById('filterType').value = val;
+  updatePageFilterClearBtn();
+  applyFilters();
+  renderKpis();
+  renderCharts();
+}
+
+function handleToolbarTypeChange() {
+  document.getElementById('pageFilterType').value = document.getElementById('filterType').value;
+  updatePageFilterClearBtn();
+  applyFilters();
+  renderKpis();
+  renderCharts();
+}
+
+function clearPageFilter() {
+  document.getElementById('pageFilterType').value = '';
+  applyPageFilter();
+}
+
+function updatePageFilterClearBtn() {
+  const val = document.getElementById('pageFilterType').value;
+  document.getElementById('pageFilterClear').style.display = val ? 'inline-flex' : 'none';
+}
+
 function applyFilters() {
   const q = document.getElementById('searchInput').value.trim().toLowerCase();
   const typeF = document.getElementById('filterType').value;
@@ -1173,12 +1332,13 @@ function goPage(p) {
 
 // ───────────── KPI RENDER ─────────────
 function renderKpis() {
+  const scoped = getScopedRecords();
   const cats = {};
-  allRecords.forEach(r => {
+  scoped.forEach(r => {
     cats[r.category] = (cats[r.category] || 0) + 1;
   });
-  document.getElementById('kpiTotal').textContent = allRecords.length;
-  document.getElementById('kpiTotalSub').textContent = 'All categories';
+  document.getElementById('kpiTotal').textContent = scoped.length;
+  document.getElementById('kpiTotalSub').textContent = scoped.length === allRecords.length ? 'All categories' : `Of ${allRecords.length} total`;
   document.getElementById('kpiShortage').textContent = cats['Inventory Shortage'] || 0;
   document.getElementById('kpiOverage').textContent = cats['Inventory Overage'] || 0;
   document.getElementById('kpiPackaging').textContent = cats['Improper Packaging'] || 0;
@@ -1190,11 +1350,12 @@ function renderCharts() {
   renderTypeChart();
   renderDonut();
   renderPickerChart();
+  renderTrendChart();
 }
 
 function renderTypeChart() {
   const counts = {};
-  allRecords.forEach(r => {
+  getScopedRecords().forEach(r => {
     const k = r.issueType || 'Unknown';
     counts[k] = (counts[k] || 0) + 1;
   });
@@ -1213,6 +1374,10 @@ function renderTypeChart() {
     'This issue was found during an audit.': 'Found During Audit',
   };
   const container = document.getElementById('typeChart');
+  if (sorted.length === 0) {
+    container.innerHTML = `<div class="trend-empty">No records match the current filter.</div>`;
+    return;
+  }
   container.innerHTML = sorted.map(([key, count]) => `
     <div class="bar-row">
       <div class="bar-label" title="${esc(key)}">${labels[key] || esc(key)}</div>
@@ -1225,21 +1390,21 @@ function renderTypeChart() {
 }
 
 function renderDonut() {
+  const scoped = getScopedRecords();
   const cats = {};
-  allRecords.forEach(r => {
+  scoped.forEach(r => {
     const k = r.category || 'Uncategorized';
     cats[k] = (cats[k] || 0) + 1;
   });
-  const colors = {
-    'Inventory Shortage': '#C8102E',
-    'Inventory Overage': '#0070C0',
-    'Improper Packaging': '#7C3AED',
-    'Damaged Inventory': '#D97706',
-    'Broken Seal (Open Carton)': '#065F46',
-    'Uncategorized': '#9AA5B4',
-  };
+  const colors = CATEGORY_COLORS;
   const total = Object.values(cats).reduce((s,v)=>s+v, 0);
   const sorted = Object.entries(cats).sort((a,b)=>b[1]-a[1]);
+
+  if (total === 0) {
+    document.getElementById('donutSvg').innerHTML = '';
+    document.getElementById('donutLegend').innerHTML = `<div class="trend-empty" style="padding:0">No records match the current filter.</div>`;
+    return;
+  }
 
   // SVG donut
   const cx = 65, cy = 65, r = 50, stroke = 22;
@@ -1274,7 +1439,7 @@ function renderDonut() {
 
 function renderPickerChart() {
   const counts = {};
-  allRecords.forEach(r => {
+  getScopedRecords().forEach(r => {
     const name = (r.picker || '').trim();
     if (!name) return; // only picking-related issues have a picker
     counts[name] = (counts[name] || 0) + 1;
@@ -1282,7 +1447,7 @@ function renderPickerChart() {
   const container = document.getElementById('pickerChart');
   const entries = Object.entries(counts);
   if (entries.length === 0) {
-    container.innerHTML = `<div style="font-size:12px;color:var(--gray-400);padding:8px 0">No picking-related issues reported yet.</div>`;
+    container.innerHTML = `<div style="font-size:12px;color:var(--gray-400);padding:8px 0">No picking-related issues match the current filter.</div>`;
     return;
   }
   const sorted = entries.sort((a,b) => b[1]-a[1]).slice(0, 12);
@@ -1296,6 +1461,97 @@ function renderPickerChart() {
           <span class="bar-count">${count}</span>
         </div>
       </div>
+    </div>`).join('');
+}
+
+// ───────────── TREND CHART (by day & category) ─────────────
+function renderTrendChart() {
+  const wrap = document.getElementById('trendSvgWrap');
+  const legendEl = document.getElementById('trendLegend');
+
+  // Ensure the svg element exists (in case a prior render swapped it for an empty-state message)
+  if (!document.getElementById('trendSvg')) {
+    wrap.innerHTML = '<svg id="trendSvg"></svg>';
+  }
+  const svg = document.getElementById('trendSvg');
+  const scoped = getScopedRecords();
+
+  if (!scoped.length) {
+    wrap.innerHTML = allRecords.length ? '<div class="trend-empty">No records match the current filter.</div>' : '<div class="trend-empty">No records yet.</div>';
+    legendEl.innerHTML = '';
+    return;
+  }
+
+  // Group counts by date -> category
+  const byDate = {};
+  scoped.forEach(r => {
+    const iso = String(r.date || '').match(/(\d{4})-(\d{2})-(\d{2})/);
+    const dateKey = iso ? iso[0] : 'Unknown';
+    const cat = r.category || 'Uncategorized';
+    if (!byDate[dateKey]) byDate[dateKey] = {};
+    byDate[dateKey][cat] = (byDate[dateKey][cat] || 0) + 1;
+  });
+
+  const dateKeys = Object.keys(byDate).filter(d => d !== 'Unknown').sort();
+  if (byDate['Unknown']) dateKeys.push('Unknown');
+
+  if (dateKeys.length === 0) {
+    wrap.innerHTML = '<div class="trend-empty">No dated records to chart.</div>';
+    legendEl.innerHTML = '';
+    return;
+  }
+
+  // Which categories actually appear, in fixed display order
+  const catsPresent = CATEGORY_ORDER.filter(c => dateKeys.some(d => byDate[d][c]));
+
+  // Layout
+  const barW = 26, barGap = 14, leftPad = 8, rightPad = 20, topPad = 16, bottomPad = 40;
+  const chartH = 190;
+  const maxTotal = Math.max(...dateKeys.map(d => Object.values(byDate[d]).reduce((s,v)=>s+v,0)), 1);
+  const width = leftPad + rightPad + dateKeys.length * (barW + barGap);
+  const height = topPad + chartH + bottomPad;
+
+  svg.setAttribute('viewBox', `0 0 ${Math.max(width, 320)} ${height}`);
+  svg.setAttribute('width', Math.max(width, 320));
+  svg.setAttribute('height', height);
+
+  let bars = '';
+  // gridlines
+  const gridLines = 4;
+  for (let i = 0; i <= gridLines; i++) {
+    const y = topPad + chartH - (chartH * i / gridLines);
+    const val = Math.round(maxTotal * i / gridLines);
+    bars += `<line x1="${leftPad}" y1="${y}" x2="${width - rightPad}" y2="${y}" stroke="#EEF1F5" stroke-width="1"/>`;
+    bars += `<text x="${leftPad}" y="${y - 3}" font-family="Barlow" font-size="9" fill="#9AA5B4">${val}</text>`;
+  }
+
+  dateKeys.forEach((d, i) => {
+    const x = leftPad + i * (barW + barGap);
+    let yCursor = topPad + chartH;
+    catsPresent.forEach(cat => {
+      const count = byDate[d][cat] || 0;
+      if (!count) return;
+      const segH = (count / maxTotal) * chartH;
+      yCursor -= segH;
+      const color = CATEGORY_COLORS[cat] || '#9AA5B4';
+      bars += `<rect class="trend-bar-seg" x="${x}" y="${yCursor}" width="${barW}" height="${segH}" fill="${color}" rx="2">
+        <title>${esc(cat)}: ${count} on ${esc(d === 'Unknown' ? 'Unknown date' : formatDate(d))}</title>
+      </rect>`;
+    });
+    const total = Object.values(byDate[d]).reduce((s,v)=>s+v,0);
+    if (total > 0) {
+      bars += `<text x="${x + barW/2}" y="${topPad + chartH - (total/maxTotal*chartH) - 5}" text-anchor="middle" font-family="Barlow" font-size="10" font-weight="600" fill="#5A6472">${total}</text>`;
+    }
+    const label = d === 'Unknown' ? 'Unk.' : d.slice(5).replace('-', '/');
+    bars += `<text x="${x + barW/2}" y="${topPad + chartH + 16}" text-anchor="middle" font-family="Barlow" font-size="10" fill="#5A6472" transform="rotate(45 ${x + barW/2} ${topPad + chartH + 16})">${label}</text>`;
+  });
+
+  svg.innerHTML = bars;
+
+  legendEl.innerHTML = catsPresent.map(cat => `
+    <div class="trend-legend-item">
+      <div class="trend-legend-dot" style="background:${CATEGORY_COLORS[cat] || '#9AA5B4'}"></div>
+      <span>${esc(cat)}</span>
     </div>`).join('');
 }
 
@@ -1320,6 +1576,7 @@ function exportToExcel() {
     'Inbound Delivery': r.inboundDelivery || '',
     'Picker': r.picker || '',
     'Pull ID': r.pullId || '',
+    'Date Pulled': r.datePulled ? formatDate(r.datePulled) : '',
     'Location': r.location || '',
     'Warehouse Task #': r.warehouseTask || '',
     'SKU': r.sku || '',
@@ -1331,7 +1588,7 @@ function exportToExcel() {
   const ws = XLSX.utils.json_to_sheet(data);
   ws['!cols'] = [
     {wch:6},{wch:18},{wch:12},{wch:22},{wch:14},{wch:16},
-    {wch:16},{wch:10},{wch:16},{wch:16},{wch:16},{wch:10},{wch:20},{wch:40}
+    {wch:16},{wch:10},{wch:12},{wch:16},{wch:16},{wch:16},{wch:10},{wch:20},{wch:40}
   ];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Inventory Discrepancies');
@@ -1392,13 +1649,26 @@ function openDetail(id) {
     </div>`;
   }
 
-  if (r.picker || r.pullId) {
+  const isAuditRecord = r.issueType === 'This issue was found during an audit.';
+
+  if (!isAuditRecord && (r.picker || r.pullId)) {
     html += `
     <div class="detail-section">
       <div class="detail-section-label">Picking Details</div>
       <div class="detail-grid">
         <div class="detail-field"><div class="detail-field-label">Picker</div>${val(r.picker)}</div>
         <div class="detail-field"><div class="detail-field-label">Pull ID</div>${val(r.pullId)}</div>
+      </div>
+    </div>`;
+  }
+
+  if (isAuditRecord && (r.pullId || r.datePulled)) {
+    html += `
+    <div class="detail-section">
+      <div class="detail-section-label">Audit Details</div>
+      <div class="detail-grid">
+        <div class="detail-field"><div class="detail-field-label">Pull ID</div>${val(r.pullId)}</div>
+        <div class="detail-field"><div class="detail-field-label">Date Pulled</div>${val(formatDate(r.datePulled))}</div>
       </div>
     </div>`;
   }
@@ -1418,8 +1688,10 @@ function handleTypeChange() {
   const val = document.getElementById('f_issueType').value;
   const showReceiving = val === 'This is a receiving issue.' || val === 'This issue was found during an audit.';
   const showPicking = val === 'This issue was found during picking.';
+  const showAudit = val === 'This issue was found during an audit.';
   document.getElementById('section_receiving').style.display = showReceiving ? 'block' : 'none';
   document.getElementById('section_picking').style.display = showPicking ? 'block' : 'none';
+  document.getElementById('section_audit').style.display = showAudit ? 'block' : 'none';
 }
 
 function openNewEntry() {
@@ -1427,6 +1699,7 @@ function openNewEntry() {
   document.getElementById('f_date').value = new Date().toISOString().split('T')[0];
   document.getElementById('section_receiving').style.display = 'none';
   document.getElementById('section_picking').style.display = 'none';
+  document.getElementById('section_audit').style.display = 'none';
   clearErrors();
   document.getElementById('formModalTitle').textContent = 'New Inventory Discrepancy';
   openModal('formModal');
@@ -1471,6 +1744,9 @@ async function submitForm(e) {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Submitting…';
 
+  const isAudit = document.getElementById('f_issueType').value === 'This issue was found during an audit.';
+  const auditPullId = document.getElementById('f_auditPullId').value.trim();
+
   const record = {
     id: getNextId(),
     reporter: document.getElementById('f_reporter').value.trim(),
@@ -1479,7 +1755,8 @@ async function submitForm(e) {
     poNumber: document.getElementById('f_poNumber').value.trim(),
     inboundDelivery: document.getElementById('f_inboundDelivery').value.trim(),
     picker: document.getElementById('f_picker').value.trim(),
-    pullId: document.getElementById('f_pullId').value.trim(),
+    pullId: isAudit ? auditPullId : document.getElementById('f_pullId').value.trim(),
+    datePulled: document.getElementById('f_datePulled').value,
     location: document.getElementById('f_location').value.trim(),
     warehouseTask: document.getElementById('f_warehouseTask').value.trim(),
     sku: document.getElementById('f_sku').value.trim(),

@@ -259,16 +259,28 @@
     border-bottom:1px solid var(--card-border-light);white-space:nowrap;
   }
   .modal-body tbody td{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,0.05);white-space:nowrap;}
+
+  .xs-kpi-grid{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+    gap:16px;margin-bottom:8px;
+  }
+  .xs-kpi{
+    background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius);
+    padding:22px 24px;position:relative;overflow:hidden;
+  }
+  .xs-kpi::before{
+    content:"";position:absolute;top:0;left:0;width:4px;height:100%;
+    background:var(--kpi-accent, var(--accent));
+  }
+  .xs-kpi .label{font-size:11px;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-faint);font-weight:700;}
+  .xs-kpi .value{font-size:32px;font-weight:800;margin-top:10px;line-height:1;}
+  .xs-kpi .sub{font-size:12px;color:var(--text-dim);margin-top:8px;}
+  .xs-kpi.placeholder{opacity:0.6;border-style:dashed;}
+  .xs-kpi.placeholder .value{font-size:20px;}
 </style>
 </head>
 <body>
 <div class="wrap">
-
-  <nav class="site-nav">
-    <a class="site-tab" data-tab="outbound" href="#outbound">Outbound</a>
-    <a class="site-tab" data-tab="inbound" href="#inbound">Inbound</a>
-    <a class="site-tab" data-tab="inventory" href="#inventory">Inventory</a>
-  </nav>
 
   <section id="tab-outbound" class="tab-page">
 
@@ -313,6 +325,13 @@
       <input type="file" id="fileInput" accept=".xlsx,.xls">
     </div>
   </header>
+
+  <nav class="site-nav">
+    <a class="site-tab" data-tab="summary" href="#summary">Executive Summary</a>
+    <a class="site-tab" data-tab="inbound" href="#inbound">Inbound</a>
+    <a class="site-tab" data-tab="inventory" href="#inventory">Inventory</a>
+    <a class="site-tab" data-tab="outbound" href="#outbound">Outbound</a>
+  </nav>
 
   <section class="kpi-grid" id="kpiGrid"></section>
   <div id="bayNote" style="font-size:12px;color:var(--text-faint);margin:-12px 0 24px;"></div>
@@ -422,6 +441,74 @@
 
   </section>
 
+  <section id="tab-summary" class="tab-page">
+    <header class="top">
+      <div>
+        <div class="brand">
+          <img class="brand-logo" src="https://www.cevalogistics.com/_ipx/w_1920&f_webp/images-spx/x_large_picture/CEVA_WhiteRed.png" alt="CEVA Logistics"
+               onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+          <div class="brand-mark" style="display:none;">CEVA</div>
+          <div>
+            <h1>Whitsett Executive Summary</h1>
+            <div class="sub">Cross-functional KPI snapshot &mdash; Whitsett, NC</div>
+          </div>
+        </div>
+      </div>
+      <div class="controls">
+        <div class="segmented" id="xsGranularityToggle">
+          <button type="button" class="seg-btn active" data-granularity="day">Day</button>
+          <button type="button" class="seg-btn" data-granularity="week">Week</button>
+          <button type="button" class="seg-btn" data-granularity="month">Month</button>
+          <button type="button" class="seg-btn" data-granularity="year">Year</button>
+        </div>
+        <select id="xsRangeFilter">
+          <option value="all">All time</option>
+          <option value="yesterday">Yesterday</option>
+          <option value="7">Last 7 days</option>
+          <option value="30" selected>Last 30 days</option>
+          <option value="custom">Custom range&hellip;</option>
+        </select>
+        <div class="date-range-inputs" id="xsDateRangeInputs">
+          <input type="date" id="xsDateFrom">
+          <span>&ndash;</span>
+          <input type="date" id="xsDateTo">
+        </div>
+      </div>
+    </header>
+
+    <nav class="site-nav">
+      <a class="site-tab" data-tab="summary" href="#summary">Executive Summary</a>
+      <a class="site-tab" data-tab="inbound" href="#inbound">Inbound</a>
+      <a class="site-tab" data-tab="inventory" href="#inventory">Inventory</a>
+      <a class="site-tab" data-tab="outbound" href="#outbound">Outbound</a>
+    </nav>
+
+    <section class="xs-kpi-grid" id="xsKpiGrid"></section>
+
+    <section class="charts-grid">
+      <div class="chart-card">
+        <h3 id="xsTitleFillRate">Fill Rate by Day</h3>
+        <div class="chart-note">Share of confirmed Outbound lines where actual qty matched target qty</div>
+        <div class="chart-holder"><canvas id="xsChartFillRate"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3 id="xsTitleDockToStock">Dock to Stock (Avg) by Day</h3>
+        <div class="chart-note">Share of completed Inbound HUs putaway within 5hr &mdash; Sundays excluded from the clock</div>
+        <div class="chart-holder"><canvas id="xsChartDockToStock"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3 id="xsTitleOnTime">On-Time Delivery by Day</h3>
+        <div class="chart-note">Auto (5hr SLA) vs. Manual (1hr SLA), Sundays excluded from the clock</div>
+        <div class="chart-holder"><canvas id="xsChartOnTime"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>Inventory Accuracy</h3>
+        <div class="chart-note">Will trend here once the Inventory tab is built out</div>
+        <div class="chart-holder" style="display:flex;align-items:center;justify-content:center;color:var(--text-faint);font-size:13px;">Coming Soon</div>
+      </div>
+    </section>
+  </section>
+
   <section id="tab-inbound" class="tab-page">
 
   <header class="top">
@@ -465,6 +552,13 @@
       <input type="file" id="ibFileInput" accept=".xlsx,.xls">
     </div>
   </header>
+
+  <nav class="site-nav">
+    <a class="site-tab" data-tab="summary" href="#summary">Executive Summary</a>
+    <a class="site-tab" data-tab="inbound" href="#inbound">Inbound</a>
+    <a class="site-tab" data-tab="inventory" href="#inventory">Inventory</a>
+    <a class="site-tab" data-tab="outbound" href="#outbound">Outbound</a>
+  </nav>
 
   <section class="kpi-grid" id="ibKpiGrid"></section>
   <div id="ibBayNote" style="font-size:12px;color:var(--text-faint);margin:-12px 0 24px;"></div>
@@ -590,6 +684,12 @@
         </div>
       </div>
     </header>
+    <nav class="site-nav">
+      <a class="site-tab" data-tab="summary" href="#summary">Executive Summary</a>
+      <a class="site-tab" data-tab="inbound" href="#inbound">Inbound</a>
+      <a class="site-tab" data-tab="inventory" href="#inventory">Inventory</a>
+      <a class="site-tab" data-tab="outbound" href="#outbound">Outbound</a>
+    </nav>
     <div class="placeholder-page">
       <div class="ph-icon">&#128230;</div>
       <h2>Coming Soon</h2>
@@ -997,6 +1097,7 @@ lineItemsRef.on('value', snap => {
   });
   setSyncStatus('ok','Connected');
   renderAll();
+  safeRender('executive summary', xsRenderAll);
 }, err=>{
   console.error(err);
   setSyncStatus('err','Connection error: '+err.message);
@@ -1035,52 +1136,57 @@ document.getElementById('searchBox').addEventListener('input', e=>{
   safeRender('table', ()=>renderTable(cachedRangeGroups));
 });
 
-// Filters Pull ID GROUPS by date range (not raw items) — this runs AFTER
-// grouping so a Pull ID's lines always travel together, and so an
-// in-progress Pull ID can be exempted from the date cutoff entirely: it
-// still shows up regardless of range, since it's actionable work, not a
-// finished number. Completed Pull IDs are subject to the selected range.
-// The rolling windows (Yesterday/7/30) always end at the start of today,
-// never including today itself — today's numbers are still in progress
-// and would read as an artificially low/incomplete day otherwise.
-function filterGroupsByRange(groups){
-  if(rangeMode==='all') return groups;
+// Shared date-range filter used by every tab's own range control (Outbound,
+// Inbound, and Executive Summary each pass their own mode/dates/field so
+// this logic — and its behavior — only needs to exist in one place. A group
+// whose status matches openStatusValue (still in progress / still in the GR
+// Zone) is exempt from the cutoff entirely: it's actionable work, not a
+// finished number for some past day. The rolling windows (Yesterday/7/30)
+// always end at the start of today, so today's partial numbers never show
+// by default.
+function computeRangeFilteredGroups(groups, mode, fromVal, toVal, dateField, openStatusValue){
+  if(mode==='all') return groups;
 
   const todayStart = new Date();
   todayStart.setHours(0,0,0,0);
 
-  if(rangeMode==='custom'){
-    const fromVal = document.getElementById('dateFrom').value;
-    const toVal = document.getElementById('dateTo').value;
+  if(mode==='custom'){
     if(!fromVal && !toVal) return groups;
     const from = fromVal ? new Date(fromVal+'T00:00:00') : null;
     const to = toVal ? new Date(toVal+'T23:59:59') : null;
     return groups.filter(g=>{
-      if(g.status==='In Progress') return true;
-      if(!g.createdAt) return false;
-      if(from && g.createdAt < from) return false;
-      if(to && g.createdAt > to) return false;
+      if(g.status===openStatusValue) return true;
+      const d = g[dateField];
+      if(!d) return false;
+      if(from && d < from) return false;
+      if(to && d > to) return false;
       return true;
     });
   }
 
-  if(rangeMode==='yesterday'){
+  if(mode==='yesterday'){
     const yStart = new Date(todayStart);
     yStart.setDate(yStart.getDate()-1);
     return groups.filter(g=>{
-      if(g.status==='In Progress') return true;
-      if(!g.createdAt) return false;
-      return g.createdAt >= yStart && g.createdAt < todayStart;
+      if(g.status===openStatusValue) return true;
+      const d = g[dateField];
+      return d && d >= yStart && d < todayStart;
     });
   }
 
   // rolling windows: '7' or '30' — N days ending yesterday (today excluded)
-  const cutoff = new Date(todayStart.getTime() - Number(rangeMode)*24*3600*1000);
+  const cutoff = new Date(todayStart.getTime() - Number(mode)*24*3600*1000);
   return groups.filter(g=>{
-    if(g.status==='In Progress') return true;
-    if(!g.createdAt) return false;
-    return g.createdAt >= cutoff && g.createdAt < todayStart;
+    if(g.status===openStatusValue) return true;
+    const d = g[dateField];
+    return d && d >= cutoff && d < todayStart;
   });
+}
+
+function filterGroupsByRange(groups){
+  const fromVal = document.getElementById('dateFrom').value;
+  const toVal = document.getElementById('dateTo').value;
+  return computeRangeFilteredGroups(groups, rangeMode, fromVal, toVal, 'createdAt', 'In Progress');
 }
 
 /* ---------------------------------------------------------------------
@@ -1334,6 +1440,7 @@ function renderCycleChart(groups){
     if(!byDay[k]) byDay[k] = { Auto:[], Manual:[] };
     if(g.createToConfirmMin!==null && g.createToConfirmMin>=0) byDay[k][g.pullType].push(g.createToConfirmMin);
   });
+  delete byDay[periodKey(new Date())]; // never chart today — the day isn't over, so its number is misleadingly partial
   const labels = Object.keys(byDay).sort();
   const autoCycle = labels.map(k=>average(byDay[k].Auto));
   const manualCycle = labels.map(k=>average(byDay[k].Manual));
@@ -1368,6 +1475,7 @@ function renderPickDurationChart(items){
     if(!byDay[k]) byDay[k] = { Auto:[], Manual:[] };
     byDay[k][pType].push(dur);
   });
+  delete byDay[periodKey(new Date())]; // never chart today — still in progress, misleadingly partial
   const labels = Object.keys(byDay).sort();
   const autoPick = labels.map(k=>average(byDay[k].Auto));
   const manualPick = labels.map(k=>average(byDay[k].Manual));
@@ -1462,6 +1570,7 @@ function renderAccuracyChart(items){
     byDay[k].total++;
     if((r.actualQty||0) === (r.targetQty||0)) byDay[k].accurate++;
   });
+  delete byDay[periodKey(new Date())]; // never chart today — still in progress, misleadingly partial
   const labels = Object.keys(byDay).sort();
   const data = labels.map(k => byDay[k].total ? Math.round((byDay[k].accurate/byDay[k].total)*1000)/10 : null);
   destroyChart('accuracy');
@@ -1493,6 +1602,7 @@ function renderBayVolumeChart(items){
     if(!byDay[k]) byDay[k] = {'Low Bay':0, 'High Bay':0, 'High Value':0};
     byDay[k][bay]++;
   });
+  delete byDay[periodKey(new Date())]; // never chart today — still in progress, misleadingly partial
   const labels = Object.keys(byDay).sort();
   const low = labels.map(k=>byDay[k]['Low Bay']);
   const high = labels.map(k=>byDay[k]['High Bay']);
@@ -1520,6 +1630,7 @@ function renderBayVelocityChart(items){
     if(!grouped[k]) grouped[k] = {'Low Bay':[], 'High Bay':[], 'High Value':[]};
     grouped[k][bay].push(r.confirmedAt.getTime());
   });
+  delete grouped[periodKey(new Date())]; // never chart today — still in progress, misleadingly partial
   const labels = Object.keys(grouped).sort();
   const low = labels.map(k=>velocityFromTimes(grouped[k]['Low Bay']));
   const high = labels.map(k=>velocityFromTimes(grouped[k]['High Bay']));
@@ -1549,6 +1660,7 @@ function renderSlaChart(groups){
     byPeriod[k][g.pullType].total++;
     if(g.slaStatus==='Met') byPeriod[k][g.pullType].met++;
   });
+  delete byPeriod[periodKey(new Date())]; // never chart today — still in progress, misleadingly partial
   const labels = Object.keys(byPeriod).sort();
   const pctFor = (type) => labels.map(k=>{
     const d = byPeriod[k][type];
@@ -1913,6 +2025,262 @@ document.addEventListener('keydown', (e)=>{
   if(e.key==='Escape') closeKpiModal();
 });
 
+/* ---------------------------------------------------------------------
+   EXECUTIVE SUMMARY TAB
+   Reads directly from the same Outbound (allLineItems) and Inbound
+   (ibAllRecords) data already loaded elsewhere in this script — no
+   separate upload or Firebase node of its own. Has its own independent
+   date-range control, reusing computeRangeFilteredGroups (defined above,
+   in the Outbound section) so the date-cutoff behavior matches exactly.
+--------------------------------------------------------------------- */
+let xsRangeMode = '30';
+let xsGranularity = 'day';
+let xsCharts = {};
+
+document.querySelectorAll('#xsGranularityToggle .seg-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    xsGranularity = btn.dataset.granularity;
+    document.querySelectorAll('#xsGranularityToggle .seg-btn').forEach(b=>b.classList.toggle('active', b===btn));
+    xsRenderAll();
+  });
+});
+document.getElementById('xsRangeFilter').addEventListener('change', e=>{
+  xsRangeMode = e.target.value;
+  document.getElementById('xsDateRangeInputs').classList.toggle('show', xsRangeMode==='custom');
+  xsRenderAll();
+});
+document.getElementById('xsDateFrom').addEventListener('change', xsRenderAll);
+document.getElementById('xsDateTo').addEventListener('change', xsRenderAll);
+
+function xsFilterOutboundGroups(groups){
+  const fromVal = document.getElementById('xsDateFrom').value;
+  const toVal = document.getElementById('xsDateTo').value;
+  return computeRangeFilteredGroups(groups, xsRangeMode, fromVal, toVal, 'createdAt', 'In Progress');
+}
+function xsFilterInboundGroups(groups){
+  const fromVal = document.getElementById('xsDateFrom').value;
+  const toVal = document.getElementById('xsDateTo').value;
+  return computeRangeFilteredGroups(groups, xsRangeMode, fromVal, toVal, 'receivedAt', 'In GR Zone');
+}
+
+// Same day/week/month/year bucketing as the Outbound and Inbound tabs, just
+// keyed off this tab's own granularity state.
+function xsPeriodKey(d){
+  if(!isValidDate(d)) return null;
+  if(xsGranularity==='year') return String(d.getFullYear());
+  if(xsGranularity==='month') return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  if(xsGranularity==='week'){
+    const ws = getWeekStart(d);
+    return ws.getFullYear()+'-'+String(ws.getMonth()+1).padStart(2,'0')+'-'+String(ws.getDate()).padStart(2,'0');
+  }
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function xsFormatPeriodLabel(k){
+  if(xsGranularity==='year') return k;
+  if(xsGranularity==='month'){
+    const [y,m] = k.split('-').map(Number);
+    return new Date(y,m-1,1).toLocaleDateString('en-US',{month:'short',year:'numeric'});
+  }
+  const [y,m,d] = k.split('-').map(Number);
+  if(xsGranularity==='week'){
+    const start = new Date(y,m-1,d);
+    const end = new Date(y,m-1,d+6);
+    const startStr = start.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    const endStr = start.getMonth()===end.getMonth()
+      ? end.toLocaleDateString('en-US',{day:'numeric'})
+      : end.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    return startStr+'\u2013'+endStr;
+  }
+  return new Date(y,m-1,d).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+}
+function xsGranularityLabel(){
+  return xsGranularity==='year' ? 'Year' : xsGranularity==='month' ? 'Month' : xsGranularity==='week' ? 'Week' : 'Day';
+}
+function xsDestroyChart(id){ if(xsCharts[id]){ xsCharts[id].destroy(); delete xsCharts[id]; } }
+
+// Safe to call any time — allLineItems/ibAllRecords default to empty arrays
+// until their Firebase listeners fire, so this just renders placeholders
+// until real data shows up, then re-renders once it does.
+// Three-tier accent for the Executive Summary cards, matched against the
+// Target SLA values shown in the SLA bar below the KPI grid. Within 2
+// percentage points below target reads as "close to missing" (yellow);
+// more than 2 points below reads as "outside SLA" (red).
+const XS_SLA_TARGETS = { fillRate: 99.7, dockToStock: 99.0, onTimeAuto: 97.0, onTimeManual: 99.0 };
+function xsSlaAccent(value, target, warnMargin){
+  if(warnMargin===undefined) warnMargin = 2;
+  if(value===null || value===undefined) return 'var(--text-faint)';
+  if(value>=target) return 'var(--good)';
+  if(value>=target-warnMargin) return 'var(--warn)';
+  return 'var(--bad)';
+}
+
+function xsRenderAll(){
+  const grid = document.getElementById('xsKpiGrid');
+  if(!grid) return;
+
+  const outboundGroups = xsFilterOutboundGroups(groupByPullId(allLineItems));
+  const outboundItems = outboundGroups.flatMap(g=>g.lines);
+  const inboundGroups = xsFilterInboundGroups(ibGroupByHU(ibAllRecords));
+
+  const confirmedLines = outboundItems.filter(r=>isValidDate(r.confirmedAt));
+  const accurateLines = confirmedLines.filter(r=>(r.actualQty||0)===(r.targetQty||0)).length;
+  const fillRatePct = confirmedLines.length ? Math.round((accurateLines/confirmedLines.length)*1000)/10 : null;
+
+  const completedInbound = inboundGroups.filter(g=>g.status==='Putaway Complete');
+  const inboundResolved = inboundGroups.filter(g=>g.slaStatus==='Met' || g.slaStatus==='Breached');
+  const inboundSlaMet = inboundResolved.filter(g=>g.slaStatus==='Met').length;
+  const dockSlaPct = inboundResolved.length ? Math.round((inboundSlaMet/inboundResolved.length)*1000)/10 : null;
+
+  const slaAdherence = (type) => {
+    const resolved = outboundGroups.filter(g=>g.pullType===type && (g.slaStatus==='Met' || g.slaStatus==='Breached'));
+    const met = resolved.filter(g=>g.slaStatus==='Met').length;
+    return { pct: resolved.length ? Math.round((met/resolved.length)*1000)/10 : null, met, breached: resolved.length-met };
+  };
+  const autoSla = slaAdherence('Auto');
+  const manualSla = slaAdherence('Manual');
+
+  const cards = [
+    {label:'Fill Rate', value: fillRatePct!==null ? fillRatePct+'%' : '\u2014',
+      sub: 'Target: >'+XS_SLA_TARGETS.fillRate+'%',
+      accent: xsSlaAccent(fillRatePct, XS_SLA_TARGETS.fillRate)},
+    {label:'Dock to Stock (Goods Receiving)', value: dockSlaPct!==null ? dockSlaPct+'%' : '\u2014',
+      sub: 'Target: >'+XS_SLA_TARGETS.dockToStock.toFixed(2)+'%',
+      accent: xsSlaAccent(dockSlaPct, XS_SLA_TARGETS.dockToStock)},
+    {label:'On-Time Delivery (Auto Pulls)', value: autoSla.pct!==null ? autoSla.pct+'%' : '\u2014',
+      sub: 'Target: >'+XS_SLA_TARGETS.onTimeAuto.toFixed(2)+'%',
+      accent: xsSlaAccent(autoSla.pct, XS_SLA_TARGETS.onTimeAuto)},
+    {label:'On-Time Delivery (Manual Pulls)', value: manualSla.pct!==null ? manualSla.pct+'%' : '\u2014',
+      sub: 'Target: >'+XS_SLA_TARGETS.onTimeManual.toFixed(2)+'%',
+      accent: xsSlaAccent(manualSla.pct, XS_SLA_TARGETS.onTimeManual)},
+    {label:'Inventory Accuracy', value:'Coming Soon', sub:'Will populate once the Inventory tab is built out', accent:'var(--text-faint)', placeholder:true}
+  ];
+
+  grid.innerHTML = cards.map(c=>`
+    <div class="xs-kpi${c.placeholder?' placeholder':''}" style="--kpi-accent:${c.accent}">
+      <div class="label">${c.label}</div>
+      <div class="value">${c.value}</div>
+      <div class="sub">${c.sub}</div>
+    </div>
+  `).join('');
+
+  safeRender('executive summary charts', ()=>xsRenderCharts(outboundGroups, outboundItems, inboundGroups));
+}
+
+/* ---------------------------------------------------------------------
+   Charts — trend versions of the same three real metrics above.
+--------------------------------------------------------------------- */
+function xsRenderCharts(outboundGroups, outboundItems, inboundGroups){
+  const g = xsGranularityLabel();
+  document.getElementById('xsTitleFillRate').textContent = 'Fill Rate by '+g;
+  document.getElementById('xsTitleDockToStock').textContent = 'Dock to Stock SLA by '+g;
+  document.getElementById('xsTitleOnTime').textContent = 'On-Time Delivery by '+g;
+
+  if(typeof Chart === 'undefined'){
+    document.querySelectorAll('#tab-summary .chart-holder').forEach(el=>{
+      el.innerHTML = '<div style="padding:20px;color:var(--text-faint);font-size:12px;">Chart library failed to load from CDN — check your network/firewall and reload.</div>';
+    });
+    throw new Error('Chart.js did not load (global "Chart" is undefined)');
+  }
+
+  // Fill Rate by period — same logic as the Outbound tab's Fill Rate chart,
+  // bucketed by when each line was created.
+  const fillByPeriod = {};
+  outboundItems.forEach(r=>{
+    if(!r.createdAt || !isValidDate(r.confirmedAt)) return;
+    const k = xsPeriodKey(r.createdAt);
+    if(!fillByPeriod[k]) fillByPeriod[k] = {total:0, accurate:0};
+    fillByPeriod[k].total++;
+    if((r.actualQty||0)===(r.targetQty||0)) fillByPeriod[k].accurate++;
+  });
+  delete fillByPeriod[xsPeriodKey(new Date())]; // never chart today — still in progress, misleadingly partial
+  const fillLabels = Object.keys(fillByPeriod).sort();
+  const fillData = fillLabels.map(k => fillByPeriod[k].total ? Math.round((fillByPeriod[k].accurate/fillByPeriod[k].total)*1000)/10 : null);
+  xsDestroyChart('fillRate');
+  const fillStep = labelSkipStep(fillLabels.length);
+  const fillOpts = baseChartOptions({y:{beginAtZero:true, suggestedMax:112, max:112, ticks:{callback:v=>v<=100?v+'%':'', stepSize:20}}});
+  fillOpts.layout = {padding:{top:20}};
+  fillOpts.plugins.tooltip = { callbacks:{ label: ctx => {
+    const k = fillLabels[ctx.dataIndex]; const d = fillByPeriod[k];
+    return 'Fill Rate: '+ctx.parsed.y+'% ('+d.accurate+'/'+d.total+' lines)';
+  }}};
+  fillOpts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:(v,ctx)=> ctx.dataIndex % fillStep === 0 ? v+'%' : ''};
+  xsCharts.fillRate = new Chart(document.getElementById('xsChartFillRate'), {
+    type:'bar',
+    data:{ labels: fillLabels.map(l=>xsFormatPeriodLabel(l)), datasets:[{ data: fillData, backgroundColor:'#2fbf71', borderRadius:4, maxBarThickness:36 }]},
+    options: fillOpts
+  });
+
+  // Dock to Stock SLA by period — same logic as the Inbound tab's SLA
+  // Adherence chart, bucketed by when each HU's putaway was confirmed.
+  const dtsByPeriod = {};
+  inboundGroups.forEach(hu=>{
+    if(hu.slaStatus!=='Met' && hu.slaStatus!=='Breached') return;
+    if(!hu.putawayAt) return;
+    const k = xsPeriodKey(hu.putawayAt);
+    if(!dtsByPeriod[k]) dtsByPeriod[k] = {met:0, total:0};
+    dtsByPeriod[k].total++;
+    if(hu.slaStatus==='Met') dtsByPeriod[k].met++;
+  });
+  delete dtsByPeriod[xsPeriodKey(new Date())]; // never chart today — still in progress, misleadingly partial
+  const dtsLabels = Object.keys(dtsByPeriod).sort();
+  const dtsData = dtsLabels.map(k=>{
+    const d = dtsByPeriod[k];
+    return d.total ? Math.round((d.met/d.total)*1000)/10 : null;
+  });
+  xsDestroyChart('dockToStock');
+  const dtsStep = labelSkipStep(dtsLabels.length);
+  const dtsOpts = baseChartOptions({y:{beginAtZero:true, suggestedMax:112, max:112, ticks:{callback:v=>v<=100?v+'%':'', stepSize:20}}});
+  dtsOpts.layout = {padding:{top:20}};
+  dtsOpts.plugins.tooltip = { callbacks:{ label: ctx => {
+    const k = dtsLabels[ctx.dataIndex]; const d = dtsByPeriod[k];
+    return ctx.parsed.y===null ? 'no completed HUs' : ctx.parsed.y+'% ('+d.met+'/'+d.total+')';
+  }}};
+  dtsOpts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:(v,ctx)=> (v===null || ctx.dataIndex % dtsStep !== 0) ? '' : v+'%'};
+  xsCharts.dockToStock = new Chart(document.getElementById('xsChartDockToStock'), {
+    type:'bar',
+    data:{ labels: dtsLabels.map(l=>xsFormatPeriodLabel(l)), datasets:[{ data: dtsData, backgroundColor:'#2fbf71', borderRadius:4, maxBarThickness:36 }]},
+    options: dtsOpts
+  });
+
+  // On-Time Delivery by period — same logic as the Outbound tab's SLA
+  // Adherence chart, Auto vs. Manual, bucketed by when each pull was confirmed.
+  const otByPeriod = {};
+  outboundGroups.forEach(pull=>{
+    if(pull.slaStatus!=='Met' && pull.slaStatus!=='Breached') return;
+    if(!pull.confirmedAt) return;
+    const k = xsPeriodKey(pull.confirmedAt);
+    if(!otByPeriod[k]) otByPeriod[k] = {'Auto':{met:0,total:0}, 'Manual':{met:0,total:0}};
+    if(!otByPeriod[k][pull.pullType]) return;
+    otByPeriod[k][pull.pullType].total++;
+    if(pull.slaStatus==='Met') otByPeriod[k][pull.pullType].met++;
+  });
+  delete otByPeriod[xsPeriodKey(new Date())]; // never chart today — still in progress, misleadingly partial
+  const otLabels = Object.keys(otByPeriod).sort();
+  const otPctFor = (type) => otLabels.map(k=>{
+    const d = otByPeriod[k][type];
+    return d.total ? Math.round((d.met/d.total)*1000)/10 : null;
+  });
+  const otAuto = otPctFor('Auto');
+  const otManual = otPctFor('Manual');
+  xsDestroyChart('onTime');
+  const otStep = labelSkipStep(otLabels.length);
+  const otOpts = baseChartOptions({y:{beginAtZero:true, suggestedMax:118, max:118, ticks:{callback:v=>v<=100?v+'%':'', stepSize:20}}}, true);
+  otOpts.layout = {padding:{top:24}};
+  otOpts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:10}, formatter:(v,ctx)=> (v===null || ctx.dataIndex % otStep !== 0) ? '' : v+'%'};
+  otOpts.plugins.tooltip = { callbacks:{ label: ctx => {
+    const k = otLabels[ctx.dataIndex]; const d = otByPeriod[k][ctx.dataset.label];
+    return ctx.dataset.label+': '+(ctx.parsed.y===null?'no completed pulls':ctx.parsed.y+'% ('+d.met+'/'+d.total+')');
+  }}};
+  xsCharts.onTime = new Chart(document.getElementById('xsChartOnTime'), {
+    type:'bar',
+    data:{ labels: otLabels.map(l=>xsFormatPeriodLabel(l)), datasets:[
+      {label:'Auto', data:otAuto, backgroundColor:'#3d9fe8', borderRadius:4, maxBarThickness:26},
+      {label:'Manual', data:otManual, backgroundColor:'#a78bfa', borderRadius:4, maxBarThickness:26}
+    ]},
+    options: otOpts
+  });
+}
+
 /* =======================================================================
    INBOUND TAB
    Fully separate state/functions from the Outbound tab above (all "ib"
@@ -2148,6 +2516,7 @@ ibReceiptsRef.on('value', snap=>{
   });
   ibSetSyncStatus('ok','Connected');
   ibRenderAll();
+  safeRender('executive summary', xsRenderAll);
 }, err=>{
   console.error(err);
   ibSetSyncStatus('err','Connection error: '+err.message);
@@ -2185,50 +2554,13 @@ document.getElementById('ibSearchBox').addEventListener('input', e=>{
   safeRender('inbound table', ()=>ibRenderTable(ibCachedRangeGroups));
 });
 
-// Filters HU groups by their receivedAt date (the "dock" event) — mirrors
-// the Outbound tab's filterGroupsByRange. HUs still sitting in the GR Zone
-// (status 'In GR Zone') are always shown regardless of range — they're
-// open, actionable backlog, not a finished number for some past day. Rolling
-// windows always end at the start of today, so today's partial numbers
-// never show under Yesterday/7/30 by default.
+// Filters HU groups by their receivedAt date (the "dock" event) — uses the
+// shared computeRangeFilteredGroups helper (see the Outbound tab, where it's
+// defined) so the date-cutoff behavior stays identical across tabs.
 function ibFilterByRange(groups){
-  if(ibRangeMode==='all') return groups;
-
-  const todayStart = new Date();
-  todayStart.setHours(0,0,0,0);
-
-  if(ibRangeMode==='custom'){
-    const fromVal = document.getElementById('ibDateFrom').value;
-    const toVal = document.getElementById('ibDateTo').value;
-    if(!fromVal && !toVal) return groups;
-    const from = fromVal ? new Date(fromVal+'T00:00:00') : null;
-    const to = toVal ? new Date(toVal+'T23:59:59') : null;
-    return groups.filter(g=>{
-      if(g.status==='In GR Zone') return true;
-      if(!g.receivedAt) return false;
-      if(from && g.receivedAt < from) return false;
-      if(to && g.receivedAt > to) return false;
-      return true;
-    });
-  }
-
-  if(ibRangeMode==='yesterday'){
-    const yStart = new Date(todayStart);
-    yStart.setDate(yStart.getDate()-1);
-    return groups.filter(g=>{
-      if(g.status==='In GR Zone') return true;
-      if(!g.receivedAt) return false;
-      return g.receivedAt >= yStart && g.receivedAt < todayStart;
-    });
-  }
-
-  // rolling windows: '7' or '30' — N days ending yesterday (today excluded)
-  const cutoff = new Date(todayStart.getTime() - Number(ibRangeMode)*24*3600*1000);
-  return groups.filter(g=>{
-    if(g.status==='In GR Zone') return true;
-    if(!g.receivedAt) return false;
-    return g.receivedAt >= cutoff && g.receivedAt < todayStart;
-  });
+  const fromVal = document.getElementById('ibDateFrom').value;
+  const toVal = document.getElementById('ibDateTo').value;
+  return computeRangeFilteredGroups(groups, ibRangeMode, fromVal, toVal, 'receivedAt', 'In GR Zone');
 }
 
 /* ---------------------------------------------------------------------
@@ -2458,6 +2790,7 @@ function ibRenderDockToStockChart(groups){
     if(!byPeriod[k]) byPeriod[k] = [];
     byPeriod[k].push(g.dockToStockMin);
   });
+  delete byPeriod[ibPeriodKey(new Date())]; // never chart today — still in progress, misleadingly partial
   const labels = Object.keys(byPeriod).sort();
   const data = labels.map(k=>average(byPeriod[k]));
   ibDestroyChart('dockToStock');
@@ -2482,6 +2815,7 @@ function ibRenderSlaChart(groups){
     byPeriod[k].total++;
     if(g.slaStatus==='Met') byPeriod[k].met++;
   });
+  delete byPeriod[ibPeriodKey(new Date())]; // never chart today — still in progress, misleadingly partial
   const labels = Object.keys(byPeriod).sort();
   const data = labels.map(k=>{
     const d = byPeriod[k];
@@ -2535,6 +2869,7 @@ function ibRenderTopPutawayChart(groups){
 function ibRenderReceivedVolumeChart(groups){
   const byPeriod = {};
   groups.forEach(g=>{ if(g.receivedAt){ const k=ibPeriodKey(g.receivedAt); byPeriod[k]=(byPeriod[k]||0)+g.lineCount; } });
+  delete byPeriod[ibPeriodKey(new Date())]; // never chart today — still in progress, misleadingly partial
   const labels = Object.keys(byPeriod).sort();
   const data = labels.map(k=>byPeriod[k]);
   ibDestroyChart('receivedVolume');
@@ -2551,6 +2886,7 @@ function ibRenderReceivedVolumeChart(groups){
 function ibRenderUnitsReceivedChart(groups){
   const byPeriod = {};
   groups.forEach(g=>{ if(g.receivedAt){ const k=ibPeriodKey(g.receivedAt); byPeriod[k]=(byPeriod[k]||0)+g.receivedQty; } });
+  delete byPeriod[ibPeriodKey(new Date())]; // never chart today — still in progress, misleadingly partial
   const labels = Object.keys(byPeriod).sort();
   const data = labels.map(k=>byPeriod[k]);
   ibDestroyChart('unitsReceived');
@@ -2891,16 +3227,17 @@ document.getElementById('ibResetAllDataBtn').addEventListener('click', resetAllD
    Site tabs — Outbound / Inbound / Inventory, one file, active tab
    tracked in the URL hash (e.g. #inbound) so it's bookmarkable/shareable.
 --------------------------------------------------------------------- */
-const SITE_TABS = ['outbound','inbound','inventory'];
+const SITE_TABS = ['summary','inbound','inventory','outbound'];
 const TAB_TITLES = {
   outbound: 'Whitsett KPI Dashboard \u2014 Outbound',
+  summary: 'Whitsett KPI Dashboard \u2014 Executive Summary',
   inbound: 'Whitsett KPI Dashboard \u2014 Inbound',
   inventory: 'Whitsett KPI Dashboard \u2014 Inventory'
 };
 
 function currentSiteTab(){
   const h = (location.hash||'').replace('#','').toLowerCase();
-  return SITE_TABS.includes(h) ? h : 'outbound';
+  return SITE_TABS.includes(h) ? h : 'summary';
 }
 
 function showSiteTab(tab){
@@ -2921,6 +3258,10 @@ function showSiteTab(tab){
   } else if(tab==='inbound'){
     requestAnimationFrame(()=>{
       Object.values(ibCharts).forEach(c=>{ try{ c.resize(); }catch(e){} });
+    });
+  } else if(tab==='summary'){
+    requestAnimationFrame(()=>{
+      Object.values(xsCharts).forEach(c=>{ try{ c.resize(); }catch(e){} });
     });
   }
 }

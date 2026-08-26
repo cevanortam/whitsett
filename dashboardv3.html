@@ -244,6 +244,31 @@
   }
   .complete-label{font-size:0.82rem; color:var(--text-dim); font-weight:500;}
 
+  .wo-card.completed{
+    background:rgba(46,204,113,0.06);
+    border-color:rgba(46,204,113,0.35);
+  }
+  .wo-card.completed .wo-elapsed-val{color:var(--green);}
+  .wo-card.completed .complete-row{border-top:1px dashed rgba(46,204,113,0.3);}
+  .verified-badge{
+    font-size:0.82rem;
+    color:var(--green);
+    font-weight:600;
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  .verified-badge .check{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width:18px; height:18px;
+    border-radius:50%;
+    background:rgba(46,204,113,0.18);
+    font-size:0.72rem;
+    flex-shrink:0;
+  }
+
   /* Slider toggle */
   .slide-toggle{
     position:relative;
@@ -849,21 +874,28 @@ function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 function openPullGroups(){
-  // returns array of {key, pullId, type, createdAt, orders:[...]} for pull ids with at least one open WO
+  // returns array of {key, pullId, type, createdAt, orders:[...]} for pull ids with at least one open WO.
+  // orders includes BOTH open and verified WOs (verified ones stay visible with an indicator instead of
+  // disappearing) — only the group-level inclusion still requires at least one open WO.
   const groups = {};
   Object.entries(warehouseOrders).forEach(([woKey, wo]) => {
-    if (wo.completed) return;
     if (!groups[wo.pullIdKey]) groups[wo.pullIdKey] = [];
     groups[wo.pullIdKey].push({key: woKey, ...wo});
   });
-  return Object.entries(groups).map(([pullKey, orders]) => {
-    const p = pullIds[pullKey] || {};
-    orders.sort((a,b) => a.addedAt - b.addedAt);
-    return {key: pullKey, pullId: p.pullId, type: p.type, createdAt: p.createdAt, orders};
-  }).sort((a,b) => {
-    // sort by Pull ID, numeric-aware
-    return String(a.pullId).localeCompare(String(b.pullId), undefined, {numeric:true, sensitivity:'base'});
-  });
+  return Object.entries(groups)
+    .filter(([pullKey, orders]) => orders.some(o => !o.completed))
+    .map(([pullKey, orders]) => {
+      const p = pullIds[pullKey] || {};
+      // open WOs first (oldest first), then verified WOs (most recently verified first)
+      orders.sort((a,b) => {
+        if (!!a.completed !== !!b.completed) return a.completed ? 1 : -1;
+        return a.completed ? (b.completedAt - a.completedAt) : (a.addedAt - b.addedAt);
+      });
+      return {key: pullKey, pullId: p.pullId, type: p.type, createdAt: p.createdAt, orders};
+    }).sort((a,b) => {
+      // sort by Pull ID, numeric-aware
+      return String(a.pullId).localeCompare(String(b.pullId), undefined, {numeric:true, sensitivity:'base'});
+    });
 }
 function pendingQAGroups(){
   // Pull IDs with every WO completed, but not yet archived (Lenovo QA not done).
@@ -921,7 +953,7 @@ function render(){
       })).filter(g => g.orders.length > 0 || String(g.pullId).toLowerCase().includes(term));
     }
 
-    const totalOpenWO = groups.reduce((n,g) => n + g.orders.length, 0);
+    const totalOpenWO = groups.reduce((n,g) => n + g.orders.filter(o => !o.completed).length, 0);
     document.getElementById('summaryLine').textContent =
       `${groups.length} open Pull ID${groups.length!==1?'s':''} · ${totalOpenWO} open Warehouse Order${totalOpenWO!==1?'s':''} · ${syncStatusText()}`;
 
@@ -982,6 +1014,8 @@ function renderPullGroup(g){
   const tier = slaTier(elapsed, sla);
   const typeClass = g.type === 'Auto' ? 'type-auto' : 'type-manual';
   const slaHours = g.type === 'Auto' ? 5 : 1;
+  const openCount = g.orders.filter(o => !o.completed).length;
+  const verifiedCount = g.orders.length - openCount;
 
   return `
   <div class="pull-group">
@@ -995,7 +1029,7 @@ function renderPullGroup(g){
           <span class="sla-label">open · ${slaHours}h SLA</span>
         </div>
       </div>
-      <div style="color:var(--text-faint); font-size:0.8rem;">${g.orders.length} open WO${g.orders.length!==1?'s':''}</div>
+      <div style="color:var(--text-faint); font-size:0.8rem;">${openCount} open WO${openCount!==1?'s':''}${verifiedCount ? ` · ${verifiedCount} verified` : ''}</div>
     </div>
     <div class="wo-grid">
       ${g.orders.map(o => renderWoCard(o)).join('')}
@@ -1004,6 +1038,19 @@ function renderPullGroup(g){
 }
 
 function renderWoCard(o){
+  if (o.completed){
+    return `
+    <div class="wo-card completed">
+      <div class="wo-num"><span class="prefix">WO</span>${escapeHtml(o.woNumber)}</div>
+      <div class="picker"><span class="icon">&#128100;</span>${escapeHtml(o.assignedPicker)}</div>
+      <div class="wo-elapsed">
+        <span class="wo-elapsed-label">Verified</span><span class="wo-elapsed-val">${o.completedAt ? new Date(o.completedAt).toLocaleString() : '—'}</span>
+      </div>
+      <div class="complete-row">
+        <span class="verified-badge"><span class="check">&#10003;</span>Counted &amp; verified</span>
+      </div>
+    </div>`;
+  }
   return `
   <div class="wo-card">
     <div class="wo-num"><span class="prefix">WO</span>${escapeHtml(o.woNumber)}</div>

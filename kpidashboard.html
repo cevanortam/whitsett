@@ -2261,7 +2261,12 @@ function xsFilterOutboundGroups(groups){
 function xsFilterInboundGroups(groups){
   const fromVal = document.getElementById('xsDateFrom').value;
   const toVal = document.getElementById('xsDateTo').value;
-  return computeRangeFilteredGroups(groups, xsRangeMode, fromVal, toVal, 'receivedAt', 'In GR Zone');
+  // No status bypass (see ibFilterByRange on the Inbound tab for why) — this
+  // only feeds the Dock to Stock SLA card/chart, which already excludes
+  // still-open GR Zone HUs via the Met/Breached check downstream, but keeping
+  // this consistent avoids the same leak if this list is ever reused for
+  // something else later.
+  return computeRangeFilteredGroups(groups, xsRangeMode, fromVal, toVal, 'receivedAt', null);
 }
 function xsFilterInventoryGroups(groups){
   const fromVal = document.getElementById('xsDateFrom').value;
@@ -2825,11 +2830,16 @@ document.getElementById('ibTblFiltersClear').addEventListener('click', ()=>{
 
 // Filters HU groups by their receivedAt date (the "dock" event) — uses the
 // shared computeRangeFilteredGroups helper (see the Outbound tab, where it's
-// defined) so the date-cutoff behavior stays identical across tabs.
+// defined) so the date-cutoff behavior stays identical across tabs. No
+// status bypass here (openStatusValue passed as null): unlike Outbound,
+// which has no other way to surface a stuck "In Progress" pull, Inbound
+// already has a dedicated always-live backlogGroups (see ibRenderAll) for
+// "Currently in GR Zone" / aging / oldest / SLA-breached-live — those don't
+// need this filter to leak old backlog into range-scoped totals and charts.
 function ibFilterByRange(groups){
   const fromVal = document.getElementById('ibDateFrom').value;
   const toVal = document.getElementById('ibDateTo').value;
-  return computeRangeFilteredGroups(groups, ibRangeMode, fromVal, toVal, 'receivedAt', 'In GR Zone');
+  return computeRangeFilteredGroups(groups, ibRangeMode, fromVal, toVal, 'receivedAt', null);
 }
 
 /* ---------------------------------------------------------------------

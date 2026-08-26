@@ -141,6 +141,16 @@
   .table-section-head h2{margin:0;font-size:15.5px;}
   .table-section-head .meta{font-size:12px;color:var(--text-faint);margin-top:3px;}
 
+  .table-filters{
+    display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;margin:-4px 0 16px;
+    padding-bottom:16px;border-bottom:1px solid var(--card-border-light);
+  }
+  .table-filters .filter-group{display:flex;flex-direction:column;gap:5px;}
+  .table-filters .filter-group label{font-size:10px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;}
+  .table-filters .filter-group .range{display:flex;align-items:center;gap:6px;}
+  .table-filters .filter-group .range span{color:var(--text-faint);font-size:12px;}
+  .table-filters .btn.secondary{padding:8px 12px;font-size:12px;}
+
   table{width:100%;border-collapse:collapse;font-size:12.8px;}
   thead th{
     text-align:left;padding:9px 10px;color:var(--text-faint);font-weight:600;
@@ -177,6 +187,9 @@
   .badge.sla-met{background:rgba(47,191,113,0.15);color:var(--good);margin-left:5px;}
   .badge.sla-breached{background:rgba(226,35,26,0.15);color:var(--accent);margin-left:5px;}
   .badge.sla-risk{background:rgba(232,163,61,0.15);color:var(--warn);margin-left:5px;}
+  .badge.accurate{background:rgba(47,191,113,0.15);color:var(--good);}
+  .badge.inaccurate{background:rgba(226,35,26,0.15);color:var(--accent);}
+  .badge.recounted{background:rgba(167,139,250,0.15);color:var(--hv-color);margin-left:5px;}
 
   .delete-line-btn{
     background:transparent;border:1px solid var(--card-border-light);color:var(--text-faint);
@@ -400,6 +413,25 @@
         <button type="button" class="btn secondary" id="exportBtn">&#8595; Export to Excel</button>
       </div>
     </div>
+    <div class="table-filters" id="tableFilters">
+      <div class="filter-group">
+        <label>Created Date</label>
+        <div class="range"><input type="date" id="tblCreatedFrom"><span>&ndash;</span><input type="date" id="tblCreatedTo"></div>
+      </div>
+      <div class="filter-group">
+        <label>Confirmed Date</label>
+        <div class="range"><input type="date" id="tblConfirmedFrom"><span>&ndash;</span><input type="date" id="tblConfirmedTo"></div>
+      </div>
+      <div class="filter-group">
+        <label>SLA Status</label>
+        <select id="tblSlaFilter">
+          <option value="all">All</option>
+          <option value="Met">Met</option>
+          <option value="Breached">Breached</option>
+        </select>
+      </div>
+      <button type="button" class="btn secondary" id="tblFiltersClear">Clear Filters</button>
+    </div>
     <div style="overflow-x:auto;">
       <table>
         <thead>
@@ -502,9 +534,9 @@
         <div class="chart-holder"><canvas id="xsChartOnTime"></canvas></div>
       </div>
       <div class="chart-card">
-        <h3>Inventory Accuracy</h3>
-        <div class="chart-note">Will trend here once the Inventory tab is built out</div>
-        <div class="chart-holder" style="display:flex;align-items:center;justify-content:center;color:var(--text-faint);font-size:13px;">Coming Soon</div>
+        <h3 id="xsTitleInventoryAccuracy">Inventory Accuracy by Day</h3>
+        <div class="chart-note">Share of resolved cycle counts that matched book qty &mdash; recount outcome wins when one occurred</div>
+        <div class="chart-holder"><canvas id="xsChartInventoryAccuracy"></canvas></div>
       </div>
     </section>
   </section>
@@ -627,6 +659,25 @@
         <button type="button" class="btn secondary" id="ibExportBtn">&#8595; Export to Excel</button>
       </div>
     </div>
+    <div class="table-filters" id="ibTableFilters">
+      <div class="filter-group">
+        <label>Received Date</label>
+        <div class="range"><input type="date" id="ibTblReceivedFrom"><span>&ndash;</span><input type="date" id="ibTblReceivedTo"></div>
+      </div>
+      <div class="filter-group">
+        <label>Putaway Date</label>
+        <div class="range"><input type="date" id="ibTblPutawayFrom"><span>&ndash;</span><input type="date" id="ibTblPutawayTo"></div>
+      </div>
+      <div class="filter-group">
+        <label>SLA Status</label>
+        <select id="ibTblSlaFilter">
+          <option value="all">All</option>
+          <option value="Met">Met</option>
+          <option value="Breached">Breached</option>
+        </select>
+      </div>
+      <button type="button" class="btn secondary" id="ibTblFiltersClear">Clear Filters</button>
+    </div>
     <div style="overflow-x:auto;">
       <table>
         <thead>
@@ -671,31 +722,143 @@
   </section>
 
   <section id="tab-inventory" class="tab-page">
-    <header class="top" style="border-bottom:none;margin-bottom:0;padding-bottom:0;">
-      <div>
-        <div class="brand">
-          <img class="brand-logo" src="https://www.cevalogistics.com/_ipx/w_1920&f_webp/images-spx/x_large_picture/CEVA_WhiteRed.png" alt="CEVA Logistics"
-               onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-          <div class="brand-mark" style="display:none;">CEVA</div>
-          <div>
-            <h1>Whitsett Inventory Dashboard</h1>
-            <div class="sub">Inventory accuracy and on-hand metrics &mdash; Whitsett, NC</div>
-          </div>
+
+  <header class="top">
+    <div>
+      <div class="brand">
+        <img class="brand-logo" src="https://www.cevalogistics.com/_ipx/w_1920&f_webp/images-spx/x_large_picture/CEVA_WhiteRed.png" alt="CEVA Logistics"
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <div class="brand-mark" style="display:none;">CEVA</div>
+        <div>
+          <h1>Whitsett Inventory Dashboard</h1>
+          <div class="sub">Cycle count accuracy &amp; location integrity &mdash; Whitsett, NC</div>
         </div>
       </div>
-    </header>
-    <nav class="site-nav">
-      <a class="site-tab" data-tab="summary" href="#summary">Executive Summary</a>
-      <a class="site-tab" data-tab="inbound" href="#inbound">Inbound</a>
-      <a class="site-tab" data-tab="inventory" href="#inventory">Inventory</a>
-      <a class="site-tab" data-tab="outbound" href="#outbound">Outbound</a>
-    </nav>
-    <div class="placeholder-page">
-      <div class="ph-icon">&#128230;</div>
-      <h2>Coming Soon</h2>
-      <p>Inventory accuracy, on-hand, and cycle count KPIs will appear here soon.</p>
-      <div class="ph-note">This page will join the Whitsett KPI Dashboard once the data source and metrics are defined.</div>
+      <div class="status-line">
+        <span id="icSyncStatus"><span class="dot" id="icSyncDot"></span><b id="icSyncText">Connecting&hellip;</b></span>
+        <span><b id="icRecordCount">0</b> count documents on file</span>
+        <span><b id="icLocationCount">0</b> bin/product locations tracked</span>
+        <span id="icLastUploadLine" style="display:none;">Last upload: <b id="icLastUploadTime">&mdash;</b></span>
+      </div>
     </div>
+    <div class="controls">
+      <div class="segmented" id="icGranularityToggle">
+        <button type="button" class="seg-btn active" data-granularity="day">Day</button>
+        <button type="button" class="seg-btn" data-granularity="week">Week</button>
+        <button type="button" class="seg-btn" data-granularity="month">Month</button>
+        <button type="button" class="seg-btn" data-granularity="year">Year</button>
+      </div>
+      <select id="icRangeFilter">
+        <option value="all">All time</option>
+        <option value="yesterday">Yesterday</option>
+        <option value="7">Last 7 days</option>
+        <option value="30" selected>Last 30 days</option>
+        <option value="custom">Custom range&hellip;</option>
+      </select>
+      <div class="date-range-inputs" id="icDateRangeInputs">
+        <input type="date" id="icDateFrom">
+        <span>&ndash;</span>
+        <input type="date" id="icDateTo">
+      </div>
+      <label class="btn" for="icFileInput">&#8593; Upload Cycle Count Results</label>
+      <input type="file" id="icFileInput" accept=".xlsx,.xls">
+    </div>
+  </header>
+
+  <nav class="site-nav">
+    <a class="site-tab" data-tab="summary" href="#summary">Executive Summary</a>
+    <a class="site-tab" data-tab="inbound" href="#inbound">Inbound</a>
+    <a class="site-tab" data-tab="inventory" href="#inventory">Inventory</a>
+    <a class="site-tab" data-tab="outbound" href="#outbound">Outbound</a>
+  </nav>
+
+  <section class="kpi-grid" id="icKpiGrid"></section>
+  <div id="icNote" style="font-size:12px;color:var(--text-faint);margin:-12px 0 24px;"></div>
+
+  <section class="charts-grid">
+    <div class="chart-card">
+      <h3 id="icTitleAccuracy">Inventory Accuracy by Day</h3>
+      <div class="chart-note">Share of resolved product counts that matched book qty &mdash; recount outcome, when one occurred, is what counts</div>
+      <div class="chart-holder"><canvas id="icChartAccuracy"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Count Status Breakdown</h3>
+      <div class="chart-note">All bin/product locations tracked on this tab, selected range</div>
+      <div class="chart-holder"><canvas id="icChartStatusSplit"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3 id="icTitleVolume">Counts by Status per Day</h3>
+      <div class="chart-note">Count documents by status, bucketed by count date (Open counts use their assigned date)</div>
+      <div class="chart-holder"><canvas id="icChartVolume"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Variance Direction</h3>
+      <div class="chart-note">Of resolved counts that missed book qty &mdash; found more than expected vs. found less</div>
+      <div class="chart-holder"><canvas id="icChartVarianceDirection"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Accuracy by Counter</h3>
+      <div class="chart-note">Resolved counts and accuracy rate per associate, selected range</div>
+      <div class="chart-holder"><canvas id="icChartByCounter"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Open Count Aging (Live)</h3>
+      <div class="chart-note">How long counts currently sitting in Open status have been waiting &mdash; not affected by the date range above</div>
+      <div class="chart-holder"><canvas id="icChartAging"></canvas></div>
+    </div>
+  </section>
+
+  <section class="table-section">
+    <div class="table-section-head">
+      <div>
+        <h2>Cycle Count Locations</h2>
+        <div class="meta" id="icTableMeta">&nbsp;</div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <input type="text" id="icSearchBox" placeholder="Search bin, SKU, or counter&hellip;" style="min-width:260px;">
+        <button type="button" class="btn secondary" id="icExportBtn">&#8595; Export to Excel</button>
+      </div>
+    </div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th data-ickey="bin">Storage Bin</th>
+            <th data-ickey="product">SKU</th>
+            <th data-ickey="productDesc">Description</th>
+            <th data-ickey="bookQty">Book Qty</th>
+            <th data-ickey="countedQty">Counted Qty</th>
+            <th data-ickey="diffQty">Difference</th>
+            <th data-ickey="status">Result</th>
+            <th data-ickey="counter">Counter</th>
+            <th data-ickey="countAt">Count Date</th>
+          </tr>
+        </thead>
+        <tbody id="icTableBody"></tbody>
+      </table>
+    </div>
+    <div class="empty-state" id="icEmptyState" style="display:none;">
+      <div class="big">No data yet</div>
+      <div>Upload a cycle count results export to get started.</div>
+    </div>
+  </section>
+
+  <footer class="note">
+    Each row is a bin/product location, resolved from every Physical Inventory Document on file for that Storage Bin +
+    Product. If a recount was generated (status RECO) and its linked recount document (status COUN) matched book qty,
+    the location is marked Accurate &mdash; the recount is what counts, not the original miss. A location only shows
+    Inaccurate once it has a completed count (COUN) with no Active (ACTI) recount still pending against it. Locations
+    with an Active count outstanding are Open and excluded from the accuracy figures until resolved. "Location
+    Accuracy" on the Executive Summary rolls this up one level further: a Storage Bin counts as accurate only if every
+    product resolved there was accurate. This is a separate data source from the Outbound/Inbound SAP export &mdash;
+    upload the cycle count results file here. Repeat uploads merge into existing data and are de-duplicated by
+    Physical Inventory Document, so re-uploading an export that overlaps a previous one is safe.
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--card-border);">
+      <button type="button" class="btn secondary" id="icResetAllDataBtn" style="border-color:var(--accent);color:var(--accent);">&#9888; Reset All Data</button>
+      <span style="color:var(--text-faint);font-size:11px;margin-left:10px;">Permanently clears all Inventory tab data so you can start with a fresh upload. Outbound/Inbound data is untouched. Password-protected, cannot be undone.</span>
+    </div>
+  </footer>
+
   </section>
 
 </div>
@@ -794,6 +957,7 @@ let sortDir = 'desc';
 let searchTerm = '';
 let rangeMode = '30';
 let granularity = 'day'; // 'day' | 'week' | 'month' | 'year' — controls how time-series charts bucket data
+let tblSlaFilter = 'all'; // Pull IDs table filter: 'all' | 'Met' | 'Breached' — independent of the tab-wide date range above
 
 function getWeekStart(d){
   // Monday-based week start, date-only (local time)
@@ -839,6 +1003,21 @@ function classifyPullType(pullId){
 const SLA_MINUTES = {'Auto': 300, 'Manual': 60};
 
 function isValidDate(d){ return d instanceof Date && !isNaN(d.getTime()); }
+
+// Shared by the per-table date filters (Outbound "Created/Confirmed Date",
+// Inbound "Received/Putaway Date") — inclusive of both endpoints, and a
+// blank from/to means that side is unbounded. Rows with no value for the
+// field being filtered (e.g. an in-progress pull has no confirmedAt) are
+// excluded the moment either bound is set, since there's nothing to
+// compare — matches how a person reading "Confirmed Date: Aug 1–15" would
+// expect an unconfirmed row to just not show up.
+function dateInRange(d, fromVal, toVal){
+  if(!fromVal && !toVal) return true;
+  if(!isValidDate(d)) return false;
+  if(fromVal && d < new Date(fromVal+'T00:00:00')) return false;
+  if(toVal && d > new Date(toVal+'T23:59:59')) return false;
+  return true;
+}
 
 // Bay classification per the Whitsett aisle/level scheme:
 //   Aisles 1-5:   Level A = Low Bay, everything else = High Bay
@@ -1133,6 +1312,19 @@ document.getElementById('dateFrom').addEventListener('change', renderAll);
 document.getElementById('dateTo').addEventListener('change', renderAll);
 document.getElementById('searchBox').addEventListener('input', e=>{
   searchTerm = e.target.value.trim().toLowerCase();
+  safeRender('table', ()=>renderTable(cachedRangeGroups));
+});
+['tblCreatedFrom','tblCreatedTo','tblConfirmedFrom','tblConfirmedTo'].forEach(id=>{
+  document.getElementById(id).addEventListener('change', ()=> safeRender('table', ()=>renderTable(cachedRangeGroups)));
+});
+document.getElementById('tblSlaFilter').addEventListener('change', e=>{
+  tblSlaFilter = e.target.value;
+  safeRender('table', ()=>renderTable(cachedRangeGroups));
+});
+document.getElementById('tblFiltersClear').addEventListener('click', ()=>{
+  ['tblCreatedFrom','tblCreatedTo','tblConfirmedFrom','tblConfirmedTo'].forEach(id=>{ document.getElementById(id).value=''; });
+  document.getElementById('tblSlaFilter').value = 'all';
+  tblSlaFilter = 'all';
   safeRender('table', ()=>renderTable(cachedRangeGroups));
 });
 
@@ -1755,6 +1947,14 @@ function renderTable(rangeGroups){
     });
   }
 
+  const createdFrom = document.getElementById('tblCreatedFrom').value;
+  const createdTo = document.getElementById('tblCreatedTo').value;
+  const confirmedFrom = document.getElementById('tblConfirmedFrom').value;
+  const confirmedTo = document.getElementById('tblConfirmedTo').value;
+  if(createdFrom || createdTo) groups = groups.filter(g=>dateInRange(g.createdAt, createdFrom, createdTo));
+  if(confirmedFrom || confirmedTo) groups = groups.filter(g=>dateInRange(g.confirmedAt, confirmedFrom, confirmedTo));
+  if(tblSlaFilter!=='all') groups = groups.filter(g=>g.slaStatus===tblSlaFilter);
+
   groups.sort((a,b)=>{
     let av = a[sortKey], bv = b[sortKey];
     if(av instanceof Date) av = av.getTime()||0;
@@ -1777,7 +1977,8 @@ function renderTable(rangeGroups){
 
   document.getElementById('tableMeta').textContent =
     groups.length.toLocaleString() + ' Pull ID' + (groups.length===1?'':'s') +
-    (rangeMode!=='all' ? ' in selected range' : '');
+    (rangeMode!=='all' ? ' in selected range' : '') +
+    ((createdFrom||createdTo||confirmedFrom||confirmedTo||tblSlaFilter!=='all') ? ' \u00b7 table filters applied' : '');
 
   const tbody = document.getElementById('tableBody');
   const emptyState = document.getElementById('emptyState');
@@ -2062,6 +2263,11 @@ function xsFilterInboundGroups(groups){
   const toVal = document.getElementById('xsDateTo').value;
   return computeRangeFilteredGroups(groups, xsRangeMode, fromVal, toVal, 'receivedAt', 'In GR Zone');
 }
+function xsFilterInventoryGroups(groups){
+  const fromVal = document.getElementById('xsDateFrom').value;
+  const toVal = document.getElementById('xsDateTo').value;
+  return computeRangeFilteredGroups(groups, xsRangeMode, fromVal, toVal, 'countAt', 'Open');
+}
 
 // Same day/week/month/year bucketing as the Outbound and Inbound tabs, just
 // keyed off this tab's own granularity state.
@@ -2105,7 +2311,7 @@ function xsDestroyChart(id){ if(xsCharts[id]){ xsCharts[id].destroy(); delete xs
 // Target SLA values shown in the SLA bar below the KPI grid. Within 2
 // percentage points below target reads as "close to missing" (yellow);
 // more than 2 points below reads as "outside SLA" (red).
-const XS_SLA_TARGETS = { fillRate: 99.7, dockToStock: 99.0, onTimeAuto: 97.0, onTimeManual: 99.0 };
+const XS_SLA_TARGETS = { fillRate: 99.7, dockToStock: 99.0, onTimeAuto: 97.0, onTimeManual: 99.0, inventoryAccuracy: 98.0 };
 function xsSlaAccent(value, target, warnMargin){
   if(warnMargin===undefined) warnMargin = 2;
   if(value===null || value===undefined) return 'var(--text-faint)';
@@ -2121,6 +2327,7 @@ function xsRenderAll(){
   const outboundGroups = xsFilterOutboundGroups(groupByPullId(allLineItems));
   const outboundItems = outboundGroups.flatMap(g=>g.lines);
   const inboundGroups = xsFilterInboundGroups(ibGroupByHU(ibAllRecords));
+  const inventoryGroups = xsFilterInventoryGroups(icGroupByLocation(icAllRecords));
 
   const confirmedLines = outboundItems.filter(r=>isValidDate(r.confirmedAt));
   const accurateLines = confirmedLines.filter(r=>(r.actualQty||0)===(r.targetQty||0)).length;
@@ -2139,20 +2346,26 @@ function xsRenderAll(){
   const autoSla = slaAdherence('Auto');
   const manualSla = slaAdherence('Manual');
 
+  const invResolved = inventoryGroups.filter(g=>g.status==='Accurate' || g.status==='Inaccurate');
+  const invAccurate = invResolved.filter(g=>g.status==='Accurate').length;
+  const invAccuracyPct = invResolved.length ? Math.round((invAccurate/invResolved.length)*1000)/10 : null;
+
   const cards = [
     {label:'Fill Rate', value: fillRatePct!==null ? fillRatePct+'%' : '\u2014',
-      sub: 'Target: >'+XS_SLA_TARGETS.fillRate+'%',
+      sub: (fillRatePct!==null ? accurateLines+'/'+confirmedLines.length+' lines on qty \u00b7 ' : '')+'Target: >'+XS_SLA_TARGETS.fillRate+'%',
       accent: xsSlaAccent(fillRatePct, XS_SLA_TARGETS.fillRate)},
     {label:'Dock to Stock (Goods Receiving)', value: dockSlaPct!==null ? dockSlaPct+'%' : '\u2014',
-      sub: 'Target: >'+XS_SLA_TARGETS.dockToStock.toFixed(2)+'%',
+      sub: (dockSlaPct!==null ? inboundSlaMet+'/'+inboundResolved.length+' HUs on time \u00b7 ' : '')+'Target: >'+XS_SLA_TARGETS.dockToStock.toFixed(2)+'%',
       accent: xsSlaAccent(dockSlaPct, XS_SLA_TARGETS.dockToStock)},
     {label:'On-Time Delivery (Auto Pulls)', value: autoSla.pct!==null ? autoSla.pct+'%' : '\u2014',
-      sub: 'Target: >'+XS_SLA_TARGETS.onTimeAuto.toFixed(2)+'%',
+      sub: (autoSla.pct!==null ? autoSla.met+'/'+(autoSla.met+autoSla.breached)+' pulls on time \u00b7 ' : '')+'Target: >'+XS_SLA_TARGETS.onTimeAuto.toFixed(2)+'%',
       accent: xsSlaAccent(autoSla.pct, XS_SLA_TARGETS.onTimeAuto)},
     {label:'On-Time Delivery (Manual Pulls)', value: manualSla.pct!==null ? manualSla.pct+'%' : '\u2014',
-      sub: 'Target: >'+XS_SLA_TARGETS.onTimeManual.toFixed(2)+'%',
+      sub: (manualSla.pct!==null ? manualSla.met+'/'+(manualSla.met+manualSla.breached)+' pulls on time \u00b7 ' : '')+'Target: >'+XS_SLA_TARGETS.onTimeManual.toFixed(2)+'%',
       accent: xsSlaAccent(manualSla.pct, XS_SLA_TARGETS.onTimeManual)},
-    {label:'Inventory Accuracy', value:'Coming Soon', sub:'Will populate once the Inventory tab is built out', accent:'var(--text-faint)', placeholder:true}
+    {label:'Inventory Accuracy', value: invAccuracyPct!==null ? invAccuracyPct+'%' : '\u2014',
+      sub: (invAccuracyPct!==null ? invAccurate+'/'+invResolved.length+' locations on qty \u00b7 ' : '')+'Target: >'+XS_SLA_TARGETS.inventoryAccuracy.toFixed(2)+'%',
+      accent: xsSlaAccent(invAccuracyPct, XS_SLA_TARGETS.inventoryAccuracy)}
   ];
 
   grid.innerHTML = cards.map(c=>`
@@ -2163,17 +2376,18 @@ function xsRenderAll(){
     </div>
   `).join('');
 
-  safeRender('executive summary charts', ()=>xsRenderCharts(outboundGroups, outboundItems, inboundGroups));
+  safeRender('executive summary charts', ()=>xsRenderCharts(outboundGroups, outboundItems, inboundGroups, inventoryGroups));
 }
 
 /* ---------------------------------------------------------------------
    Charts — trend versions of the same three real metrics above.
 --------------------------------------------------------------------- */
-function xsRenderCharts(outboundGroups, outboundItems, inboundGroups){
+function xsRenderCharts(outboundGroups, outboundItems, inboundGroups, inventoryGroups){
   const g = xsGranularityLabel();
   document.getElementById('xsTitleFillRate').textContent = 'Fill Rate by '+g;
   document.getElementById('xsTitleDockToStock').textContent = 'Dock to Stock SLA by '+g;
   document.getElementById('xsTitleOnTime').textContent = 'On-Time Delivery by '+g;
+  document.getElementById('xsTitleInventoryAccuracy').textContent = 'Inventory Accuracy by '+g;
 
   if(typeof Chart === 'undefined'){
     document.querySelectorAll('#tab-summary .chart-holder').forEach(el=>{
@@ -2210,13 +2424,17 @@ function xsRenderCharts(outboundGroups, outboundItems, inboundGroups){
     options: fillOpts
   });
 
-  // Dock to Stock SLA by period — same logic as the Inbound tab's SLA
-  // Adherence chart, bucketed by when each HU's putaway was confirmed.
+  // Dock to Stock SLA by period — bucketed by receivedAt (when the HU
+  // was created/received), same cohort the KPI card above and the range
+  // filter itself use, so "yesterday" means the same set of HUs
+  // everywhere on this page. A HU's SLA outcome (Met/Breached) still
+  // reflects its actual putaway completion time — only the day it's
+  // charted under is what changed.
   const dtsByPeriod = {};
   inboundGroups.forEach(hu=>{
     if(hu.slaStatus!=='Met' && hu.slaStatus!=='Breached') return;
-    if(!hu.putawayAt) return;
-    const k = xsPeriodKey(hu.putawayAt);
+    if(!hu.receivedAt) return;
+    const k = xsPeriodKey(hu.receivedAt);
     if(!dtsByPeriod[k]) dtsByPeriod[k] = {met:0, total:0};
     dtsByPeriod[k].total++;
     if(hu.slaStatus==='Met') dtsByPeriod[k].met++;
@@ -2242,13 +2460,17 @@ function xsRenderCharts(outboundGroups, outboundItems, inboundGroups){
     options: dtsOpts
   });
 
-  // On-Time Delivery by period — same logic as the Outbound tab's SLA
-  // Adherence chart, Auto vs. Manual, bucketed by when each pull was confirmed.
+  // On-Time Delivery by period — bucketed by createdAt (when the pull was
+  // created), matching the KPI card above and outboundGroups' own range
+  // filter, so "yesterday" always means the same cohort of pulls whether
+  // you're reading the card, this chart, or the Outbound tab's own table.
+  // A pull's SLA outcome (Met/Breached) still reflects its actual
+  // confirmation time — only the day it's charted under is what changed.
   const otByPeriod = {};
   outboundGroups.forEach(pull=>{
     if(pull.slaStatus!=='Met' && pull.slaStatus!=='Breached') return;
-    if(!pull.confirmedAt) return;
-    const k = xsPeriodKey(pull.confirmedAt);
+    if(!pull.createdAt) return;
+    const k = xsPeriodKey(pull.createdAt);
     if(!otByPeriod[k]) otByPeriod[k] = {'Auto':{met:0,total:0}, 'Manual':{met:0,total:0}};
     if(!otByPeriod[k][pull.pullType]) return;
     otByPeriod[k][pull.pullType].total++;
@@ -2278,6 +2500,39 @@ function xsRenderCharts(outboundGroups, outboundItems, inboundGroups){
       {label:'Manual', data:otManual, backgroundColor:'#a78bfa', borderRadius:4, maxBarThickness:26}
     ]},
     options: otOpts
+  });
+
+  // Inventory Accuracy by period — same recount-aware resolution logic as
+  // the Inventory tab, bucketed by when each location was resolved (or, for
+  // still-open locations, ignored here since only resolved counts chart).
+  const invByPeriod = {};
+  inventoryGroups.forEach(loc=>{
+    if(loc.status!=='Accurate' && loc.status!=='Inaccurate') return;
+    if(!loc.countAt) return;
+    const k = xsPeriodKey(loc.countAt);
+    if(!invByPeriod[k]) invByPeriod[k] = {accurate:0, total:0};
+    invByPeriod[k].total++;
+    if(loc.status==='Accurate') invByPeriod[k].accurate++;
+  });
+  delete invByPeriod[xsPeriodKey(new Date())]; // never chart today — still in progress, misleadingly partial
+  const invLabels = Object.keys(invByPeriod).sort();
+  const invData = invLabels.map(k=>{
+    const d = invByPeriod[k];
+    return d.total ? Math.round((d.accurate/d.total)*1000)/10 : null;
+  });
+  xsDestroyChart('inventoryAccuracy');
+  const invStep = labelSkipStep(invLabels.length);
+  const invOpts = baseChartOptions({y:{beginAtZero:true, suggestedMax:112, max:112, ticks:{callback:v=>v<=100?v+'%':'', stepSize:20}}});
+  invOpts.layout = {padding:{top:20}};
+  invOpts.plugins.tooltip = { callbacks:{ label: ctx => {
+    const k = invLabels[ctx.dataIndex]; const d = invByPeriod[k];
+    return ctx.parsed.y===null ? 'no resolved locations' : 'Accuracy: '+ctx.parsed.y+'% ('+d.accurate+'/'+d.total+' locations)';
+  }}};
+  invOpts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:(v,ctx)=> (v===null || ctx.dataIndex % invStep !== 0) ? '' : v+'%'};
+  xsCharts.inventoryAccuracy = new Chart(document.getElementById('xsChartInventoryAccuracy'), {
+    type:'bar',
+    data:{ labels: invLabels.map(l=>xsFormatPeriodLabel(l)), datasets:[{ data: invData, backgroundColor:'#2fbf71', borderRadius:4, maxBarThickness:36 }]},
+    options: invOpts
   });
 }
 
@@ -2359,6 +2614,7 @@ let ibSortDir = 'desc';
 let ibSearchTerm = '';
 let ibRangeMode = '30';
 let ibGranularity = 'day';
+let ibTblSlaFilter = 'all'; // Inbound Lines table filter: 'all' | 'Met' | 'Breached' — independent of the tab-wide date range above
 let ibCharts = {};
 let ibCachedRangeGroups = [];
 let ibLastRenderedGroups = [];
@@ -2551,6 +2807,19 @@ document.getElementById('ibDateFrom').addEventListener('change', ibRenderAll);
 document.getElementById('ibDateTo').addEventListener('change', ibRenderAll);
 document.getElementById('ibSearchBox').addEventListener('input', e=>{
   ibSearchTerm = e.target.value.trim().toLowerCase();
+  safeRender('inbound table', ()=>ibRenderTable(ibCachedRangeGroups));
+});
+['ibTblReceivedFrom','ibTblReceivedTo','ibTblPutawayFrom','ibTblPutawayTo'].forEach(id=>{
+  document.getElementById(id).addEventListener('change', ()=> safeRender('inbound table', ()=>ibRenderTable(ibCachedRangeGroups)));
+});
+document.getElementById('ibTblSlaFilter').addEventListener('change', e=>{
+  ibTblSlaFilter = e.target.value;
+  safeRender('inbound table', ()=>ibRenderTable(ibCachedRangeGroups));
+});
+document.getElementById('ibTblFiltersClear').addEventListener('click', ()=>{
+  ['ibTblReceivedFrom','ibTblReceivedTo','ibTblPutawayFrom','ibTblPutawayTo'].forEach(id=>{ document.getElementById(id).value=''; });
+  document.getElementById('ibTblSlaFilter').value = 'all';
+  ibTblSlaFilter = 'all';
   safeRender('inbound table', ()=>ibRenderTable(ibCachedRangeGroups));
 });
 
@@ -2997,6 +3266,14 @@ function ibRenderTable(rangeGroups){
     });
   }
 
+  const receivedFrom = document.getElementById('ibTblReceivedFrom').value;
+  const receivedTo = document.getElementById('ibTblReceivedTo').value;
+  const putawayFrom = document.getElementById('ibTblPutawayFrom').value;
+  const putawayTo = document.getElementById('ibTblPutawayTo').value;
+  if(receivedFrom || receivedTo) groups = groups.filter(g=>dateInRange(g.receivedAt, receivedFrom, receivedTo));
+  if(putawayFrom || putawayTo) groups = groups.filter(g=>dateInRange(g.putawayAt, putawayFrom, putawayTo));
+  if(ibTblSlaFilter!=='all') groups = groups.filter(g=>g.slaStatus===ibTblSlaFilter);
+
   groups = [...groups].sort((a,b)=>{
     let av = a[ibSortKey], bv = b[ibSortKey];
     if(av instanceof Date) av = av.getTime()||0;
@@ -3019,7 +3296,8 @@ function ibRenderTable(rangeGroups){
 
   document.getElementById('ibTableMeta').textContent =
     groups.length.toLocaleString() + ' HU' + (groups.length===1?'':'s') +
-    (ibRangeMode!=='all' ? ' in selected range' : '');
+    (ibRangeMode!=='all' ? ' in selected range' : '') +
+    ((receivedFrom||receivedTo||putawayFrom||putawayTo||ibTblSlaFilter!=='all') ? ' \u00b7 table filters applied' : '');
 
   const tbody = document.getElementById('ibTableBody');
   const emptyState = document.getElementById('ibEmptyState');
@@ -3114,6 +3392,804 @@ function ibExportTableToExcel(){
   const today = new Date().toISOString().slice(0,10);
   XLSX.writeFile(wb, 'whitsett-inbound_'+rangeSuffix+'_'+today+'.xlsx');
 }
+
+/* =======================================================================
+   INVENTORY TAB
+   Fully separate state/functions (all "ic" prefixed, for "Inventory
+   Count") so this never collides with Outbound/Inbound above. Shares the
+   same Firebase app/db but writes to its own top-level nodes:
+   /inventory_counts and /inventory_count_uploads. This is a genuinely
+   different SAP export (Physical Inventory Document results, not the
+   Warehouse Task extract Outbound/Inbound use), so it gets its own
+   upload button and is NOT part of combinedUploadFromFile below.
+======================================================================= */
+const icRecordsRef = db.ref('inventory_counts');
+const icUploadsRef = db.ref('inventory_count_uploads');
+
+const IC_COLUMN_HEADERS = {
+  picDoc:      ['Physical Inventory Document'],
+  status:      ['Physical Inventory Status'],
+  warehouseOrder:['Warehouse Order'],
+  bin:         ['Storage Bin'],
+  product:     ['Product'],
+  stockType:   ['Stock Type'],
+  counter:     ['Counter'],
+  countDate:   ['Count Date'],
+  countTime:   ['Count Time'],
+  productDesc: ['Product Short Description'],
+  bookQty:     ['Book Quantity'],
+  countedQty:  ['Counted Quantity'],
+  diffQty:     ['Difference Quantity'],
+  refPicDoc:   ['Reference Physical Inventory Document'],
+  hu:          ['Handling Unit'],
+  warehouseTask:['Warehouse Task'],
+  owner:       ['Owner']
+};
+const IC_REQUIRED_COLUMNS = ['picDoc','status','bin'];
+// ACTI = Active/waiting to be counted, COUN = count complete, RECO = a
+// recount was generated from this count (the actual recount lives as its
+// own document, cross-referenced via Reference Physical Inventory Document).
+// Any other status in the export is dropped on import — this tab only
+// tracks these three.
+const IC_KEEP_STATUSES = new Set(['ACTI','COUN','RECO']);
+
+function icResolveColumns(headerRow){
+  const lookup = {};
+  (headerRow||[]).forEach((h,i)=>{
+    const norm = normalizeHeader(h);
+    if(norm && !(norm in lookup)) lookup[norm] = i;
+  });
+  const col = {};
+  const missing = [];
+  for(const field of Object.keys(IC_COLUMN_HEADERS)){
+    const found = IC_COLUMN_HEADERS[field].map(normalizeHeader).find(c => c in lookup);
+    if(found !== undefined) col[field] = lookup[found];
+    else missing.push(field);
+  }
+  return {col, missing};
+}
+
+/* ---------------------------------------------------------------------
+   State
+--------------------------------------------------------------------- */
+let icAllRecords = [];
+let icSortKey = 'countAt';
+let icSortDir = 'desc';
+let icSearchTerm = '';
+let icRangeMode = '30';
+let icGranularity = 'day';
+let icCharts = {};
+let icCachedRangeGroups = [];
+let icLastRenderedGroups = [];
+
+function icDestroyChart(id){ if(icCharts[id]){ icCharts[id].destroy(); delete icCharts[id]; } }
+
+function icPeriodKey(d){
+  if(!isValidDate(d)) return null;
+  if(icGranularity==='year') return String(d.getFullYear());
+  if(icGranularity==='month') return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  if(icGranularity==='week'){
+    const ws = getWeekStart(d);
+    return ws.getFullYear()+'-'+String(ws.getMonth()+1).padStart(2,'0')+'-'+String(ws.getDate()).padStart(2,'0');
+  }
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function icFormatPeriodLabel(k){
+  if(icGranularity==='year') return k;
+  if(icGranularity==='month'){
+    const [y,m] = k.split('-').map(Number);
+    return new Date(y,m-1,1).toLocaleDateString('en-US',{month:'short',year:'numeric'});
+  }
+  const [y,m,d] = k.split('-').map(Number);
+  if(icGranularity==='week'){
+    const start = new Date(y,m-1,d);
+    const end = new Date(y,m-1,d+6);
+    const startStr = start.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    const endStr = start.getMonth()===end.getMonth()
+      ? end.toLocaleDateString('en-US',{day:'numeric'})
+      : end.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    return startStr+'\u2013'+endStr;
+  }
+  return new Date(y,m-1,d).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+}
+function icGranularityLabel(){
+  return icGranularity==='year' ? 'Year' : icGranularity==='month' ? 'Month' : icGranularity==='week' ? 'Week' : 'Day';
+}
+
+/* ---------------------------------------------------------------------
+   Excel parsing
+--------------------------------------------------------------------- */
+async function icParseSapExport(file){
+  const buf = await readFileAsArrayBuffer(file);
+  const wb = XLSX.read(buf, {type:'array', cellDates:true});
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:null, raw:true});
+
+  if(rows.length === 0){
+    const err = new Error('The file has no rows.');
+    err.code = 'NO_ROWS';
+    throw err;
+  }
+
+  const {col: COL, missing} = icResolveColumns(rows[0]);
+  const missingRequired = missing.filter(f => IC_REQUIRED_COLUMNS.includes(f));
+  if(missingRequired.length){
+    const names = missingRequired.map(f => IC_COLUMN_HEADERS[f][0]).join(', ');
+    const err = new Error('Missing required column(s): '+names+'. Check the export still includes these columns (name can shift position, but must be present).');
+    err.code = 'MISSING_COLUMNS';
+    throw err;
+  }
+
+  const updates = {};
+  let totalRows=0, skippedStatus=0, skippedIncomplete=0, imported=0;
+
+  for(let i=1;i<rows.length;i++){
+    const row = rows[i];
+    if(!row || row.length===0) continue;
+    totalRows++;
+
+    const status = row[COL.status] ? String(row[COL.status]).trim().toUpperCase() : '';
+    if(!IC_KEEP_STATUSES.has(status)){ skippedStatus++; continue; }
+
+    const picDoc = row[COL.picDoc];
+    if(!picDoc){ skippedIncomplete++; continue; }
+
+    const bin = COL.bin!==undefined ? row[COL.bin] : null;
+    if(!bin){ skippedIncomplete++; continue; }
+    // Product is NOT required: a blind zone-sweep count is scheduled
+    // against a bin before anyone knows what's actually in it, so many
+    // ACTI rows legitimately have no Product yet. It gets filled in once
+    // the count actually happens.
+    const productRaw = COL.product!==undefined ? row[COL.product] : null;
+    const product = (productRaw!==null && productRaw!==undefined && String(productRaw).trim()!=='') ? String(productRaw).trim() : null;
+
+    const countDate = COL.countDate!==undefined ? row[COL.countDate] : null;
+    const countTime = COL.countTime!==undefined ? row[COL.countTime] : null;
+    const countAt = combineDateAndTime(countDate, countTime);
+
+    const bookQty = COL.bookQty!==undefined ? (Number(row[COL.bookQty]) || 0) : 0;
+    const countedQty = COL.countedQty!==undefined ? (Number(row[COL.countedQty]) || 0) : 0;
+
+    const record = {
+      picDoc: String(picDoc).trim(),
+      status,
+      warehouseOrder: COL.warehouseOrder!==undefined ? (row[COL.warehouseOrder] ?? null) : null,
+      bin: String(bin).trim(),
+      product,
+      stockType: COL.stockType!==undefined ? (row[COL.stockType] ?? null) : null,
+      counter: COL.counter!==undefined ? (row[COL.counter] ?? null) : null,
+      productDesc: COL.productDesc!==undefined ? (row[COL.productDesc] ?? null) : null,
+      bookQty, countedQty,
+      diffQty: countedQty - bookQty, // computed independently of the export's own Difference Quantity column
+      refPicDoc: COL.refPicDoc!==undefined ? (row[COL.refPicDoc] ?? null) : null,
+      hu: COL.hu!==undefined ? (row[COL.hu] ?? null) : null,
+      warehouseTask: COL.warehouseTask!==undefined ? (row[COL.warehouseTask] ?? null) : null,
+      owner: COL.owner!==undefined ? (row[COL.owner] ?? null) : null,
+      countAt: countAt ? countAt.toISOString() : null,
+      uploadedAt: new Date().toISOString()
+    };
+
+    // Physical Inventory Document is NOT a unique per-line key in this
+    // export — a single document number can cover a whole batch of bins
+    // in one zone-sweep count (seen: one document spanning 113 different
+    // bins). Storage Bin is unique within a document, so the dedupe key
+    // is the pair — Document alone would silently collapse a multi-bin
+    // batch down to its last row.
+    const key = sanitizeKey(record.picDoc+'__'+record.bin);
+    updates[key] = record;
+    imported++;
+  }
+
+  return {updates, totalRows, skippedStatus, skippedIncomplete, imported, missingOptional: missing.filter(f=>!IC_REQUIRED_COLUMNS.includes(f))};
+}
+
+/* ---------------------------------------------------------------------
+   Upload flow — independent file input, this tab's own SAP export
+--------------------------------------------------------------------- */
+document.getElementById('icFileInput').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  icSetSyncStatus('busy','Reading file\u2026');
+  try{
+    const result = await icParseSapExport(file);
+    const keys = Object.keys(result.updates);
+    if(keys.length){
+      await icRecordsRef.update(result.updates);
+      await icUploadsRef.push({ fileName:file.name, uploadedAt:new Date().toISOString(),
+        totalRows:result.totalRows, skippedStatus:result.skippedStatus, skippedIncomplete:result.skippedIncomplete, imported:result.imported });
+      icSetSyncStatus('ok', result.imported+' count'+(result.imported===1?'':'s')+' imported'+(result.skippedStatus?', '+result.skippedStatus+' skipped (status)':''));
+    } else {
+      icSetSyncStatus('err','No matching rows found in that file.');
+    }
+  }catch(err){
+    console.error(err);
+    icSetSyncStatus('err','Upload failed: '+err.message);
+  }
+  e.target.value='';
+});
+
+function icSetSyncStatus(kind, text){
+  const dot = document.getElementById('icSyncDot');
+  const txt = document.getElementById('icSyncText');
+  dot.className = 'dot' + (kind==='busy'?' busy':kind==='err'?' err':'');
+  txt.textContent = text;
+}
+
+/* ---------------------------------------------------------------------
+   Firebase live listener
+--------------------------------------------------------------------- */
+icSetSyncStatus('busy','Connecting&hellip;');
+icRecordsRef.on('value', snap=>{
+  const val = snap.val() || {};
+  icAllRecords = Object.keys(val).map(k=>{
+    const r = val[k];
+    return { ...r, _key:k, countAt: r.countAt ? new Date(r.countAt) : null };
+  });
+  icSetSyncStatus('ok','Connected');
+  icRenderAll();
+  safeRender('executive summary', xsRenderAll);
+}, err=>{
+  console.error(err);
+  icSetSyncStatus('err','Connection error: '+err.message);
+});
+
+icUploadsRef.limitToLast(1).on('value', snap=>{
+  const val = snap.val();
+  if(!val) return;
+  const entry = Object.values(val)[0];
+  document.getElementById('icLastUploadLine').style.display='inline';
+  document.getElementById('icLastUploadTime').textContent =
+    new Date(entry.uploadedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
+    + ' (' + entry.imported + ' counts)';
+});
+
+/* ---------------------------------------------------------------------
+   Filtering & controls
+--------------------------------------------------------------------- */
+document.querySelectorAll('#icGranularityToggle .seg-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    icGranularity = btn.dataset.granularity;
+    document.querySelectorAll('#icGranularityToggle .seg-btn').forEach(b=>b.classList.toggle('active', b===btn));
+    icRenderAll();
+  });
+});
+document.getElementById('icRangeFilter').addEventListener('change', e=>{
+  icRangeMode = e.target.value;
+  document.getElementById('icDateRangeInputs').classList.toggle('show', icRangeMode==='custom');
+  icRenderAll();
+});
+document.getElementById('icDateFrom').addEventListener('change', icRenderAll);
+document.getElementById('icDateTo').addEventListener('change', icRenderAll);
+document.getElementById('icSearchBox').addEventListener('input', e=>{
+  icSearchTerm = e.target.value.trim().toLowerCase();
+  safeRender('inventory table', ()=>icRenderTable(icCachedRangeGroups));
+});
+
+// Uses the shared computeRangeFilteredGroups helper (defined on the
+// Outbound tab above) so date-cutoff behavior stays identical across tabs.
+// Open locations always show regardless of range, same as In-Progress
+// pulls and In-GR-Zone HUs elsewhere.
+function icFilterByRange(groups){
+  const fromVal = document.getElementById('icDateFrom').value;
+  const toVal = document.getElementById('icDateTo').value;
+  return computeRangeFilteredGroups(groups, icRangeMode, fromVal, toVal, 'countAt', 'Open');
+}
+
+/* ---------------------------------------------------------------------
+   Aggregation: resolve every Physical Inventory Document into one
+   bin/product location record, applying the recount-override rule:
+   if a recount was generated (RECO) and no ACTI is still pending against
+   that same bin/product, the outcome is whatever the most recent
+   completed (COUN) document for that bin/product shows — the original
+   miss that triggered the recount is superseded, not averaged in.
+   Unsuccessful is only registered when the terminal record is COUN with
+   a non-zero difference and no ACTI is pending against the same location.
+--------------------------------------------------------------------- */
+function icGroupByLocation(records){
+  const map = new Map();
+  for(const r of records){
+    const key = r.bin+'\u0001'+r.product;
+    if(!map.has(key)) map.set(key, []);
+    map.get(key).push(r);
+  }
+  const groups = [];
+  for(const [key, recs] of map.entries()){
+    const hasActi = recs.some(r=>r.status==='ACTI');
+    const couns = recs.filter(r=>r.status==='COUN');
+    const hadRecount = recs.some(r=>r.status==='RECO');
+    // "Terminal" record: the one that currently represents this location's
+    // outcome — the most recently counted COUN document, if any.
+    const sortedCouns = [...couns].filter(r=>isValidDate(r.countAt)).sort((a,b)=>b.countAt-a.countAt);
+    const terminal = sortedCouns[0] || null;
+    // Earliest record on file, for display/context (e.g. the original
+    // miss that a recount corrected).
+    const sortedAll = [...recs].filter(r=>isValidDate(r.countAt)).sort((a,b)=>a.countAt-b.countAt);
+    const earliest = sortedAll[0] || recs[0];
+
+    let status;
+    if(hasActi) status = 'Open';
+    else if(terminal) status = terminal.diffQty===0 ? 'Accurate' : 'Inaccurate';
+    else status = 'Open'; // only RECO on file, no terminal yet (recount not in this export window)
+
+    const rep = terminal || earliest; // record to display qty/counter/date from
+    const originalDiff = hadRecount && earliest && terminal && earliest._key!==terminal._key ? earliest.diffQty : null;
+
+    groups.push({
+      key, bin: earliest.bin, product: earliest.product,
+      productDesc: (terminal && terminal.productDesc) || earliest.productDesc,
+      stockType: (terminal && terminal.stockType) || earliest.stockType,
+      warehouseOrder: (terminal && terminal.warehouseOrder) || earliest.warehouseOrder,
+      bookQty: rep.bookQty, countedQty: rep.countedQty, diffQty: rep.diffQty,
+      originalDiffQty: originalDiff,
+      counter: (terminal && terminal.counter) || null,
+      countAt: status==='Open' ? earliest.countAt : (terminal ? terminal.countAt : earliest.countAt),
+      status, hadRecount,
+      recountOutcome: hadRecount && status!=='Open' ? (status==='Accurate' ? 'Corrected' : 'Confirmed') : null,
+      recordCount: recs.length,
+      records: recs
+    });
+  }
+  return groups;
+}
+
+// Bin-level rollup for "Location Accuracy" — a Storage Bin is only
+// Accurate if every product resolved at that bin was Accurate; Open if
+// anything at that bin is still pending; Inaccurate if anything resolved
+// there missed. In this export bins typically hold one product each, but
+// this rolls up correctly whether or not that's true.
+function icRollupByBin(groups){
+  const map = new Map();
+  for(const g of groups){
+    if(!map.has(g.bin)) map.set(g.bin, []);
+    map.get(g.bin).push(g);
+  }
+  const bins = [];
+  for(const [bin, locs] of map.entries()){
+    let status;
+    if(locs.some(l=>l.status==='Open')) status = 'Open';
+    else if(locs.some(l=>l.status==='Inaccurate')) status = 'Inaccurate';
+    else status = 'Accurate';
+    bins.push({ bin, status, locationCount: locs.length });
+  }
+  return bins;
+}
+
+/* ---------------------------------------------------------------------
+   Render: orchestrator
+--------------------------------------------------------------------- */
+function icRenderAll(){
+  document.getElementById('icRecordCount').textContent = icAllRecords.length.toLocaleString();
+  const allGroups = icGroupByLocation(icAllRecords);
+  document.getElementById('icLocationCount').textContent = allGroups.length.toLocaleString();
+
+  const rangeGroups = icFilterByRange(allGroups);
+  icCachedRangeGroups = rangeGroups;
+  const openGroups = allGroups.filter(g=>g.status==='Open'); // always live, not range-filtered
+
+  // Raw status tallies (Open/Completed/Recount counts) work off individual
+  // count documents, not the resolved-location rollup above — same date
+  // bounds, but ACTI documents are always included live (mirrors how
+  // In-Progress pulls / In-GR-Zone HUs are handled elsewhere).
+  const fromVal = document.getElementById('icDateFrom').value;
+  const toVal = document.getElementById('icDateTo').value;
+  const rangeRecords = computeRangeFilteredGroups(icAllRecords, icRangeMode, fromVal, toVal, 'countAt', 'ACTI');
+
+  safeRender('inventory KPIs', ()=>icRenderKPIs(rangeGroups, openGroups, rangeRecords));
+  safeRender('inventory charts', ()=>icRenderCharts(rangeGroups, openGroups));
+  safeRender('inventory table', ()=>icRenderTable(rangeGroups));
+}
+
+/* ---------------------------------------------------------------------
+   KPI cards
+--------------------------------------------------------------------- */
+function icModalTableHtml(groups){
+  if(!groups.length) return '<div style="color:var(--text-faint);padding:10px 0 4px;">No matching locations.</div>';
+  return `<div style="overflow-x:auto;"><table><thead><tr>
+      <th>Bin</th><th>SKU</th><th>Description</th><th>Book</th><th>Counted</th><th>Diff</th><th>Result</th><th>Counter</th><th>Count Date</th>
+    </tr></thead><tbody>${groups.map(g=>`
+      <tr>
+        <td>${g.bin}</td>
+        <td>${g.product||'&mdash;'}</td>
+        <td style="white-space:normal;max-width:260px;">${g.productDesc||'&mdash;'}</td>
+        <td>${g.bookQty.toLocaleString()}</td>
+        <td>${g.countedQty.toLocaleString()}</td>
+        <td>${g.diffQty>0?'+':''}${g.diffQty.toLocaleString()}</td>
+        <td>${g.status}</td>
+        <td>${g.counter||'&mdash;'}</td>
+        <td>${formatDateTime(g.countAt)}</td>
+      </tr>
+    `).join('')}</tbody></table></div>`;
+}
+
+function icRenderKPIs(groups, openGroups, rangeRecords){
+  const grid = document.getElementById('icKpiGrid');
+
+  const openRecordCount = rangeRecords.filter(r=>r.status==='ACTI').length;
+  const completedRecordCount = rangeRecords.filter(r=>r.status==='COUN').length;
+  const recountRecordCount = rangeRecords.filter(r=>r.status==='RECO').length;
+
+  const resolved = groups.filter(g=>g.status==='Accurate' || g.status==='Inaccurate');
+  const accurate = resolved.filter(g=>g.status==='Accurate').length;
+  const accuracyPct = resolved.length ? Math.round((accurate/resolved.length)*1000)/10 : null;
+
+  const bins = icRollupByBin(groups);
+  const binsResolved = bins.filter(b=>b.status==='Accurate' || b.status==='Inaccurate');
+  const binsAccurate = binsResolved.filter(b=>b.status==='Accurate').length;
+  const locationAccuracyPct = binsResolved.length ? Math.round((binsAccurate/binsResolved.length)*1000)/10 : null;
+
+  const recountedGroups = groups.filter(g=>g.hadRecount);
+  const recountedResolved = recountedGroups.filter(g=>g.status==='Accurate' || g.status==='Inaccurate');
+  const recountRate = resolved.length ? Math.round((recountedResolved.length/(resolved.length))*1000)/10 : null;
+  const recountCorrected = recountedResolved.filter(g=>g.recountOutcome==='Corrected').length;
+  const recountSuccessPct = recountedResolved.length ? Math.round((recountCorrected/recountedResolved.length)*1000)/10 : null;
+
+  const inaccurateGroups = resolved.filter(g=>g.status==='Inaccurate').sort((a,b)=>Math.abs(b.diffQty)-Math.abs(a.diffQty));
+  const overages = inaccurateGroups.filter(g=>g.diffQty>0).length;
+  const shortages = inaccurateGroups.filter(g=>g.diffQty<0).length;
+
+  const now = new Date();
+  const openWithAge = openGroups.map(g=>({...g, ageMin: isValidDate(g.countAt) ? minutesBetween(g.countAt, now) : null}));
+  const oldestOpenFirst = [...openWithAge].sort((a,b)=>(b.ageMin||0)-(a.ageMin||0));
+  const oldestOpen = oldestOpenFirst[0] || null;
+
+  const cards = [
+    {label:'Overall Inventory Accuracy', value: accuracyPct!==null ? accuracyPct+'%' : '\u2014',
+      sub: accuracyPct!==null ? accurate+'/'+resolved.length+' locations on qty' : 'no resolved locations',
+      accent: xsSlaAccent(accuracyPct, XS_SLA_TARGETS.inventoryAccuracy)},
+    {label:'Location Accuracy', value: locationAccuracyPct!==null ? locationAccuracyPct+'%' : '\u2014',
+      sub: locationAccuracyPct!==null ? binsAccurate+'/'+binsResolved.length+' bins fully accurate' : 'no resolved bins',
+      accent: xsSlaAccent(locationAccuracyPct, XS_SLA_TARGETS.inventoryAccuracy)},
+    {label:'Open Counts', value: openRecordCount.toLocaleString(), sub:'waiting to be counted, live', accent: openRecordCount>0 ? 'var(--warn)' : 'var(--good)',
+      modalTitle:'Open Counts \u2014 '+openRecordCount.toLocaleString()+' location'+(openRecordCount===1?'':'s')+' waiting (oldest first)',
+      modalBody: icModalTableHtml(oldestOpenFirst)},
+    {label:'Completed Counts', value: completedRecordCount.toLocaleString(), sub:'COUN documents in range', accent:'var(--accent)'},
+    {label:'Recounts Initiated', value: recountRecordCount.toLocaleString(), sub:'RECO documents in range', accent: recountRecordCount>0 ? 'var(--hv-color)' : 'var(--good)'},
+    {label:'Recount Rate', value: recountRate!==null ? recountRate+'%' : '\u2014', sub: recountedResolved.length+' of '+resolved.length+' resolved locations needed one', accent:'var(--info)'},
+    {label:'Recount Success Rate', value: recountSuccessPct!==null ? recountSuccessPct+'%' : '\u2014', sub: recountSuccessPct!==null ? recountCorrected+'/'+recountedResolved.length+' recounts matched book qty' : 'no completed recounts', accent: recountSuccessPct!==null && recountSuccessPct<80 ? 'var(--warn)' : 'var(--good)'},
+    {label:'Inaccurate Locations', value: inaccurateGroups.length.toLocaleString(), sub: overages+' over, '+shortages+' short', accent: inaccurateGroups.length>0 ? 'var(--bad)' : 'var(--good)',
+      modalTitle:'Inaccurate Locations \u2014 largest variance first',
+      modalBody: icModalTableHtml(inaccurateGroups)},
+    {label:'Oldest Open Count', value: oldestOpen ? formatDuration(oldestOpen.ageMin) : '\u2014', sub: oldestOpen ? (oldestOpen.product+' @ '+oldestOpen.bin) : 'nothing open', accent: oldestOpen && oldestOpen.ageMin>4320 ? 'var(--bad)' : 'var(--warn)',
+      modalTitle:'Open Counts \u2014 Oldest First', modalBody: icModalTableHtml(oldestOpenFirst)}
+  ];
+
+  grid.innerHTML = cards.map((c,i)=>`
+    <div class="kpi${c.modalBody?' clickable':''}" style="--kpi-accent:${c.accent}"${c.modalBody?` data-card-idx="${i}"`:''}>
+      <div class="label">${c.label}</div>
+      <div class="value">${c.value}</div>
+      <div class="sub">${c.sub}</div>
+    </div>
+  `).join('');
+
+  grid.querySelectorAll('[data-card-idx]').forEach(el=>{
+    const c = cards[Number(el.dataset.cardIdx)];
+    el.addEventListener('click', ()=> openKpiModal(c.modalTitle, c.modalBody));
+  });
+
+  document.getElementById('icNote').textContent = '';
+}
+
+/* ---------------------------------------------------------------------
+   Charts
+--------------------------------------------------------------------- */
+function icRenderCharts(groups, openGroups){
+  icUpdateChartTitles();
+  if(typeof Chart === 'undefined'){
+    document.querySelectorAll('#tab-inventory .chart-holder').forEach(el=>{
+      el.innerHTML = '<div style="padding:20px;color:var(--text-faint);font-size:12px;">Chart library failed to load from CDN — check your network/firewall and reload.</div>';
+    });
+    throw new Error('Chart.js did not load (global "Chart" is undefined)');
+  }
+  icRenderAccuracyChart(groups);
+  icRenderStatusSplitChart(groups);
+  icRenderVolumeChart(groups);
+  icRenderVarianceDirectionChart(groups);
+  icRenderByCounterChart(groups);
+  icRenderAgingChart(openGroups);
+}
+
+function icUpdateChartTitles(){
+  const g = icGranularityLabel();
+  document.getElementById('icTitleAccuracy').textContent = 'Inventory Accuracy by '+g;
+  document.getElementById('icTitleVolume').textContent = 'Counts by Status per '+g;
+}
+
+function icRenderAccuracyChart(groups){
+  const byPeriod = {};
+  groups.forEach(g=>{
+    if(g.status!=='Accurate' && g.status!=='Inaccurate') return;
+    if(!g.countAt) return;
+    const k = icPeriodKey(g.countAt);
+    if(!byPeriod[k]) byPeriod[k] = {accurate:0, total:0};
+    byPeriod[k].total++;
+    if(g.status==='Accurate') byPeriod[k].accurate++;
+  });
+  delete byPeriod[icPeriodKey(new Date())];
+  const labels = Object.keys(byPeriod).sort();
+  const data = labels.map(k=>{
+    const d = byPeriod[k];
+    return d.total ? Math.round((d.accurate/d.total)*1000)/10 : null;
+  });
+  icDestroyChart('accuracy');
+  const step = labelSkipStep(labels.length);
+  const opts = baseChartOptions({y:{beginAtZero:true, suggestedMax:112, max:112, ticks:{callback:v=>v<=100?v+'%':'', stepSize:20}}});
+  opts.layout = {padding:{top:20}};
+  opts.plugins.tooltip = { callbacks:{ label: ctx => {
+    const k = labels[ctx.dataIndex]; const d = byPeriod[k];
+    return ctx.parsed.y===null ? 'no resolved locations' : 'Accuracy: '+ctx.parsed.y+'% ('+d.accurate+'/'+d.total+')';
+  }}};
+  opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:(v,ctx)=> (v===null || ctx.dataIndex % step !== 0) ? '' : v+'%'};
+  icCharts.accuracy = new Chart(document.getElementById('icChartAccuracy'), {
+    type:'bar',
+    data:{ labels: labels.map(l=>icFormatPeriodLabel(l)), datasets:[{ data, backgroundColor:'#2fbf71', borderRadius:4, maxBarThickness:36 }]},
+    options: opts
+  });
+}
+
+function icRenderStatusSplitChart(groups){
+  const open = groups.filter(g=>g.status==='Open').length;
+  const accurate = groups.filter(g=>g.status==='Accurate').length;
+  const inaccurate = groups.filter(g=>g.status==='Inaccurate').length;
+  icDestroyChart('statusSplit');
+  icCharts.statusSplit = new Chart(document.getElementById('icChartStatusSplit'), {
+    type:'doughnut',
+    data:{ labels:['Open','Accurate','Inaccurate'], datasets:[{ data:[open,accurate,inaccurate],
+      backgroundColor:['#e8a33d','#2fbf71','#e2231a'], borderWidth:0 }]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{position:'bottom', labels:{color:LABEL_COLOR, boxWidth:12, padding:14}},
+        tooltip:{ callbacks:{ label: ctx => ctx.label+': '+ctx.parsed+' ('+Math.round(ctx.parsed/(open+accurate+inaccurate||1)*1000)/10+'%)' } },
+        datalabels:{display:false} } }
+  });
+}
+
+function icRenderVolumeChart(groups){
+  const byPeriod = {};
+  groups.forEach(g=>{
+    g.records.forEach(r=>{
+      if(!IC_KEEP_STATUSES.has(r.status)) return;
+      const dateForBucket = r.status==='ACTI' ? r.countAt : r.countAt;
+      if(!isValidDate(dateForBucket)) return;
+      const k = icPeriodKey(dateForBucket);
+      if(!byPeriod[k]) byPeriod[k] = {ACTI:0, COUN:0, RECO:0};
+      byPeriod[k][r.status]++;
+    });
+  });
+  const labels = Object.keys(byPeriod).sort();
+  icDestroyChart('volume');
+  const opts = baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}}, true);
+  opts.scales.x.stacked = true;
+  opts.scales.y.stacked = true;
+  icCharts.volume = new Chart(document.getElementById('icChartVolume'), {
+    type:'bar',
+    data:{ labels: labels.map(l=>icFormatPeriodLabel(l)), datasets:[
+      {label:'Open', data:labels.map(k=>byPeriod[k].ACTI), backgroundColor:'#e8a33d', borderRadius:2, maxBarThickness:28},
+      {label:'Completed', data:labels.map(k=>byPeriod[k].COUN), backgroundColor:'#2fbf71', borderRadius:2, maxBarThickness:28},
+      {label:'Recount', data:labels.map(k=>byPeriod[k].RECO), backgroundColor:'#a78bfa', borderRadius:2, maxBarThickness:28}
+    ]},
+    options: opts
+  });
+}
+
+function icRenderVarianceDirectionChart(groups){
+  const byPeriod = {};
+  groups.forEach(g=>{
+    if(g.status!=='Inaccurate' || !g.countAt) return;
+    const k = icPeriodKey(g.countAt);
+    if(!byPeriod[k]) byPeriod[k] = {over:0, short:0};
+    if(g.diffQty>0) byPeriod[k].over++; else byPeriod[k].short++;
+  });
+  delete byPeriod[icPeriodKey(new Date())];
+  const labels = Object.keys(byPeriod).sort();
+  icDestroyChart('varianceDirection');
+  const opts = baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}}, true);
+  icCharts.varianceDirection = new Chart(document.getElementById('icChartVarianceDirection'), {
+    type:'bar',
+    data:{ labels: labels.map(l=>icFormatPeriodLabel(l)), datasets:[
+      {label:'Overage (found more)', data:labels.map(k=>byPeriod[k].over), backgroundColor:'#3d9fe8', borderRadius:4, maxBarThickness:26},
+      {label:'Shortage (found less)', data:labels.map(k=>byPeriod[k].short), backgroundColor:'#e2231a', borderRadius:4, maxBarThickness:26}
+    ]},
+    options: opts
+  });
+}
+
+function icRenderByCounterChart(groups){
+  const resolved = groups.filter(g=>(g.status==='Accurate'||g.status==='Inaccurate') && g.counter);
+  const byCounter = {};
+  resolved.forEach(g=>{
+    if(!byCounter[g.counter]) byCounter[g.counter] = {accurate:0, total:0};
+    byCounter[g.counter].total++;
+    if(g.status==='Accurate') byCounter[g.counter].accurate++;
+  });
+  const counters = Object.keys(byCounter).sort((a,b)=>byCounter[b].total-byCounter[a].total);
+  const data = counters.map(c=>Math.round((byCounter[c].accurate/byCounter[c].total)*1000)/10);
+  icDestroyChart('byCounter');
+  const opts = baseChartOptions({y:{beginAtZero:true, suggestedMax:112, max:112, ticks:{callback:v=>v<=100?v+'%':'', stepSize:20}}});
+  opts.plugins.tooltip = { callbacks:{ label: ctx => {
+    const c = counters[ctx.dataIndex]; const d = byCounter[c];
+    return d.accurate+'/'+d.total+' accurate ('+ctx.parsed.y+'%)';
+  }}};
+  opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:v=>v+'%'};
+  icCharts.byCounter = new Chart(document.getElementById('icChartByCounter'), {
+    type:'bar',
+    data:{ labels: counters, datasets:[{ data, backgroundColor:'#3d9fe8', borderRadius:4, maxBarThickness:48 }]},
+    options: opts
+  });
+}
+
+function icRenderAgingChart(openGroups){
+  const now = new Date();
+  const buckets = ['0\u20131d','1\u20132d','2\u20133d','3\u20135d','5\u20137d','7d+'];
+  const counts = new Array(6).fill(0);
+  openGroups.forEach(g=>{
+    if(!isValidDate(g.countAt)) return;
+    const days = minutesBetween(g.countAt, now)/1440;
+    let idx = days<1?0 : days<2?1 : days<3?2 : days<5?3 : days<7?4 : 5;
+    counts[idx]++;
+  });
+  icDestroyChart('aging');
+  const opts = baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}});
+  opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:v=>v>0?v:''};
+  const colors = ['#2fbf71','#2fbf71','#e8a33d','#e8a33d','#e2231a','#e2231a'];
+  icCharts.aging = new Chart(document.getElementById('icChartAging'), {
+    type:'bar',
+    data:{ labels: buckets, datasets:[{ data: counts, backgroundColor: colors, borderRadius:4, maxBarThickness:48 }]},
+    options: opts
+  });
+}
+
+/* ---------------------------------------------------------------------
+   Table
+--------------------------------------------------------------------- */
+document.querySelectorAll('#tab-inventory thead th').forEach(th=>{
+  th.addEventListener('click', ()=>{
+    const key = th.dataset.ickey;
+    if(icSortKey===key){ icSortDir = icSortDir==='asc'?'desc':'asc'; }
+    else { icSortKey = key; icSortDir = 'desc'; }
+    safeRender('inventory table', ()=>icRenderTable(icCachedRangeGroups));
+  });
+});
+
+function icRenderTable(rangeGroups){
+  let groups = rangeGroups;
+
+  if(icSearchTerm){
+    groups = groups.filter(g=>{
+      const hay = [g.bin, g.product, g.productDesc, g.counter].join(' ').toLowerCase();
+      return hay.includes(icSearchTerm);
+    });
+  }
+
+  groups = [...groups].sort((a,b)=>{
+    let av = a[icSortKey], bv = b[icSortKey];
+    if(av instanceof Date) av = av.getTime()||0;
+    if(bv instanceof Date) bv = bv.getTime()||0;
+    if(av===null||av===undefined) av = icSortDir==='asc' ? Infinity : -Infinity;
+    if(bv===null||bv===undefined) bv = icSortDir==='asc' ? Infinity : -Infinity;
+    if(typeof av==='string') av = av.toLowerCase();
+    if(typeof bv==='string') bv = bv.toLowerCase();
+    if(av<bv) return icSortDir==='asc'?-1:1;
+    if(av>bv) return icSortDir==='asc'?1:-1;
+    return 0;
+  });
+
+  document.querySelectorAll('#tab-inventory thead th').forEach(th=>{
+    th.classList.remove('sorted','sorted-asc');
+    if(th.dataset.ickey===icSortKey) th.classList.add(icSortDir==='asc'?'sorted-asc':'sorted');
+  });
+
+  icLastRenderedGroups = groups;
+
+  document.getElementById('icTableMeta').textContent =
+    groups.length.toLocaleString() + ' location' + (groups.length===1?'':'s') +
+    (icRangeMode!=='all' ? ' in selected range' : '');
+
+  const tbody = document.getElementById('icTableBody');
+  const emptyState = document.getElementById('icEmptyState');
+
+  if(groups.length===0){
+    tbody.innerHTML = '';
+    emptyState.style.display = 'block';
+    return;
+  }
+  emptyState.style.display = 'none';
+
+  tbody.innerHTML = groups.map(g=>{
+    const statusBadge = g.status==='Accurate' ? '<span class="badge accurate">Accurate</span>'
+      : g.status==='Inaccurate' ? '<span class="badge inaccurate">Inaccurate</span>'
+      : '<span class="badge progress">Open</span>';
+    const recountBadge = g.hadRecount ? `<span class="badge recounted">${g.recountOutcome==='Corrected'?'Recount corrected':g.recountOutcome==='Confirmed'?'Recount confirmed':'Recount pending'}</span>` : '';
+    return `
+      <tr>
+        <td>${g.bin}</td>
+        <td>${g.product||'&mdash;'}</td>
+        <td style="white-space:normal;max-width:260px;">${g.productDesc||'&mdash;'}</td>
+        <td>${g.bookQty.toLocaleString()}</td>
+        <td>${g.countedQty.toLocaleString()}</td>
+        <td>${g.diffQty>0?'+':''}${g.diffQty.toLocaleString()}</td>
+        <td>${statusBadge}${recountBadge}</td>
+        <td>${g.counter||'&mdash;'}</td>
+        <td>${formatDateTime(g.countAt)}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+/* ---------------------------------------------------------------------
+   Export to Excel
+--------------------------------------------------------------------- */
+document.getElementById('icExportBtn').addEventListener('click', icExportTableToExcel);
+
+function icExportTableToExcel(){
+  if(typeof XLSX === 'undefined'){
+    icSetSyncStatus('err', 'Excel export library failed to load from CDN — check your network/firewall and reload.');
+    return;
+  }
+  if(icLastRenderedGroups.length===0){
+    icSetSyncStatus('err', 'Nothing to export — no locations match the current filters.');
+    return;
+  }
+
+  const rows = icLastRenderedGroups.map(g=>({
+    'Storage Bin': g.bin,
+    'SKU': g.product,
+    'Description': g.productDesc,
+    'Book Qty': g.bookQty,
+    'Counted Qty': g.countedQty,
+    'Difference': g.diffQty,
+    'Original Difference (pre-recount)': g.originalDiffQty ?? '',
+    'Result': g.status,
+    'Recounted': g.hadRecount ? 'Yes' : 'No',
+    'Counter': g.counter,
+    'Count Date': isValidDate(g.countAt) ? g.countAt : ''
+  }));
+
+  const sheet = XLSX.utils.json_to_sheet(rows, {cellDates:true});
+  sheet['!cols'] = [
+    {wch:14},{wch:12},{wch:32},{wch:10},{wch:12},{wch:12},{wch:22},{wch:12},{wch:10},{wch:14},{wch:18}
+  ];
+  const headerRow = Object.keys(rows[0]||{});
+  const colIdx = headerRow.indexOf('Count Date');
+  if(colIdx!==-1){
+    for(let r=0;r<rows.length;r++){
+      const addr = XLSX.utils.encode_cell({r:r+1, c:colIdx});
+      if(sheet[addr] && sheet[addr].t==='d') sheet[addr].z = 'mm/dd/yyyy hh:mm AM/PM';
+    }
+  }
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, sheet, 'Cycle Count Locations');
+
+  const rangeSuffix = icRangeMode==='all' ? 'all-time'
+    : icRangeMode==='yesterday' ? 'yesterday'
+    : icRangeMode==='custom' ? 'custom-range'
+    : 'last-'+icRangeMode+'-days';
+  const today = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, 'whitsett-inventory_'+rangeSuffix+'_'+today+'.xlsx');
+}
+
+/* ---------------------------------------------------------------------
+   Reset All Data — scoped only to this tab's own Firebase nodes
+--------------------------------------------------------------------- */
+async function icResetAllDataPrompt(){
+  const pw = prompt('This permanently deletes ALL Inventory tab data (Outbound/Inbound data is untouched). Enter the password to continue:');
+  if(pw === null) return;
+  if(pw !== DELETE_LINE_PASSWORD){
+    alert('Incorrect password. No data was deleted.');
+    return;
+  }
+  if(!confirm('Are you absolutely sure? This deletes every cycle count document on file, plus upload history, on the Inventory tab. This cannot be undone.')) return;
+
+  icSetSyncStatus('busy','Deleting all data\u2026');
+  try{
+    await Promise.all([ icRecordsRef.remove(), icUploadsRef.remove() ]);
+    icSetSyncStatus('ok','All data cleared \u2014 ready for a fresh upload');
+    document.getElementById('icLastUploadLine').style.display='none';
+  }catch(err){
+    console.error(err);
+    icSetSyncStatus('err','Failed to clear data: '+err.message);
+  }
+}
+document.getElementById('icResetAllDataBtn').addEventListener('click', icResetAllDataPrompt);
 
 /* ---------------------------------------------------------------------
    Combined upload — one uploaded file is parsed independently by both
@@ -3258,6 +4334,10 @@ function showSiteTab(tab){
   } else if(tab==='inbound'){
     requestAnimationFrame(()=>{
       Object.values(ibCharts).forEach(c=>{ try{ c.resize(); }catch(e){} });
+    });
+  } else if(tab==='inventory'){
+    requestAnimationFrame(()=>{
+      Object.values(icCharts).forEach(c=>{ try{ c.resize(); }catch(e){} });
     });
   } else if(tab==='summary'){
     requestAnimationFrame(()=>{

@@ -244,6 +244,11 @@
   .kpi.clickable::after{
     content:"\2192";position:absolute;bottom:9px;right:11px;font-size:11px;color:var(--text-faint);
   }
+  .xs-kpi.clickable{cursor:pointer;transition:transform .1s ease, border-color .15s ease;}
+  .xs-kpi.clickable:hover{border-color:var(--accent);transform:translateY(-1px);}
+  .xs-kpi.clickable::after{
+    content:"\2192";position:absolute;bottom:9px;right:11px;font-size:11px;color:var(--text-faint);
+  }
 
   .modal-overlay{
     position:fixed;inset:0;background:rgba(5,12,22,0.75);z-index:1000;
@@ -2335,53 +2340,112 @@ function xsRenderAll(){
   const inventoryGroups = xsFilterInventoryGroups(icGroupByLocation(icAllRecords));
 
   const confirmedLines = outboundItems.filter(r=>isValidDate(r.confirmedAt));
-  const accurateLines = confirmedLines.filter(r=>(r.actualQty||0)===(r.targetQty||0)).length;
+  const missedLines = confirmedLines.filter(r=>(r.actualQty||0)!==(r.targetQty||0));
+  const accurateLines = confirmedLines.length - missedLines.length;
   const fillRatePct = confirmedLines.length ? Math.round((accurateLines/confirmedLines.length)*1000)/10 : null;
 
   const completedInbound = inboundGroups.filter(g=>g.status==='Putaway Complete');
   const inboundResolved = inboundGroups.filter(g=>g.slaStatus==='Met' || g.slaStatus==='Breached');
-  const inboundSlaMet = inboundResolved.filter(g=>g.slaStatus==='Met').length;
+  const inboundBreached = inboundResolved.filter(g=>g.slaStatus==='Breached');
+  const inboundSlaMet = inboundResolved.length - inboundBreached.length;
   const dockSlaPct = inboundResolved.length ? Math.round((inboundSlaMet/inboundResolved.length)*1000)/10 : null;
 
   const slaAdherence = (type) => {
     const resolved = outboundGroups.filter(g=>g.pullType===type && (g.slaStatus==='Met' || g.slaStatus==='Breached'));
-    const met = resolved.filter(g=>g.slaStatus==='Met').length;
-    return { pct: resolved.length ? Math.round((met/resolved.length)*1000)/10 : null, met, breached: resolved.length-met };
+    const breached = resolved.filter(g=>g.slaStatus==='Breached');
+    const met = resolved.length - breached.length;
+    return { pct: resolved.length ? Math.round((met/resolved.length)*1000)/10 : null, met, breached: breached.length, breachedGroups: breached };
   };
   const autoSla = slaAdherence('Auto');
   const manualSla = slaAdherence('Manual');
 
   const invResolved = inventoryGroups.filter(g=>g.status==='Accurate' || g.status==='Inaccurate');
-  const invAccurate = invResolved.filter(g=>g.status==='Accurate').length;
+  const invInaccurate = invResolved.filter(g=>g.status==='Inaccurate');
+  const invAccurate = invResolved.length - invInaccurate.length;
   const invAccuracyPct = invResolved.length ? Math.round((invAccurate/invResolved.length)*1000)/10 : null;
 
   const cards = [
     {label:'Fill Rate', value: fillRatePct!==null ? fillRatePct+'%' : '\u2014',
       sub: (fillRatePct!==null ? accurateLines+'/'+confirmedLines.length+' lines on qty \u00b7 ' : '')+'Target: >'+XS_SLA_TARGETS.fillRate+'%',
-      accent: xsSlaAccent(fillRatePct, XS_SLA_TARGETS.fillRate)},
+      accent: xsSlaAccent(fillRatePct, XS_SLA_TARGETS.fillRate),
+      modalTitle: 'Fill Rate Misses \u2014 '+missedLines.length.toLocaleString()+' line'+(missedLines.length===1?'':'s')+' off target qty',
+      modalBody: xsLineModalTableHtml(missedLines)},
     {label:'Dock to Stock (Goods Receiving)', value: dockSlaPct!==null ? dockSlaPct+'%' : '\u2014',
       sub: (dockSlaPct!==null ? inboundSlaMet+'/'+inboundResolved.length+' HUs on time \u00b7 ' : '')+'Target: >'+XS_SLA_TARGETS.dockToStock.toFixed(2)+'%',
-      accent: xsSlaAccent(dockSlaPct, XS_SLA_TARGETS.dockToStock)},
+      accent: xsSlaAccent(dockSlaPct, XS_SLA_TARGETS.dockToStock),
+      modalTitle: 'Dock to Stock SLA Breaches \u2014 '+inboundBreached.length.toLocaleString()+' HU'+(inboundBreached.length===1?'':'s')+' over 5hr',
+      modalBody: ibModalTableHtml(inboundBreached)},
     {label:'On-Time Delivery (Auto Pulls)', value: autoSla.pct!==null ? autoSla.pct+'%' : '\u2014',
       sub: (autoSla.pct!==null ? autoSla.met+'/'+(autoSla.met+autoSla.breached)+' pulls on time \u00b7 ' : '')+'Target: >'+XS_SLA_TARGETS.onTimeAuto.toFixed(2)+'%',
-      accent: xsSlaAccent(autoSla.pct, XS_SLA_TARGETS.onTimeAuto)},
+      accent: xsSlaAccent(autoSla.pct, XS_SLA_TARGETS.onTimeAuto),
+      modalTitle: 'On-Time Delivery Breaches (Auto) \u2014 '+autoSla.breached.toLocaleString()+' pull'+(autoSla.breached===1?'':'s')+' over 5hr SLA',
+      modalBody: xsPullModalTableHtml(autoSla.breachedGroups)},
     {label:'On-Time Delivery (Manual Pulls)', value: manualSla.pct!==null ? manualSla.pct+'%' : '\u2014',
       sub: (manualSla.pct!==null ? manualSla.met+'/'+(manualSla.met+manualSla.breached)+' pulls on time \u00b7 ' : '')+'Target: >'+XS_SLA_TARGETS.onTimeManual.toFixed(2)+'%',
-      accent: xsSlaAccent(manualSla.pct, XS_SLA_TARGETS.onTimeManual)},
+      accent: xsSlaAccent(manualSla.pct, XS_SLA_TARGETS.onTimeManual),
+      modalTitle: 'On-Time Delivery Breaches (Manual) \u2014 '+manualSla.breached.toLocaleString()+' pull'+(manualSla.breached===1?'':'s')+' over 1hr SLA',
+      modalBody: xsPullModalTableHtml(manualSla.breachedGroups)},
     {label:'Inventory Accuracy', value: invAccuracyPct!==null ? invAccuracyPct+'%' : '\u2014',
       sub: (invAccuracyPct!==null ? invAccurate+'/'+invResolved.length+' locations on qty \u00b7 ' : '')+'Target: >'+XS_SLA_TARGETS.inventoryAccuracy.toFixed(2)+'%',
-      accent: xsSlaAccent(invAccuracyPct, XS_SLA_TARGETS.inventoryAccuracy)}
+      accent: xsSlaAccent(invAccuracyPct, XS_SLA_TARGETS.inventoryAccuracy),
+      modalTitle: 'Inaccurate Locations \u2014 '+invInaccurate.length.toLocaleString()+' location'+(invInaccurate.length===1?'':'s')+' off qty, largest variance first',
+      modalBody: icModalTableHtml([...invInaccurate].sort((a,b)=>Math.abs(b.diffQty)-Math.abs(a.diffQty)))}
   ];
 
-  grid.innerHTML = cards.map(c=>`
-    <div class="xs-kpi${c.placeholder?' placeholder':''}" style="--kpi-accent:${c.accent}">
+  grid.innerHTML = cards.map((c,i)=>`
+    <div class="xs-kpi${c.placeholder?' placeholder':''}${c.modalBody?' clickable':''}" style="--kpi-accent:${c.accent}"${c.modalBody?` data-xs-card-idx="${i}"`:''}>
       <div class="label">${c.label}</div>
       <div class="value">${c.value}</div>
       <div class="sub">${c.sub}</div>
     </div>
   `).join('');
 
+  grid.querySelectorAll('[data-xs-card-idx]').forEach(el=>{
+    const c = cards[Number(el.dataset.xsCardIdx)];
+    el.addEventListener('click', ()=> openKpiModal(c.modalTitle, c.modalBody));
+  });
+
   safeRender('executive summary charts', ()=>xsRenderCharts(outboundGroups, outboundItems, inboundGroups, inventoryGroups));
+}
+
+// Drill-down table for a Fill Rate miss: individual line items where actual
+// qty didn't match target qty (Short/Over/NIL), not pull-level.
+function xsLineModalTableHtml(lines){
+  if(!lines.length) return '<div style="color:var(--text-faint);padding:10px 0 4px;">No matching lines.</div>';
+  return `<div style="overflow-x:auto;"><table><thead><tr>
+      <th>Pull ID</th><th>SKU</th><th>Description</th><th>Target Qty</th><th>Actual Qty</th><th>Diff</th><th>Confirmed</th>
+    </tr></thead><tbody>${lines.map(l=>{
+      const diff = (l.actualQty||0)-(l.targetQty||0);
+      return `
+      <tr>
+        <td>${l.pullId||'&mdash;'}</td>
+        <td>${l.product||'&mdash;'}</td>
+        <td style="white-space:normal;max-width:260px;">${l.productDesc||'&mdash;'}</td>
+        <td>${(l.targetQty||0).toLocaleString()}</td>
+        <td>${(l.actualQty||0).toLocaleString()}</td>
+        <td>${diff>0?'+':''}${diff.toLocaleString()}</td>
+        <td>${formatDateTime(l.confirmedAt)}</td>
+      </tr>
+    `;}).join('')}</tbody></table></div>`;
+}
+
+// Drill-down table for an On-Time Delivery breach: pull-group level.
+function xsPullModalTableHtml(groups){
+  if(!groups.length) return '<div style="color:var(--text-faint);padding:10px 0 4px;">No matching pulls.</div>';
+  return `<div style="overflow-x:auto;"><table><thead><tr>
+      <th>Pull ID</th><th>Type</th><th>Lines</th><th>Target Qty</th><th>Actual Qty</th><th>Created</th><th>Confirmed</th><th>Elapsed</th>
+    </tr></thead><tbody>${groups.map(g=>`
+      <tr>
+        <td>${g.pullId}</td>
+        <td>${g.pullType}</td>
+        <td>${g.lineCount}</td>
+        <td>${(g.targetQty||0).toLocaleString()}</td>
+        <td>${(g.actualQty||0).toLocaleString()}</td>
+        <td>${formatDateTime(g.createdAt)}</td>
+        <td>${formatDateTime(g.confirmedAt)}</td>
+        <td>${g.slaElapsedMin!==null ? formatDuration(g.slaElapsedMin) : '&mdash;'}</td>
+      </tr>
+    `).join('')}</tbody></table></div>`;
 }
 
 /* ---------------------------------------------------------------------

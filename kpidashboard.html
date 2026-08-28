@@ -525,22 +525,18 @@
     <section class="charts-grid">
       <div class="chart-card">
         <h3 id="xsTitleFillRate">Fill Rate by Day</h3>
-        <div class="chart-note">Share of confirmed Outbound lines where actual qty matched target qty</div>
         <div class="chart-holder"><canvas id="xsChartFillRate"></canvas></div>
       </div>
       <div class="chart-card">
         <h3 id="xsTitleDockToStock">Dock to Stock (Avg) by Day</h3>
-        <div class="chart-note">Share of completed Inbound HUs putaway within 5hr &mdash; Sundays excluded from the clock</div>
         <div class="chart-holder"><canvas id="xsChartDockToStock"></canvas></div>
       </div>
       <div class="chart-card">
         <h3 id="xsTitleOnTime">On-Time Delivery by Day</h3>
-        <div class="chart-note">Auto (5hr SLA) vs. Manual (1hr SLA), Sundays excluded from the clock</div>
         <div class="chart-holder"><canvas id="xsChartOnTime"></canvas></div>
       </div>
       <div class="chart-card">
         <h3 id="xsTitleInventoryAccuracy">Inventory Accuracy by Day</h3>
-        <div class="chart-note">Share of resolved cycle counts that matched book qty &mdash; recount outcome wins when one occurred</div>
         <div class="chart-holder"><canvas id="xsChartInventoryAccuracy"></canvas></div>
       </div>
     </section>
@@ -627,9 +623,9 @@
       <div class="chart-holder"><canvas id="ibChartTopPutaway"></canvas></div>
     </div>
     <div class="chart-card">
-      <h3 id="ibTitleReceivedVolume">Received Lines by Day</h3>
-      <div class="chart-note">Receiving volume over time</div>
-      <div class="chart-holder"><canvas id="ibChartReceivedVolume"></canvas></div>
+      <h3 id="ibTitleHUsReceived">HUs Received by Day</h3>
+      <div class="chart-note">Distinct Handling Units received over time</div>
+      <div class="chart-holder"><canvas id="ibChartHUsReceived"></canvas></div>
     </div>
     <div class="chart-card">
       <h3 id="ibTitleUnitsReceived">Units Received by Day</h3>
@@ -1341,11 +1337,24 @@ document.getElementById('tblFiltersClear').addEventListener('click', ()=>{
 // finished number for some past day. The rolling windows (Yesterday/7/30)
 // always end at the start of today, so today's partial numbers never show
 // by default.
-function computeRangeFilteredGroups(groups, mode, fromVal, toVal, dateField, openStatusValue){
+// dateTransform: an optional function applied to each record's date before
+// every comparison below. Outbound/Inbound/Executive-Summary callers don't
+// pass one (comparisons run on the raw timestamp, calendar-midnight
+// boundaries, today excluded from rolling windows — unchanged). Inventory's
+// calls pass icBusinessDate, which rolls a count logged before 6 AM back
+// onto the previous calendar day first, since that's how the 3rd-shift
+// cycle-count day is defined (see icBusinessDate). Once dates are shifted
+// that way, the normal "today excluded from rolling windows" rule below
+// does the right thing automatically: a count from last night that hasn't
+// hit its 6 AM cutoff yet still reads as part of today's in-progress shift
+// and stays out of the numbers until the shift day rolls over.
+function computeRangeFilteredGroups(groups, mode, fromVal, toVal, dateField, openStatusValue, dateTransform){
   if(mode==='all') return groups;
 
   const todayStart = new Date();
   todayStart.setHours(0,0,0,0);
+
+  const effDate = dateTransform ? (d => isValidDate(d) ? dateTransform(d) : null) : (d => d);
 
   if(mode==='custom'){
     if(!fromVal && !toVal) return groups;
@@ -1353,7 +1362,7 @@ function computeRangeFilteredGroups(groups, mode, fromVal, toVal, dateField, ope
     const to = toVal ? new Date(toVal+'T23:59:59') : null;
     return groups.filter(g=>{
       if(g.status===openStatusValue) return true;
-      const d = g[dateField];
+      const d = effDate(g[dateField]);
       if(!d) return false;
       if(from && d < from) return false;
       if(to && d > to) return false;
@@ -1366,7 +1375,7 @@ function computeRangeFilteredGroups(groups, mode, fromVal, toVal, dateField, ope
     yStart.setDate(yStart.getDate()-1);
     return groups.filter(g=>{
       if(g.status===openStatusValue) return true;
-      const d = g[dateField];
+      const d = effDate(g[dateField]);
       return d && d >= yStart && d < todayStart;
     });
   }
@@ -1375,7 +1384,7 @@ function computeRangeFilteredGroups(groups, mode, fromVal, toVal, dateField, ope
   const cutoff = new Date(todayStart.getTime() - Number(mode)*24*3600*1000);
   return groups.filter(g=>{
     if(g.status===openStatusValue) return true;
-    const d = g[dateField];
+    const d = effDate(g[dateField]);
     return d && d >= cutoff && d < todayStart;
   });
 }
@@ -2276,7 +2285,9 @@ function xsFilterInboundGroups(groups){
 function xsFilterInventoryGroups(groups){
   const fromVal = document.getElementById('xsDateFrom').value;
   const toVal = document.getElementById('xsDateTo').value;
-  return computeRangeFilteredGroups(groups, xsRangeMode, fromVal, toVal, 'countAt', 'Open');
+  // icBusinessDate — same 3rd-shift, 6AM-cutover day logic as the Inventory
+  // tab itself, unlike the Outbound/Inbound filters above on this same tab.
+  return computeRangeFilteredGroups(groups, xsRangeMode, fromVal, toVal, 'countAt', 'Open', icBusinessDate);
 }
 
 // Same day/week/month/year bucketing as the Outbound and Inbound tabs, just
@@ -2313,6 +2324,23 @@ function xsGranularityLabel(){
   return xsGranularity==='year' ? 'Year' : xsGranularity==='month' ? 'Month' : xsGranularity==='week' ? 'Week' : 'Day';
 }
 function xsDestroyChart(id){ if(xsCharts[id]){ xsCharts[id].destroy(); delete xsCharts[id]; } }
+
+// Same bucketing as xsPeriodKey, but rolls the timestamp back onto its
+// 3rd-shift business day first (see icBusinessDate) before bucketing.
+// Fill Rate / Dock-to-Stock / On-Time above use xsPeriodKey directly
+// (calendar days); only the Inventory Accuracy chart needs the 6AM
+// shift-cutover logic, matching the Inventory tab and the KPI card above it.
+function xsInventoryPeriodKey(d){
+  const bd = icBusinessDate(d);
+  if(!bd) return null;
+  if(xsGranularity==='year') return String(bd.getFullYear());
+  if(xsGranularity==='month') return bd.getFullYear()+'-'+String(bd.getMonth()+1).padStart(2,'0');
+  if(xsGranularity==='week'){
+    const ws = getWeekStart(bd);
+    return ws.getFullYear()+'-'+String(ws.getMonth()+1).padStart(2,'0')+'-'+String(ws.getDate()).padStart(2,'0');
+  }
+  return bd.getFullYear()+'-'+String(bd.getMonth()+1).padStart(2,'0')+'-'+String(bd.getDate()).padStart(2,'0');
+}
 
 // Safe to call any time — allLineItems/ibAllRecords default to empty arrays
 // until their Firebase listeners fire, so this just renders placeholders
@@ -2361,8 +2389,13 @@ function xsRenderAll(){
 
   const invResolved = inventoryGroups.filter(g=>g.status==='Accurate' || g.status==='Inaccurate');
   const invInaccurate = invResolved.filter(g=>g.status==='Inaccurate');
-  const invAccurate = invResolved.length - invInaccurate.length;
-  const invAccuracyPct = invResolved.length ? Math.round((invAccurate/invResolved.length)*1000)/10 : null;
+  // Unit-weighted, same formula as the Inventory tab's "Overall Unit
+  // Accuracy" card and the Analysis workbook's "Unit Accuracy %": (total
+  // book qty - total absolute variance) / total book qty across resolved
+  // locations. Not a location headcount.
+  const invBookQty = invResolved.reduce((sum,g)=>sum+g.bookQty, 0);
+  const invAbsDiff = invResolved.reduce((sum,g)=>sum+Math.abs(g.diffQty), 0);
+  const invAccuracyPct = invBookQty>0 ? Math.round(((invBookQty-invAbsDiff)/invBookQty)*1000)/10 : null;
 
   const cards = [
     {label:'Fill Rate', value: fillRatePct!==null ? fillRatePct+'%' : '\u2014',
@@ -2386,7 +2419,7 @@ function xsRenderAll(){
       modalTitle: 'On-Time Delivery Breaches (Manual) \u2014 '+manualSla.breached.toLocaleString()+' pull'+(manualSla.breached===1?'':'s')+' over 1hr SLA',
       modalBody: xsPullModalTableHtml(manualSla.breachedGroups)},
     {label:'Inventory Accuracy', value: invAccuracyPct!==null ? invAccuracyPct+'%' : '\u2014',
-      sub: (invAccuracyPct!==null ? invAccurate+'/'+invResolved.length+' locations on qty \u00b7 ' : '')+'Target: >'+XS_SLA_TARGETS.inventoryAccuracy.toFixed(2)+'%',
+      sub: 'Target: >'+XS_SLA_TARGETS.inventoryAccuracy.toFixed(2)+'%',
       accent: xsSlaAccent(invAccuracyPct, XS_SLA_TARGETS.inventoryAccuracy),
       modalTitle: 'Inaccurate Locations \u2014 '+invInaccurate.length.toLocaleString()+' location'+(invInaccurate.length===1?'':'s')+' off qty, largest variance first',
       modalBody: icModalTableHtml([...invInaccurate].sort((a,b)=>Math.abs(b.diffQty)-Math.abs(a.diffQty)))}
@@ -2571,23 +2604,25 @@ function xsRenderCharts(outboundGroups, outboundItems, inboundGroups, inventoryG
     options: otOpts
   });
 
-  // Inventory Accuracy by period — same recount-aware resolution logic as
-  // the Inventory tab, bucketed by when each location was resolved (or, for
-  // still-open locations, ignored here since only resolved counts chart).
+  // Inventory Accuracy by period — unit-weighted, same formula as the
+  // "Unit Inventory Accuracy" KPI card above and the Inventory tab's own
+  // chart: (book qty - abs variance) / book qty per period, not a location
+  // headcount. Bucketed by when each location was resolved (still-open
+  // locations are ignored here since only resolved counts chart).
   const invByPeriod = {};
   inventoryGroups.forEach(loc=>{
     if(loc.status!=='Accurate' && loc.status!=='Inaccurate') return;
     if(!loc.countAt) return;
-    const k = xsPeriodKey(loc.countAt);
-    if(!invByPeriod[k]) invByPeriod[k] = {accurate:0, total:0};
-    invByPeriod[k].total++;
-    if(loc.status==='Accurate') invByPeriod[k].accurate++;
+    const k = xsInventoryPeriodKey(loc.countAt);
+    if(!invByPeriod[k]) invByPeriod[k] = {bookQty:0, absDiff:0};
+    invByPeriod[k].bookQty += loc.bookQty;
+    invByPeriod[k].absDiff += Math.abs(loc.diffQty);
   });
-  delete invByPeriod[xsPeriodKey(new Date())]; // never chart today — still in progress, misleadingly partial
+  delete invByPeriod[xsInventoryPeriodKey(new Date())]; // never chart today's still-in-progress shift day
   const invLabels = Object.keys(invByPeriod).sort();
   const invData = invLabels.map(k=>{
     const d = invByPeriod[k];
-    return d.total ? Math.round((d.accurate/d.total)*1000)/10 : null;
+    return d.bookQty>0 ? Math.round(((d.bookQty-d.absDiff)/d.bookQty)*1000)/10 : null;
   });
   xsDestroyChart('inventoryAccuracy');
   const invStep = labelSkipStep(invLabels.length);
@@ -2595,7 +2630,7 @@ function xsRenderCharts(outboundGroups, outboundItems, inboundGroups, inventoryG
   invOpts.layout = {padding:{top:20}};
   invOpts.plugins.tooltip = { callbacks:{ label: ctx => {
     const k = invLabels[ctx.dataIndex]; const d = invByPeriod[k];
-    return ctx.parsed.y===null ? 'no resolved locations' : 'Accuracy: '+ctx.parsed.y+'% ('+d.accurate+'/'+d.total+' locations)';
+    return ctx.parsed.y===null ? 'no resolved locations' : 'Accuracy: '+ctx.parsed.y+'% ('+(d.bookQty-d.absDiff).toLocaleString()+'/'+d.bookQty.toLocaleString()+' units)';
   }}};
   invOpts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:(v,ctx)=> (v===null || ctx.dataIndex % invStep !== 0) ? '' : v+'%'};
   xsCharts.inventoryAccuracy = new Chart(document.getElementById('xsChartInventoryAccuracy'), {
@@ -3044,7 +3079,7 @@ function ibRenderKPIs(groups, backlogGroups){
   const cards = [
     {label:'Dock to Stock (Avg)', value: formatDuration(avgDockToStock), sub: completed.length+' completed HU'+(completed.length===1?'':'s')+' in range', accent:'var(--info)'},
     {label:'Dock to Stock SLA', value: slaPct!==null ? slaPct+'%' : '&mdash;', sub: slaPct!==null ? (resolved.length-slaMet)+' breached (5hr SLA)' : 'no resolved HUs', accent: slaPct!==null && slaPct<95 ? 'var(--bad)' : 'var(--good)'},
-    {label:'Lines Received', value: totalLines.toLocaleString(), sub: totalUnits.toLocaleString()+' units received', accent:'var(--accent)'},
+    {label:'HU\u2019s Received', value: groups.length.toLocaleString(), sub: totalLines.toLocaleString()+' line'+(totalLines===1?'':'s')+' received', accent:'var(--accent)'},
     {label:'Units Received', value: totalUnits.toLocaleString(), sub: avgUnitsPerLine!==null ? avgUnitsPerLine+' avg per line' : '&mdash;', accent:'var(--accent)'},
     {label:'Putaway Completion Rate', value: putawayRate!==null ? putawayRate+'%' : '&mdash;', sub: completed.length+' of '+groups.length+' HUs in range', accent: putawayRate!==null && putawayRate<90 ? 'var(--warn)' : 'var(--good)'},
     {label:'Currently in GR Zone', value: backlogGroups.length.toLocaleString(), sub: backlogUnits.toLocaleString()+' units \u2014 live, all-time', accent: backlogGroups.length>0 ? 'var(--warn)' : 'var(--good)',
@@ -3097,7 +3132,7 @@ function ibRenderCharts(groups, backlogGroups){
   ibRenderSlaChart(groups);
   ibRenderPutawayHourlyChart(groups);
   ibRenderTopPutawayChart(groups);
-  ibRenderReceivedVolumeChart(groups);
+  ibRenderHUsReceivedChart(groups);
   ibRenderUnitsReceivedChart(groups);
   ibRenderAgingChart(backlogGroups);
   ibRenderBaySplitChart(groups);
@@ -3108,7 +3143,7 @@ function ibUpdateChartTitles(){
   const g = ibGranularityLabel();
   document.getElementById('ibTitleDockToStock').textContent = 'Dock to Stock (Avg) by '+g;
   document.getElementById('ibTitleSla').textContent = 'Dock to Stock SLA Adherence by '+g;
-  document.getElementById('ibTitleReceivedVolume').textContent = 'Received Lines by '+g;
+  document.getElementById('ibTitleHUsReceived').textContent = 'HUs Received by '+g;
   document.getElementById('ibTitleUnitsReceived').textContent = 'Units Received by '+g;
 }
 
@@ -3209,19 +3244,19 @@ function ibRenderTopPutawayChart(groups){
   });
 }
 
-function ibRenderReceivedVolumeChart(groups){
+function ibRenderHUsReceivedChart(groups){
   const byPeriod = {};
-  groups.forEach(g=>{ if(g.receivedAt){ const k=ibPeriodKey(g.receivedAt); byPeriod[k]=(byPeriod[k]||0)+g.lineCount; } });
+  groups.forEach(g=>{ if(g.receivedAt){ const k=ibPeriodKey(g.receivedAt); byPeriod[k]=(byPeriod[k]||0)+1; } });
   delete byPeriod[ibPeriodKey(new Date())]; // never chart today — still in progress, misleadingly partial
   const labels = Object.keys(byPeriod).sort();
   const data = labels.map(k=>byPeriod[k]);
-  ibDestroyChart('receivedVolume');
+  ibDestroyChart('husReceived');
   const step = labelSkipStep(labels.length);
   const opts = baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}});
   opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:(v,ctx)=> ctx.dataIndex % step === 0 ? v : ''};
-  ibCharts.receivedVolume = new Chart(document.getElementById('ibChartReceivedVolume'), {
+  ibCharts.husReceived = new Chart(document.getElementById('ibChartHUsReceived'), {
     type:'bar',
-    data:{ labels: labels.map(l=>ibFormatPeriodLabel(l)), datasets:[{ data, backgroundColor:'#e2231a', borderRadius:4, maxBarThickness:36 }]},
+    data:{ labels: labels.map(l=>ibFormatPeriodLabel(l)), datasets:[{ data, backgroundColor:'#3d9fe8', borderRadius:4, maxBarThickness:36 }]},
     options: opts
   });
 }
@@ -3538,8 +3573,21 @@ let icLastRenderedGroups = [];
 
 function icDestroyChart(id){ if(icCharts[id]){ icCharts[id].destroy(); delete icCharts[id]; } }
 
-function icPeriodKey(d){
+// Inventory runs on 3rd shift, which ends at 6:00 AM — a count logged at,
+// say, 2:15 AM is still last night's work, so for every day/week/month/year
+// bucket and every date-range filter on this tab, it's attributed to the
+// PREVIOUS calendar day. A count logged at or after 6:00 AM belongs to that
+// calendar day as normal. Returns null for an invalid/missing date.
+function icBusinessDate(d){
   if(!isValidDate(d)) return null;
+  const shifted = new Date(d.getTime() - 6*3600*1000);
+  shifted.setHours(0,0,0,0);
+  return shifted;
+}
+
+function icPeriodKey(rawD){
+  const d = icBusinessDate(rawD);
+  if(!d) return null;
   if(icGranularity==='year') return String(d.getFullYear());
   if(icGranularity==='month') return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
   if(icGranularity==='week'){
@@ -3746,7 +3794,10 @@ document.getElementById('icSearchBox').addEventListener('input', e=>{
 function icFilterByRange(groups){
   const fromVal = document.getElementById('icDateFrom').value;
   const toVal = document.getElementById('icDateTo').value;
-  return computeRangeFilteredGroups(groups, icRangeMode, fromVal, toVal, 'countAt', 'Open');
+  // icBusinessDate rolls pre-6AM counts back onto the prior day first, so
+  // "today excluded from the rolling window" correctly means "the 3rd-shift
+  // day still in progress," not "the calendar date since midnight."
+  return computeRangeFilteredGroups(groups, icRangeMode, fromVal, toVal, 'countAt', 'Open', icBusinessDate);
 }
 
 /* ---------------------------------------------------------------------
@@ -3846,7 +3897,7 @@ function icRenderAll(){
   // In-Progress pulls / In-GR-Zone HUs are handled elsewhere).
   const fromVal = document.getElementById('icDateFrom').value;
   const toVal = document.getElementById('icDateTo').value;
-  const rangeRecords = computeRangeFilteredGroups(icAllRecords, icRangeMode, fromVal, toVal, 'countAt', 'ACTI');
+  const rangeRecords = computeRangeFilteredGroups(icAllRecords, icRangeMode, fromVal, toVal, 'countAt', 'ACTI', icBusinessDate);
 
   safeRender('inventory KPIs', ()=>icRenderKPIs(rangeGroups, openGroups, rangeRecords));
   safeRender('inventory charts', ()=>icRenderCharts(rangeGroups, openGroups));
@@ -3883,8 +3934,14 @@ function icRenderKPIs(groups, openGroups, rangeRecords){
   const recountRecordCount = rangeRecords.filter(r=>r.status==='RECO').length;
 
   const resolved = groups.filter(g=>g.status==='Accurate' || g.status==='Inaccurate');
-  const accurate = resolved.filter(g=>g.status==='Accurate').length;
-  const accuracyPct = resolved.length ? Math.round((accurate/resolved.length)*1000)/10 : null;
+  // Unit-weighted, matching the Analysis workbook's "Unit Accuracy %":
+  // (total book qty - total absolute variance) / total book qty across
+  // resolved locations — reflects how many of the actual units on the
+  // shelf were accounted for, not just how many locations landed at zero.
+  // Location Accuracy below stays a location headcount, unchanged.
+  const resolvedBookQty = resolved.reduce((sum,g)=>sum+g.bookQty, 0);
+  const resolvedAbsDiff = resolved.reduce((sum,g)=>sum+Math.abs(g.diffQty), 0);
+  const accuracyPct = resolvedBookQty>0 ? Math.round(((resolvedBookQty-resolvedAbsDiff)/resolvedBookQty)*1000)/10 : null;
 
   const bins = icRollupByBin(groups);
   const binsResolved = bins.filter(b=>b.status==='Accurate' || b.status==='Inaccurate');
@@ -3907,8 +3964,8 @@ function icRenderKPIs(groups, openGroups, rangeRecords){
   const oldestOpen = oldestOpenFirst[0] || null;
 
   const cards = [
-    {label:'Overall Inventory Accuracy', value: accuracyPct!==null ? accuracyPct+'%' : '\u2014',
-      sub: accuracyPct!==null ? accurate+'/'+resolved.length+' locations on qty' : 'no resolved locations',
+    {label:'Overall Unit Accuracy', value: accuracyPct!==null ? accuracyPct+'%' : '\u2014',
+      sub: accuracyPct!==null ? (resolvedBookQty-resolvedAbsDiff).toLocaleString()+'/'+resolvedBookQty.toLocaleString()+' units on qty' : 'no resolved locations',
       accent: xsSlaAccent(accuracyPct, XS_SLA_TARGETS.inventoryAccuracy)},
     {label:'Location Accuracy', value: locationAccuracyPct!==null ? locationAccuracyPct+'%' : '\u2014',
       sub: locationAccuracyPct!==null ? binsAccurate+'/'+binsResolved.length+' bins fully accurate' : 'no resolved bins',

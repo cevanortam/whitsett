@@ -1537,8 +1537,6 @@ function renderKPIs(items, groups){
   const totalPulls = groups.length;
   const totalLines = items.length;
   const avgPicksPerPull = totalPulls ? Math.round((totalLines/totalPulls)*10)/10 : null;
-  const totalWTs = groups.reduce((s,g)=>s+g.wtCount,0);
-  const avgWTsPerPull = totalPulls ? Math.round((totalWTs/totalPulls)*10)/10 : null;
   const confirmedLines = items.filter(r=>isValidDate(r.confirmedAt));
   const accurateLines = confirmedLines.filter(r=>(r.actualQty||0)===(r.targetQty||0)).length;
   const accuracyPct = confirmedLines.length ? Math.round((accurateLines/confirmedLines.length)*1000)/10 : null;
@@ -1584,7 +1582,6 @@ function renderKPIs(items, groups){
   const cards = [
     {label:'Pull IDs', value: totalPulls.toLocaleString(), sub: totalLines.toLocaleString()+' line items', accent:'var(--accent)'},
     {label:'Picks per Pull ID', value: avgPicksPerPull!==null ? avgPicksPerPull : '&mdash;', sub:'avg line items per Pull ID', accent:'var(--accent)'},
-    {label:'Avg WTs / Pull', value: avgWTsPerPull!==null ? avgWTsPerPull : '&mdash;', sub: totalWTs.toLocaleString()+' distinct Warehouse Tasks created', accent:'var(--accent)'},
     {label:'Fill Rate', value: accuracyPct!==null ? accuracyPct+'%' : '&mdash;', sub: accuracyPct!==null ? (confirmedLines.length-accurateLines)+' of '+confirmedLines.length+' confirmed lines off qty' : 'no confirmed lines', accent: accuracyPct!==null && accuracyPct<98 ? 'var(--warn)' : 'var(--good)'},
     {label:'Auto Avg Cycle Time', value: formatDuration(avgCycleAuto), sub:'created \u2192 confirmed', accent:'var(--info)'},
     {label:'Manual Avg Cycle Time', value: formatDuration(avgCycleManual), sub:'created \u2192 confirmed', accent:'var(--hv-color)'},

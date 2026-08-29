@@ -198,6 +198,15 @@
   }
   .delete-line-btn:hover{border-color:var(--accent);color:var(--accent);}
 
+  .sla-override-btn{
+    background:transparent;border:1px solid var(--card-border-light);color:var(--text-faint);
+    border-radius:6px;padding:2px 6px;font-size:11px;cursor:pointer;line-height:1;margin-left:5px;
+    transition:border-color .15s ease, color .15s ease;
+  }
+  .sla-override-btn:hover{border-color:var(--info);color:var(--info);}
+  .sla-override-btn.clear:hover{border-color:var(--bad);color:var(--bad);}
+  .badge.sla-met, .badge.sla-breached{cursor:help;}
+
   .pull-id-cell{font-weight:700;color:var(--text);}
   .caret{display:inline-block;margin-right:6px;color:var(--text-faint);transition:transform .15s ease;font-size:10px;}
   tr.pull-row.expanded .caret{transform:rotate(90deg);color:var(--accent);}
@@ -405,6 +414,16 @@
       <div class="chart-note">Share of classified picks in the selected range</div>
       <div class="chart-holder"><canvas id="chartBaySplit"></canvas></div>
     </div>
+    <div class="chart-card">
+      <h3 id="titleWtAvg">Avg Warehouse Tasks Created per Pull by Day</h3>
+      <div class="chart-note">Average distinct Warehouse Tasks created per Pull ID</div>
+      <div class="chart-holder"><canvas id="chartWtAvg"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3 id="titleWtTotal">Total Warehouse Tasks Created by Day</h3>
+      <div class="chart-note">Distinct Warehouse Tasks created, by Pull ID creation date</div>
+      <div class="chart-holder"><canvas id="chartWtTotal"></canvas></div>
+    </div>
   </section>
 
   <section class="table-section">
@@ -469,7 +488,10 @@
     contains both picking and receiving/putaway activity together. Repeat uploads merge into existing data and are
     de-duplicated by Warehouse Task, so re-uploading an export that overlaps a previous one is safe. Line items
     can be permanently deleted from the expandable detail view (click a Pull ID, then the trash icon on a row) &mdash;
-    this is password-protected and cannot be undone.
+    this is password-protected and cannot be undone. A completed Pull ID's SLA outcome (Met/Breached) can be
+    manually overridden from the "&#9998; Override" button next to its SLA badge &mdash; a note is required and is
+    kept with the override, visible on hover over the badge and in the Excel export; overrides can be cleared at
+    any time to revert to the calculated status.
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--card-border);">
       <button type="button" class="btn secondary" id="resetAllDataBtn" style="border-color:var(--accent);color:var(--accent);">&#9888; Reset All Data</button>
       <span style="color:var(--text-faint);font-size:11px;margin-left:10px;">Permanently clears all Outbound and Inbound data (both tabs) so you can start with a fresh upload. Cycle count data is untouched. Password-protected, cannot be undone.</span>
@@ -893,6 +915,7 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 const lineItemsRef = db.ref('outbound_pulls');
 const uploadsRef = db.ref('outbound_pull_uploads');
+const slaOverridesRef = db.ref('outbound_sla_overrides');
 
 /* ---------------------------------------------------------------------
    Column map — resolved by header NAME (not fixed position) each upload,
@@ -972,6 +995,7 @@ let charts = {};
 let expandedPullIds = new Set();
 let lastRenderedGroups = []; // the exact filtered/sorted Pull ID rows currently on screen — used for Excel export
 let cachedRangeGroups = []; // Pull ID groups after date-range filtering only (pre search/sort) — reused by search/sort so they don't redo the full grouping pass
+let slaOverrides = {}; // pullId (sanitized) -> {status:'Met'|'Breached', note, setAt} — manual corrections to computed SLA outcomes
 
 /* ---------------------------------------------------------------------
    Date / time helpers
@@ -1283,6 +1307,12 @@ lineItemsRef.on('value', snap => {
   setSyncStatus('err','Connection error: '+err.message);
 });
 
+slaOverridesRef.on('value', snap=>{
+  slaOverrides = snap.val() || {};
+  renderAll();
+  safeRender('executive summary', xsRenderAll);
+});
+
 uploadsRef.limitToLast(1).on('value', snap=>{
   const val = snap.val();
   if(!val) return;
@@ -1423,6 +1453,8 @@ function groupByPullId(items){
     const confirmedByUsers = [...new Set(lines.map(l=>l.confirmedBy).filter(Boolean))];
     const createdByUsers = [...new Set(lines.map(l=>l.createdBy).filter(Boolean))];
     const warehouseOrders = [...new Set(lines.map(l=>l.warehouseOrder).filter(Boolean))];
+    const wtSet = new Set(lines.map(l=>l.warehouseTask).filter(v=>v!==null && v!==undefined && String(v).trim()!=='').map(v=>String(v).trim()));
+    const wtCount = wtSet.size;
 
     const pullType = classifyPullType(pullId);
     const createToConfirmMin = allConfirmed ? minutesBetween(createdAt, confirmedAt) : null;
@@ -1439,17 +1471,28 @@ function groupByPullId(items){
       }
     }
 
+    // Manual SLA correction — only meaningful for pulls that reached a
+    // resolved outcome (Met/Breached); computedSlaStatus preserves what the
+    // data actually says, slaStatus becomes the effective/displayed value.
+    const computedSlaStatus = slaStatus;
+    const override = (computedSlaStatus==='Met' || computedSlaStatus==='Breached')
+      ? (slaOverrides[sanitizeKey(pullId)] || null)
+      : null;
+    if(override && override.status){ slaStatus = override.status; }
+
     groups.push({
       pullId,
       pullType,
       lineCount: lines.length,
       targetQty, actualQty, hasShort, hasOver, hasNil,
+      wtCount,
       createdAt, startAt, confirmedAt,
       status: allConfirmed ? 'Complete' : 'In Progress',
       createToStartMin: minutesBetween(createdAt, startAt),
       createToConfirmMin,
       startToConfirmMin: allConfirmed ? minutesBetween(startAt, confirmedAt) : null,
       slaThresholdMin, slaStatus, slaElapsedMin,
+      computedSlaStatus, slaOverride: override,
       confirmedBy: confirmedByUsers.join(', '),
       createdBy: createdByUsers.join(', '),
       warehouseOrders: warehouseOrders.join(', '),
@@ -1494,6 +1537,8 @@ function renderKPIs(items, groups){
   const totalPulls = groups.length;
   const totalLines = items.length;
   const avgPicksPerPull = totalPulls ? Math.round((totalLines/totalPulls)*10)/10 : null;
+  const totalWTs = groups.reduce((s,g)=>s+g.wtCount,0);
+  const avgWTsPerPull = totalPulls ? Math.round((totalWTs/totalPulls)*10)/10 : null;
   const confirmedLines = items.filter(r=>isValidDate(r.confirmedAt));
   const accurateLines = confirmedLines.filter(r=>(r.actualQty||0)===(r.targetQty||0)).length;
   const accuracyPct = confirmedLines.length ? Math.round((accurateLines/confirmedLines.length)*1000)/10 : null;
@@ -1539,6 +1584,7 @@ function renderKPIs(items, groups){
   const cards = [
     {label:'Pull IDs', value: totalPulls.toLocaleString(), sub: totalLines.toLocaleString()+' line items', accent:'var(--accent)'},
     {label:'Picks per Pull ID', value: avgPicksPerPull!==null ? avgPicksPerPull : '&mdash;', sub:'avg line items per Pull ID', accent:'var(--accent)'},
+    {label:'Avg WTs / Pull', value: avgWTsPerPull!==null ? avgWTsPerPull : '&mdash;', sub: totalWTs.toLocaleString()+' distinct Warehouse Tasks created', accent:'var(--accent)'},
     {label:'Fill Rate', value: accuracyPct!==null ? accuracyPct+'%' : '&mdash;', sub: accuracyPct!==null ? (confirmedLines.length-accurateLines)+' of '+confirmedLines.length+' confirmed lines off qty' : 'no confirmed lines', accent: accuracyPct!==null && accuracyPct<98 ? 'var(--warn)' : 'var(--good)'},
     {label:'Auto Avg Cycle Time', value: formatDuration(avgCycleAuto), sub:'created \u2192 confirmed', accent:'var(--info)'},
     {label:'Manual Avg Cycle Time', value: formatDuration(avgCycleManual), sub:'created \u2192 confirmed', accent:'var(--hv-color)'},
@@ -1616,6 +1662,8 @@ function renderCharts(items, groups){
   renderBayVelocityChart(items);
   renderSlaChart(groups);
   renderBaySplitChart(items);
+  renderWtAvgChart(groups);
+  renderWtTotalChart(groups);
 }
 
 function renderPerDayChart(groups){
@@ -1765,6 +1813,8 @@ function updateChartTitles(){
   document.getElementById('titleAccuracy').textContent = 'Fill Rate by '+g;
   document.getElementById('titleBayVolume').textContent = 'Picks by Bay Type per '+g;
   document.getElementById('titleSla').textContent = 'SLA Adherence by '+g;
+  document.getElementById('titleWtAvg').textContent = 'Avg Warehouse Tasks Created per Pull by '+g;
+  document.getElementById('titleWtTotal').textContent = 'Total Warehouse Tasks Created by '+g;
 }
 
 function renderAccuracyChart(items){
@@ -1924,6 +1974,59 @@ function renderBaySplitChart(items){
   });
 }
 
+// Trend of the average number of distinct Warehouse Tasks created per Pull
+// ID, bucketed by each Pull ID's creation date (matches the "Avg WTs / Pull"
+// KPI card's definition).
+function renderWtAvgChart(groups){
+  const byDay = {};
+  groups.forEach(g=>{
+    if(!g.createdAt) return;
+    const k = periodKey(g.createdAt);
+    if(!byDay[k]) byDay[k] = [];
+    byDay[k].push(g.wtCount);
+  });
+  delete byDay[periodKey(new Date())]; // never chart today — still in progress, misleadingly partial
+  const labels = Object.keys(byDay).sort();
+  const data = labels.map(k=>{
+    const vals = byDay[k];
+    return vals.length ? Math.round((vals.reduce((a,b)=>a+b,0)/vals.length)*10)/10 : null;
+  });
+  destroyChart('wtAvg');
+  const opts = baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}});
+  opts.plugins.tooltip = { callbacks:{ label: ctx => 'Avg WTs/Pull: '+(ctx.parsed.y===null?'\u2014':ctx.parsed.y) } };
+  charts.wtAvg = new Chart(document.getElementById('chartWtAvg'), {
+    type:'line',
+    data:{ labels: labels.map(l=>formatPeriodLabel(l)), datasets:[
+      { data, borderColor:'#2fbf71', backgroundColor:'rgba(47,191,113,0.15)', tension:0.3, fill:true, spanGaps:true }
+    ]},
+    options: opts
+  });
+}
+
+// Trend of the total number of distinct Warehouse Tasks created (summed
+// across Pull IDs), bucketed by each Pull ID's creation date.
+function renderWtTotalChart(groups){
+  const byDay = {};
+  groups.forEach(g=>{
+    if(!g.createdAt) return;
+    const k = periodKey(g.createdAt);
+    byDay[k] = (byDay[k]||0) + g.wtCount;
+  });
+  delete byDay[periodKey(new Date())]; // never chart today — still in progress, misleadingly partial
+  const labels = Object.keys(byDay).sort();
+  const data = labels.map(k=>byDay[k]);
+  destroyChart('wtTotal');
+  const step = labelSkipStep(labels.length);
+  const opts = baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}});
+  opts.layout = {padding:{top:20}};
+  opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:(v,ctx)=> ctx.dataIndex % step === 0 ? v : ''};
+  charts.wtTotal = new Chart(document.getElementById('chartWtTotal'), {
+    type:'bar',
+    data:{ labels: labels.map(l=>formatPeriodLabel(l)), datasets:[{ data, backgroundColor:'#3d9fe8', borderRadius:4, maxBarThickness:36 }]},
+    options: opts
+  });
+}
+
 function baseChartOptions(scalesExtra, showLegend, horizontal){
   return {
     responsive:true, maintainAspectRatio:false,
@@ -2013,7 +2116,13 @@ function renderTable(rangeGroups){
     const overBadge = g.hasOver ? '<span class="badge over">Over Pick</span>' : '';
     const nilBadge = g.hasNil ? '<span class="badge nil">NIL Pick</span>' : '';
     const slaBadgeClass = g.slaStatus==='Met' ? 'sla-met' : g.slaStatus==='Breached' ? 'sla-breached' : g.slaStatus==='At Risk' ? 'sla-risk' : '';
-    const slaBadge = slaBadgeClass ? `<span class="badge ${slaBadgeClass}">SLA ${g.slaStatus}</span>` : '';
+    const overrideTitle = g.slaOverride ? `Manually overridden from ${g.computedSlaStatus} \u2014 ${g.slaOverride.note}` : '';
+    const slaBadge = slaBadgeClass ? `<span class="badge ${slaBadgeClass}"${overrideTitle?` title="${escapeAttr(overrideTitle)}"`:''}>SLA ${g.slaStatus}${g.slaOverride?' \u270e':''}</span>` : '';
+    const overrideBtn = g.slaOverride
+      ? `<button type="button" class="sla-override-btn clear" data-pullid="${escapeAttr(g.pullId)}" title="Clear SLA override">&#10005; Clear</button>`
+      : ((g.computedSlaStatus==='Met' || g.computedSlaStatus==='Breached')
+        ? `<button type="button" class="sla-override-btn" data-pullid="${escapeAttr(g.pullId)}" data-target="${g.computedSlaStatus==='Met'?'Breached':'Met'}" title="Override SLA status">&#9998; Override</button>`
+        : '');
     const typeBadgeClass = g.pullType==='Auto' ? 'auto' : g.pullType==='Manual' ? 'manual' : 'unknown';
 
     const detailRows = g.lines.map(l=>{
@@ -2055,7 +2164,7 @@ function renderTable(rangeGroups){
         <td>${formatDateTime(g.confirmedAt)}</td>
         <td>${formatDuration(g.createToStartMin)}</td>
         <td>${formatDuration(g.createToConfirmMin)}</td>
-        <td>${statusBadge}${slaBadge}${shortBadge}${overBadge}${nilBadge}</td>
+        <td>${statusBadge}${slaBadge}${shortBadge}${overBadge}${nilBadge}${overrideBtn}</td>
       </tr>
       <tr class="detail-row ${isOpen?'open':''}" data-pullid-detail="${escapeAttr(g.pullId)}">
         <td colspan="11">
@@ -2088,6 +2197,45 @@ function renderTable(rangeGroups){
       deleteLineItemPrompt(btn.dataset.key);
     });
   });
+
+  tbody.querySelectorAll('.sla-override-btn').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      if(btn.classList.contains('clear')) clearSlaOverride(btn.dataset.pullid);
+      else overrideSlaPrompt(btn.dataset.pullid, btn.dataset.target);
+    });
+  });
+}
+
+async function overrideSlaPrompt(pullId, targetStatus){
+  const note = prompt(`Override Pull ID ${pullId} to SLA ${targetStatus}.\n\nEnter a note explaining why (required):`);
+  if(note === null) return; // cancelled
+  if(!note.trim()){
+    alert('A note is required to override the SLA status.');
+    return;
+  }
+  try{
+    await slaOverridesRef.child(sanitizeKey(pullId)).set({
+      status: targetStatus,
+      note: note.trim(),
+      setAt: new Date().toISOString()
+    });
+    setSyncStatus('ok', 'SLA status overridden for '+pullId);
+  }catch(err){
+    console.error(err);
+    setSyncStatus('err', 'Failed to save SLA override: '+err.message);
+  }
+}
+
+async function clearSlaOverride(pullId){
+  if(!confirm(`Clear the SLA override for Pull ID ${pullId}? It will revert to the calculated status.`)) return;
+  try{
+    await slaOverridesRef.child(sanitizeKey(pullId)).remove();
+    setSyncStatus('ok', 'SLA override cleared for '+pullId);
+  }catch(err){
+    console.error(err);
+    setSyncStatus('err', 'Failed to clear SLA override: '+err.message);
+  }
 }
 
 const DELETE_LINE_PASSWORD = 'Jen$en120313!';
@@ -2132,6 +2280,7 @@ function exportTableToExcel(){
     'Type': g.pullType,
     'Status': g.status,
     'SLA Status': g.slaStatus,
+    'SLA Override Note': g.slaOverride ? `Overridden from ${g.computedSlaStatus}: ${g.slaOverride.note}` : '',
     'SLA Elapsed (min, ex. Sun)': g.slaElapsedMin ?? '',
     'Lines': g.lineCount,
     'Target Qty': g.targetQty,

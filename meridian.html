@@ -623,6 +623,7 @@
   .cl-label-preview .cl-barcode svg{max-height:0.7in;}
   .cl-label-preview .cl-meta .cl-k{font-size:9pt;}
   .cl-label-preview .cl-meta .cl-v{font-size:18pt;}
+  .cl-label-preview .cl-meta .cl-v-sm{font-size:12pt;}
 
   .cl-label{
     width:4in;height:2in;box-sizing:border-box;padding:0.2in 0.22in;
@@ -638,6 +639,7 @@
   .cl-meta .cl-box + .cl-box{border-left:1pt solid #000;}
   .cl-meta .cl-k{font-size:6.5pt;letter-spacing:0.8px;text-transform:uppercase;color:#333;font-weight:700;}
   .cl-meta .cl-v{font-size:12.5pt;font-weight:800;margin-top:1pt;}
+  .cl-meta .cl-v-sm{font-size:9pt;font-weight:800;margin-top:1pt;word-break:break-word;}
 
   @media print{
     body *{ visibility:hidden; }
@@ -1157,9 +1159,10 @@
   <aside class="sidebar">
     <div class="card">
       <h2><span class="num">1</span> Scan part</h2>
-      <p class="hint">Scan or type the part number, then press Enter. If a Microsoft part number is scanned and an MSPN map has been uploaded in Pick Ticket Printing, the matching Lenovo part number prints instead.</p>
-      <div class="field"><label for="clPartNumber">Part number <span class="cl-required">*</span></label><input id="clPartNumber" type="text" placeholder="Scan or type part number" autocomplete="off" autofocus required></div>
+      <p class="hint">Scan or type the Lenovo part number, then press Enter. If a Microsoft/Lenovo map has been uploaded in Pick Ticket Printing, the matching Microsoft part number prints on the label as text.</p>
+      <div class="field"><label for="clPartNumber">Lenovo part number <span class="cl-required">*</span></label><input id="clPartNumber" type="text" placeholder="Scan or type Lenovo part number" autocomplete="off" autofocus required></div>
       <div class="cl-learned-hint" id="clPartHint"></div>
+      <div class="cl-error" id="clPartError"></div>
     </div>
 
     <div class="card">
@@ -1834,6 +1837,18 @@ function buildLabelHTML(data){
   const partBarcode = renderCode128SVG(data.product);
   const huBarcode = data.hu ? renderCode128SVG(data.hu) : '';
   const aisleVal = (data.aisle!==null && data.aisle!==undefined) ? String(data.aisle).padStart(2,'0') : '-';
+  // Human-readable Microsoft part number (no barcode) — Lenovo keeps the
+  // scannable barcode below. Reuses the Lenovo -> Microsoft map uploaded
+  // in Pick Ticket Printing (shared localStorage key).
+  const mspnVal = (function(sku){
+    try{
+      const raw = localStorage.getItem('pickTicketStation:mspnMap');
+      if(!raw) return '';
+      const map = JSON.parse(raw);
+      const key = String(sku==null?'':sku).trim().toUpperCase();
+      return key && map[key] ? String(map[key]).trim() : '';
+    }catch(e){ return ''; }
+  })(data.product);
 
   const noticeBlock = data.manualOverride
     ? `<div class="label-overflow">MANUAL OVERRIDE &mdash; LOCATION ADJUSTED BY OPERATOR</div>`
@@ -1854,6 +1869,7 @@ function buildLabelHTML(data){
 
   const itemRows = `
       <div class="label-kv-row emphasis"><span class="k">PART</span><span class="v">${esc(data.product)}</span></div>
+      <div class="label-kv-row"><span class="k">MICROSOFT PART</span><span class="v">${mspnVal ? esc(mspnVal) : '\u2014'}</span></div>
       <div class="label-kv-row"><span class="k">DESCRIPTION</span><span class="v">${esc(data.desc||'\u2014')}</span></div>
       <div class="label-kv-row"><span class="k">QUANTITY</span><span class="v">${data.qty ? esc(data.qty) : '\u2014'}</span></div>`;
 
@@ -3459,12 +3475,14 @@ function clBarcodeSVG(text){
   return `<svg viewBox="0 0 ${totalWidth} 100" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">${bars.join('')}</svg>`;
 }
 
-/* ---- Microsoft <-> Lenovo part number cross-reference ----
+/* ---- Lenovo <-> Microsoft part number cross-reference ----
    Reuses the Lenovo -> Microsoft (MSPN) map uploaded in Pick Ticket
-   Printing (same localStorage key), reversed here so that scanning a
-   Microsoft part number resolves to — and prints — the matching Lenovo
-   part number. If the map hasn't been uploaded, or there's no match,
-   whatever was scanned prints as-is. */
+   Printing (same localStorage key). Only a Lenovo part number may be
+   scanned/typed here; if what was typed is recognized as a Microsoft
+   part number (i.e. it appears as a value in the map), entry is blocked
+   with a message asking for the Lenovo part number instead. When the
+   typed Lenovo part number has a known Microsoft part number, that MSPN
+   is looked up and printed on the label as plain text (no barcode). */
 const LS_MSPN_KEY = 'pickTicketStation:mspnMap';
 function loadMspnMap(){
   try{
@@ -3473,32 +3491,28 @@ function loadMspnMap(){
   }catch(e){ return {}; }
 }
 function normalizePN(v){ return String(v==null?'':v).trim().toUpperCase(); }
-function buildReverseMspnMap(map){
-  const rev = {};
-  Object.keys(map).forEach(function(lenovoPN){
-    const msKey = normalizePN(map[lenovoPN]);
-    if(!msKey) return;
-    if(!rev[msKey]) rev[msKey] = [];
-    if(rev[msKey].indexOf(lenovoPN) === -1) rev[msKey].push(lenovoPN);
+function looksLikeKnownMspn(key, mspnMap){
+  // true only if `key` is not itself a Lenovo key, but matches a Microsoft
+  // PN value somewhere in the map — i.e. someone scanned the MS number.
+  if(Object.prototype.hasOwnProperty.call(mspnMap, key)) return false;
+  return Object.keys(mspnMap).some(function(lenovoPN){
+    return normalizePN(mspnMap[lenovoPN]) === key;
   });
-  return rev;
 }
-function resolvePartNumber(typed){
-  const key = normalizePN(typed);
-  if(!key) return { resolved: '', note: '' };
+function lookupMspnForLenovo(key){
+  if(!key) return '';
   const mspnMap = loadMspnMap();
-  if(Object.prototype.hasOwnProperty.call(mspnMap, key)){
-    return { resolved: key, note: '' }; // already a known Lenovo part number
+  const val = mspnMap[key];
+  return val ? String(val).trim() : '';
+}
+function evaluatePartNumber(typed){
+  const key = normalizePN(typed);
+  if(!key) return { part: '', mspn: '', error: '' };
+  const mspnMap = loadMspnMap();
+  if(looksLikeKnownMspn(key, mspnMap)){
+    return { part: key, mspn: '', error: 'This is a Microsoft part number \u2014 enter the Lenovo part number instead.' };
   }
-  const reverse = buildReverseMspnMap(mspnMap);
-  const matches = reverse[key];
-  if(matches && matches.length === 1){
-    return { resolved: matches[0], note: `Microsoft PN detected \u2192 printing Lenovo ${matches[0]}` };
-  }
-  if(matches && matches.length > 1){
-    return { resolved: key, note: `Multiple Lenovo PNs map to this Microsoft PN (${matches.join(', ')}) \u2014 enter the Lenovo PN directly.` };
-  }
-  return { resolved: key, note: '' };
+  return { part: key, mspn: lookupMspnForLenovo(key), error: '' };
 }
 
 /* ---- print log (per-day counts for billing) ---- */
@@ -3559,6 +3573,7 @@ const CL_HISTORY_MAX_PER_PART = 25;
 
 const partInput = document.getElementById('clPartNumber');
 const partHint = document.getElementById('clPartHint');
+const partErrorEl = document.getElementById('clPartError');
 const unitsInput = document.getElementById('clUnitsPerCase');
 const unitsHint = document.getElementById('clUnitsHint');
 const casesInput = document.getElementById('clCasesOnPallet');
@@ -3641,17 +3656,25 @@ function forceUppercase(el){
 
 function currentValues(){
   const typedPart = norm(partInput.value);
-  const resolved = resolvePartNumber(typedPart);
+  const evaluated = evaluatePartNumber(typedPart);
   const unitsRaw = unitsInput.value;
   const casesRaw = casesInput.value;
   const units = unitsRaw === '' ? NaN : parseInt(unitsRaw, 10);
   const cases = casesRaw === '' ? NaN : parseInt(casesRaw, 10);
-  return { typedPart, part: resolved.resolved, partNote: resolved.note, units, cases };
+  return { typedPart, part: evaluated.part, mspn: evaluated.mspn, partError: evaluated.error, units, cases };
 }
 
 function updatePartHint(){
-  const { partNote } = currentValues();
-  partHint.textContent = partNote || '';
+  const { mspn, partError } = currentValues();
+  if(partError){
+    partHint.textContent = '';
+    partErrorEl.textContent = partError;
+    partErrorEl.classList.add('show');
+  } else {
+    partErrorEl.classList.remove('show');
+    partErrorEl.textContent = '';
+    partHint.textContent = mspn ? `Microsoft PN on label: ${mspn}` : '';
+  }
 }
 
 function clampCasesInput(){
@@ -3667,7 +3690,7 @@ function clampCasesInput(){
   }
 }
 
-function buildLabelHTML(part, unitsPerCase, caseIndex, totalCases, isPreview){
+function buildLabelHTML(part, unitsPerCase, caseIndex, totalCases, mspn, isPreview){
   const barcode = part ? clBarcodeSVG(part) : '';
   const cls = isPreview ? 'cl-label cl-label-preview' : 'cl-label';
   return `
@@ -3677,16 +3700,17 @@ function buildLabelHTML(part, unitsPerCase, caseIndex, totalCases, isPreview){
       <div class="cl-meta">
         <div class="cl-box"><div class="cl-k">Units / Case</div><div class="cl-v">${isNaN(unitsPerCase) ? '\u2014' : esc(unitsPerCase)}</div></div>
         <div class="cl-box"><div class="cl-k">Case</div><div class="cl-v">${esc(caseIndex)} of ${esc(totalCases)}</div></div>
+        <div class="cl-box"><div class="cl-k">Microsoft PN</div><div class="cl-v cl-v-sm">${mspn ? esc(mspn) : '\u2014'}</div></div>
       </div>
     </div>`;
 }
 
 function refresh(){
-  const { part, units, cases } = currentValues();
+  const { part, mspn, partError, units, cases } = currentValues();
   updatePartHint();
   const validUnits = !isNaN(units) && units > 0;
   const validCases = !isNaN(cases) && cases > 0 && cases <= MAX_CASES;
-  const validPart = part.length > 0;
+  const validPart = part.length > 0 && !partError;
 
   const labelCount = validCases ? cases : 0;
   const totalUnits = (validUnits && validCases) ? units * cases : 0;
@@ -3695,18 +3719,18 @@ function refresh(){
 
   printBtn.disabled = !(validPart && validUnits && validCases);
 
-  previewLabel.innerHTML = buildLabelHTML(part, units, 1, validCases ? cases : (isNaN(cases) ? 1 : cases), true);
+  previewLabel.innerHTML = buildLabelHTML(part, units, 1, validCases ? cases : (isNaN(cases) ? 1 : cases), mspn, true);
 }
 
 let pendingPrint = null; // { part, units, n } awaiting print confirmation
 
 function printCaseLabels(){
-  const { part, units, cases } = currentValues();
-  if(!part || isNaN(units) || units <= 0 || isNaN(cases) || cases <= 0) return;
+  const { part, mspn, partError, units, cases } = currentValues();
+  if(!part || partError || isNaN(units) || units <= 0 || isNaN(cases) || cases <= 0) return;
   const n = Math.min(cases, MAX_CASES);
 
   const html = [];
-  for(let i=1;i<=n;i++){ html.push(buildLabelHTML(part, units, i, n)); }
+  for(let i=1;i<=n;i++){ html.push(buildLabelHTML(part, units, i, n, mspn)); }
   printRoot.innerHTML = html.join('');
 
   pendingPrint = { part, units, n };
@@ -3764,6 +3788,8 @@ function clearForm(){
   unitsAutoFilled = false;
   unitsHint.textContent = '';
   partHint.textContent = '';
+  partErrorEl.classList.remove('show');
+  partErrorEl.textContent = '';
   casesError.classList.remove('show');
   if(statusPill){ statusPill.textContent = 'Ready to scan'; statusPill.classList.remove('ok'); }
   refresh();
@@ -3777,7 +3803,13 @@ partInput.addEventListener('input', function(){
 });
 partInput.addEventListener('blur', function(){ updatePartHint(); updateUnitsSuggestion(); });
 partInput.addEventListener('keydown', function(e){
-  if(e.key === 'Enter'){ e.preventDefault(); updatePartHint(); updateUnitsSuggestion(); unitsInput.focus(); unitsInput.select(); }
+  if(e.key === 'Enter'){
+    e.preventDefault();
+    updatePartHint();
+    if(currentValues().partError){ return; }
+    updateUnitsSuggestion();
+    unitsInput.focus(); unitsInput.select();
+  }
 });
 unitsInput.addEventListener('input', function(){ unitsAutoFilled = false; refresh(); });
 unitsInput.addEventListener('keydown', function(e){

@@ -735,7 +735,10 @@
     excluded from these figures &mdash; a future version could add QC-Hold dwell time as its own metric. This tab and the
     Outbound tab share the same SAP export &mdash; uploading a file here (or on the Outbound tab) updates both
     automatically. Repeat uploads merge into existing data and are de-duplicated by Warehouse Task, so re-uploading an
-    export that overlaps a previous one is safe.
+    export that overlaps a previous one is safe. A resolved HU's SLA outcome (Met/Breached) can be manually overridden
+    from the "&#9998; Override" button next to its SLA badge &mdash; a note is required and is kept with the override,
+    visible on hover over the badge and in the Excel export; overrides can be cleared at any time to revert to the
+    calculated status.
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--card-border);">
       <button type="button" class="btn secondary" id="ibResetAllDataBtn" style="border-color:var(--accent);color:var(--accent);">&#9888; Reset All Data</button>
       <span style="color:var(--text-faint);font-size:11px;margin-left:10px;">Permanently clears all Outbound and Inbound data (both tabs) so you can start with a fresh upload. Cycle count data is untouched. Password-protected, cannot be undone.</span>
@@ -2795,6 +2798,7 @@ function xsRenderCharts(outboundGroups, outboundItems, inboundGroups, inventoryG
 ======================================================================= */
 const ibReceiptsRef = db.ref('inbound_receipts');
 const ibUploadsRef = db.ref('inbound_receipt_uploads');
+const ibSlaOverridesRef = db.ref('inbound_sla_overrides');
 
 /* Column map — resolved by header name each upload, same approach as
    Outbound. Only rows for Activity INTL/PTWY with a relevant process type
@@ -2865,6 +2869,7 @@ let ibSearchTerm = '';
 let ibRangeMode = '30';
 let ibGranularity = 'day';
 let ibTblSlaFilter = 'all'; // Inbound Lines table filter: 'all' | 'Met' | 'Breached' — independent of the tab-wide date range above
+let ibSlaOverrides = {}; // HU (sanitized) -> {status:'Met'|'Breached', note, setAt} — manual corrections to computed SLA outcomes
 let ibCharts = {};
 let ibCachedRangeGroups = [];
 let ibLastRenderedGroups = [];
@@ -3028,6 +3033,12 @@ ibReceiptsRef.on('value', snap=>{
   ibSetSyncStatus('err','Connection error: '+err.message);
 });
 
+ibSlaOverridesRef.on('value', snap=>{
+  ibSlaOverrides = snap.val() || {};
+  ibRenderAll();
+  safeRender('executive summary', xsRenderAll);
+});
+
 ibUploadsRef.limitToLast(1).on('value', snap=>{
   const val = snap.val();
   if(!val) return;
@@ -3138,10 +3149,20 @@ function ibGroupByHU(items){
       }
     }
 
+    // Manual SLA correction — only meaningful for HUs that reached a
+    // resolved outcome (Met/Breached); computedSlaStatus preserves what the
+    // data actually says, slaStatus becomes the effective/displayed value.
+    const computedSlaStatus = slaStatus;
+    const override = (computedSlaStatus==='Met' || computedSlaStatus==='Breached')
+      ? (ibSlaOverrides[sanitizeKey(hu)] || null)
+      : null;
+    if(override && override.status){ slaStatus = override.status; }
+
     groups.push({
       hu, product, productDesc, receivedQty, receivedAt, receivedBy, warehouseOrder,
       status, putawayAt, putawayBin, putawayBy, bayType,
       dockToStockMin, dwellMin, slaStatus, slaElapsedMin,
+      computedSlaStatus, slaOverride: override,
       lineCount: receivedRows.length
     });
   }
@@ -3569,7 +3590,13 @@ function ibRenderTable(rangeGroups){
       ? '<span class="badge complete">Putaway Complete</span>'
       : '<span class="badge progress">In GR Zone</span>';
     const slaBadgeClass = g.slaStatus==='Met' ? 'sla-met' : g.slaStatus==='Breached' ? 'sla-breached' : g.slaStatus==='At Risk' ? 'sla-risk' : '';
-    const slaBadge = slaBadgeClass ? `<span class="badge ${slaBadgeClass}">SLA ${g.slaStatus}</span>` : '';
+    const overrideTitle = g.slaOverride ? `Manually overridden from ${g.computedSlaStatus} \u2014 ${g.slaOverride.note}` : '';
+    const slaBadge = slaBadgeClass ? `<span class="badge ${slaBadgeClass}"${overrideTitle?` title="${escapeAttr(overrideTitle)}"`:''}>SLA ${g.slaStatus}${g.slaOverride?' \u270e':''}</span>` : '';
+    const overrideBtn = g.slaOverride
+      ? `<button type="button" class="sla-override-btn clear" data-hu="${escapeAttr(g.hu)}" title="Clear SLA override">&#10005; Clear</button>`
+      : ((g.computedSlaStatus==='Met' || g.computedSlaStatus==='Breached')
+        ? `<button type="button" class="sla-override-btn" data-hu="${escapeAttr(g.hu)}" data-target="${g.computedSlaStatus==='Met'?'Breached':'Met'}" title="Override SLA status">&#9998; Override</button>`
+        : '');
     return `
       <tr>
         <td>${g.hu}</td>
@@ -3578,7 +3605,7 @@ function ibRenderTable(rangeGroups){
         <td>${g.receivedQty.toLocaleString()}</td>
         <td>${formatDateTime(g.receivedAt)}</td>
         <td>${g.receivedBy||'&mdash;'}</td>
-        <td>${statusBadge}${slaBadge}</td>
+        <td>${statusBadge}${slaBadge}${overrideBtn}</td>
         <td>${formatDateTime(g.putawayAt)}</td>
         <td>${g.putawayBy||'&mdash;'}</td>
         <td>${g.putawayBin||'&mdash;'}</td>
@@ -3587,6 +3614,45 @@ function ibRenderTable(rangeGroups){
       </tr>
     `;
   }).join('');
+
+  tbody.querySelectorAll('.sla-override-btn').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      if(btn.classList.contains('clear')) ibClearSlaOverride(btn.dataset.hu);
+      else ibOverrideSlaPrompt(btn.dataset.hu, btn.dataset.target);
+    });
+  });
+}
+
+async function ibOverrideSlaPrompt(hu, targetStatus){
+  const note = prompt(`Override HU ${hu} to SLA ${targetStatus}.\n\nEnter a note explaining why (required):`);
+  if(note === null) return; // cancelled
+  if(!note.trim()){
+    alert('A note is required to override the SLA status.');
+    return;
+  }
+  try{
+    await ibSlaOverridesRef.child(sanitizeKey(hu)).set({
+      status: targetStatus,
+      note: note.trim(),
+      setAt: new Date().toISOString()
+    });
+    ibSetSyncStatus('ok', 'SLA status overridden for '+hu);
+  }catch(err){
+    console.error(err);
+    ibSetSyncStatus('err', 'Failed to save SLA override: '+err.message);
+  }
+}
+
+async function ibClearSlaOverride(hu){
+  if(!confirm(`Clear the SLA override for HU ${hu}? It will revert to the calculated status.`)) return;
+  try{
+    await ibSlaOverridesRef.child(sanitizeKey(hu)).remove();
+    ibSetSyncStatus('ok', 'SLA override cleared for '+hu);
+  }catch(err){
+    console.error(err);
+    ibSetSyncStatus('err', 'Failed to clear SLA override: '+err.message);
+  }
 }
 
 /* ---------------------------------------------------------------------
@@ -3619,13 +3685,14 @@ function ibExportTableToExcel(){
     'Bay Type': g.bayType,
     'Dock\u2192Stock (min)': g.dockToStockMin ?? '',
     'Currently Waiting (min)': g.dwellMin ?? '',
-    'SLA Status': g.slaStatus
+    'SLA Status': g.slaStatus,
+    'SLA Override Note': g.slaOverride ? `Overridden from ${g.computedSlaStatus}: ${g.slaOverride.note}` : ''
   }));
 
   const sheet = XLSX.utils.json_to_sheet(rows, {cellDates:true});
   sheet['!cols'] = [
     {wch:14},{wch:12},{wch:32},{wch:16},{wch:12},{wch:18},{wch:14},
-    {wch:16},{wch:18},{wch:14},{wch:12},{wch:11},{wch:14},{wch:16},{wch:11}
+    {wch:16},{wch:18},{wch:14},{wch:12},{wch:11},{wch:14},{wch:16},{wch:11},{wch:32}
   ];
   const headerRow = Object.keys(rows[0]||{});
   ['Received At','Putaway At'].forEach(col=>{

@@ -3697,7 +3697,6 @@ function buildLabelHTML(part, unitsPerCase, caseIndex, totalCases, mspn, isPrevi
       <div class="cl-barcode">${barcode || '<div class="cl-fallback">No part number</div>'}</div>
       <div class="cl-meta">
         <div class="cl-box"><div class="cl-k">Units / Case</div><div class="cl-v">${isNaN(unitsPerCase) ? '\u2014' : esc(unitsPerCase)}</div></div>
-        <div class="cl-box"><div class="cl-k">Case</div><div class="cl-v">${esc(caseIndex)} of ${esc(totalCases)}</div></div>
         <div class="cl-box"><div class="cl-k">Microsoft PN</div><div class="cl-v cl-v-sm">${mspn ? esc(mspn) : '\u2014'}</div></div>
       </div>
     </div>`;

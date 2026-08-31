@@ -1868,20 +1868,19 @@ function buildLabelHTML(data){
   ].map(([k,v])=> `<div class="label-kv-row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('');
 
   const itemRows = `
-      <div class="label-kv-row emphasis"><span class="k">PART</span><span class="v">${esc(data.product)}</span></div>
-      <div class="label-kv-row"><span class="k">MICROSOFT PART</span><span class="v">${mspnVal ? esc(mspnVal) : '\u2014'}</span></div>
+      <div class="label-kv-row emphasis"><span class="k">Lenovo Prt Nbr</span><span class="v">${esc(data.product)}</span></div>
+      <div class="label-kv-row"><span class="k">Microsoft Prt Nbr</span><span class="v">${mspnVal ? esc(mspnVal) : '\u2014'}</span></div>
       <div class="label-kv-row"><span class="k">DESCRIPTION</span><span class="v">${esc(data.desc||'\u2014')}</span></div>
       <div class="label-kv-row"><span class="k">QUANTITY</span><span class="v">${data.qty ? esc(data.qty) : '\u2014'}</span></div>`;
 
   const bottomCodeBlock = partBarcode ? `
       <div class="label-bottomcode">${partBarcode}</div>
       <div class="label-bottomcode-num">${esc(data.product)}</div>
-      <div class="label-bottomcode-tag">Part Number</div>` : '';
+      <div class="label-bottomcode-tag">Lenovo Prt Nbr</div>` : '';
 
   return `
     <div class="label-inner">
       <div class="label-logo-wrap"><img class="label-logo" src="${CEVA_LOGO_DATA}" alt="CEVA Logistics"></div>
-      <div class="label-head">DOCKSENSE &middot; PUTAWAY</div>
       ${noticeBlock}
       ${topCodeBlock}
       <div class="label-kv-section">${infoRows}</div>
@@ -3345,17 +3344,16 @@ document.addEventListener('input', e=>{
         <div class="lt-sku-block">
           <div class="lt-pn-row">
             <div class="lt-pn-text">
-              <div class="lt-label">Lenovo part nbr</div>
+              <div class="lt-label">Lenovo Prt Nbr</div>
               <div class="lt-sku">${esc(r.sku)||"—"}</div>
             </div>
             <div class="lt-pn-barcode">${r.sku ? barcodeSVG(r.sku, 34) : '<div class="lt-fallback">No part number</div>'}</div>
           </div>
           <div class="lt-pn-row">
             <div class="lt-pn-text">
-              <div class="lt-label">Microsoft part nbr</div>
+              <div class="lt-label">Microsoft Prt Nbr</div>
               <div class="lt-sku">${esc(lookupMSPN(r.sku))||"—"}</div>
             </div>
-            <div class="lt-pn-barcode">${lookupMSPN(r.sku) ? barcodeSVG(lookupMSPN(r.sku), 34) : '<div class="lt-fallback">No mapping found</div>'}</div>
           </div>
           <div class="lt-desc">${esc(r.description)||""}</div>
         </div>

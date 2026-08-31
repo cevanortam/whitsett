@@ -617,8 +617,12 @@
   }
   .cl-error.show{display:block;}
   .cl-learned-hint{font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:6px;min-height:14px;}
-  .cl-preview-shell{display:flex;justify-content:center;padding:22px;background:#20262f;border-radius:8px;overflow:auto;}
-  .cl-preview-scaler{transform:scale(1.5);transform-origin:center;}
+  .cl-preview-shell{padding:22px;background:#20262f;border-radius:8px;overflow-x:auto;}
+  .cl-label.cl-label-preview{width:480px;height:240px;margin:0 auto;padding:0.28in 0.3in;}
+  .cl-label-preview .cl-part{font-size:22pt;}
+  .cl-label-preview .cl-barcode svg{max-height:0.7in;}
+  .cl-label-preview .cl-meta .cl-k{font-size:9pt;}
+  .cl-label-preview .cl-meta .cl-v{font-size:18pt;}
 
   .cl-label{
     width:4in;height:2in;box-sizing:border-box;padding:0.2in 0.22in;
@@ -1193,15 +1197,27 @@
       <h2>Label preview</h2>
       <p class="hint">4&Prime; &times; 2&Prime; direct thermal &mdash; Zebra ZT510 / ZD421. One label prints per case, numbered &ldquo;Case X of N&rdquo;.</p>
       <div class="cl-preview-shell">
-        <div class="cl-preview-scaler">
-          <div class="cl-label" id="clPreviewLabel"></div>
-        </div>
+        <div id="clPreviewLabel"></div>
       </div>
     </div>
   </div>
 </div>
 
 <div id="caseLabelPrintRoot"></div>
+
+<!-- PRINT CONFIRM MODAL -->
+<div class="modal-overlay hidden" id="clPrintConfirmModal">
+  <div class="modal">
+    <div class="modal-head"><h3>Confirm print</h3></div>
+    <p style="font-size:13px;color:var(--muted);line-height:1.5;margin:0 0 16px;">
+      Did the <span id="clPrintConfirmCount">0</span> case label(s) print successfully? This is what gets logged for the billing export.
+    </p>
+    <div class="modal-foot">
+      <button class="btn ghost" id="clPrintConfirmNo">No, don&rsquo;t count these</button>
+      <button class="btn primary" id="clPrintConfirmYes">Yes, printed successfully</button>
+    </div>
+  </div>
+</div>
 
 </div>
 
@@ -3651,10 +3667,11 @@ function clampCasesInput(){
   }
 }
 
-function buildLabelHTML(part, unitsPerCase, caseIndex, totalCases){
+function buildLabelHTML(part, unitsPerCase, caseIndex, totalCases, isPreview){
   const barcode = part ? clBarcodeSVG(part) : '';
+  const cls = isPreview ? 'cl-label cl-label-preview' : 'cl-label';
   return `
-    <div class="cl-label">
+    <div class="${cls}">
       <div class="cl-part">${esc(part) || '\u2014'}</div>
       <div class="cl-barcode">${barcode || '<div class="cl-fallback">No part number</div>'}</div>
       <div class="cl-meta">
@@ -3678,8 +3695,10 @@ function refresh(){
 
   printBtn.disabled = !(validPart && validUnits && validCases);
 
-  previewLabel.innerHTML = buildLabelHTML(part, units, 1, validCases ? cases : (isNaN(cases) ? 1 : cases));
+  previewLabel.innerHTML = buildLabelHTML(part, units, 1, validCases ? cases : (isNaN(cases) ? 1 : cases), true);
 }
+
+let pendingPrint = null; // { part, units, n } awaiting print confirmation
 
 function printCaseLabels(){
   const { part, units, cases } = currentValues();
@@ -3690,9 +3709,7 @@ function printCaseLabels(){
   for(let i=1;i<=n;i++){ html.push(buildLabelHTML(part, units, i, n)); }
   printRoot.innerHTML = html.join('');
 
-  recordUnitsForPart(part, units);
-  updateUnitsSuggestion();
-  recordPrintEvent(part, units, n);
+  pendingPrint = { part, units, n };
 
   // The 4x6 label modules (Putaway / Pick Ticket) each define their own
   // @page rule; since @page is a single global cascade, we can't just add
@@ -3703,19 +3720,42 @@ function printCaseLabels(){
   styleTag.textContent = '@page{ size:4in 2in; margin:0; }';
   document.head.appendChild(styleTag);
 
-  function cleanup(){
-    window.removeEventListener('afterprint', cleanup);
+  // window.print() gives no reliable signal for Print vs Cancel in the OS
+  // dialog, so we can't count these as printed the moment the dialog opens.
+  // afterprint only tells us the dialog closed either way — we ask the
+  // operator to confirm before logging anything for billing.
+  function onAfterPrint(){
+    window.removeEventListener('afterprint', onAfterPrint);
     styleTag.remove();
+    document.getElementById('clPrintConfirmCount').textContent = n;
+    document.getElementById('clPrintConfirmModal').classList.remove('hidden');
   }
-  window.addEventListener('afterprint', cleanup);
-
-  if(statusPill){
-    statusPill.textContent = `Printed ${n} label${n===1?'':'s'}`;
-    statusPill.classList.add('ok');
-  }
+  window.addEventListener('afterprint', onAfterPrint);
 
   setTimeout(()=>window.print(), 50);
 }
+
+document.getElementById('clPrintConfirmYes').addEventListener('click', function(){
+  document.getElementById('clPrintConfirmModal').classList.add('hidden');
+  if(!pendingPrint) return;
+  recordUnitsForPart(pendingPrint.part, pendingPrint.units);
+  updateUnitsSuggestion();
+  recordPrintEvent(pendingPrint.part, pendingPrint.units, pendingPrint.n);
+  if(statusPill){
+    statusPill.textContent = `Printed ${pendingPrint.n} label${pendingPrint.n===1?'':'s'}`;
+    statusPill.classList.add('ok');
+  }
+  pendingPrint = null;
+});
+
+document.getElementById('clPrintConfirmNo').addEventListener('click', function(){
+  document.getElementById('clPrintConfirmModal').classList.add('hidden');
+  if(statusPill){
+    statusPill.textContent = 'Print not confirmed \u2014 not logged';
+    statusPill.classList.remove('ok');
+  }
+  pendingPrint = null;
+});
 
 function clearForm(){
   partInput.value = '';

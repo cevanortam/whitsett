@@ -372,12 +372,12 @@
     </div>
     <div class="chart-card">
       <h3 id="titleCycle">Avg Cycle Time by Day</h3>
-      <div class="chart-note">Avg Created&rarr;Confirmed, Auto vs. Manual</div>
+      <div class="chart-note">Avg Created&rarr;Confirmed, Auto vs. Manual. Sundays excluded from the clock.</div>
       <div class="chart-holder"><canvas id="chartCycle"></canvas></div>
     </div>
     <div class="chart-card">
       <h3 id="titlePickDuration">Avg Time to Complete a Pick by Day</h3>
-      <div class="chart-note">Avg Created&rarr;Confirmed per Warehouse Task, Auto vs. Manual</div>
+      <div class="chart-note">Avg Created&rarr;Confirmed per Warehouse Task, Auto vs. Manual. Sundays excluded from the clock.</div>
       <div class="chart-holder"><canvas id="chartPickDuration"></canvas></div>
     </div>
     <div class="chart-card">
@@ -630,7 +630,7 @@
     </div>
     <div class="chart-card">
       <h3 id="ibTitleDockToStock">Dock to Stock (Avg) by Day</h3>
-      <div class="chart-note">Avg Received&rarr;Putaway, completed HUs only</div>
+      <div class="chart-note">Avg Received&rarr;Putaway, completed HUs only. Sundays excluded from the clock.</div>
       <div class="chart-holder"><canvas id="ibChartDockToStock"></canvas></div>
     </div>
     <div class="chart-card">
@@ -1002,6 +1002,9 @@ function getWeekStart(d){
   nd.setDate(nd.getDate()+diff);
   return nd;
 }
+function isSunday(d){
+  return isValidDate(d) && d.getDay()===0;
+}
 let charts = {};
 let expandedPullIds = new Set();
 let lastRenderedGroups = []; // the exact filtered/sorted Pull ID rows currently on screen — used for Excel export
@@ -1135,9 +1138,14 @@ function average(arr){
 }
 
 // Same as minutesBetween, but any time that falls on a Sunday (the
-// warehouse's non-working day) is excluded from the elapsed total —
-// used specifically for SLA clock calculations, not general cycle-time
-// reporting. Saturdays still count, since the warehouse sometimes works them.
+// warehouse's non-working day) is excluded from the elapsed total — used
+// for every elapsed-time/duration metric on the Outbound and Inbound tabs
+// (SLA clocks, cycle time, dispatch delay, pick duration, dock-to-stock,
+// GR Zone dwell time), so a task idle over Sunday isn't counted against it.
+// Saturdays still count, since the warehouse works them. Not used on the
+// Inventory tab — cycle counts legitimately run overnight into/through
+// Sunday (see icBusinessDate), so that tab's elapsed-time math is
+// deliberately left on plain minutesBetween.
 function minutesBetweenExcludingSundays(a,b){
   if(!isValidDate(a) || !isValidDate(b) || b<a) return null;
   let total = 0;
@@ -1488,7 +1496,7 @@ function groupByPullId(items){
     const wtCount = wtSet.size;
 
     const pullType = classifyPullType(pullId);
-    const createToConfirmMin = allConfirmed ? minutesBetween(createdAt, confirmedAt) : null;
+    const createToConfirmMin = allConfirmed ? minutesBetweenExcludingSundays(createdAt, confirmedAt) : null;
     const slaThresholdMin = SLA_MINUTES[pullType] ?? null;
     let slaStatus = 'N/A';
     let slaElapsedMin = null;
@@ -1519,9 +1527,9 @@ function groupByPullId(items){
       wtCount,
       createdAt, startAt, confirmedAt,
       status: allConfirmed ? 'Complete' : 'In Progress',
-      createToStartMin: minutesBetween(createdAt, startAt),
+      createToStartMin: minutesBetweenExcludingSundays(createdAt, startAt),
       createToConfirmMin,
-      startToConfirmMin: allConfirmed ? minutesBetween(startAt, confirmedAt) : null,
+      startToConfirmMin: allConfirmed ? minutesBetweenExcludingSundays(startAt, confirmedAt) : null,
       slaThresholdMin, slaStatus, slaElapsedMin,
       computedSlaStatus, slaOverride: override,
       confirmedBy: confirmedByUsers.join(', '),
@@ -1598,9 +1606,25 @@ function renderKPIs(items, groups){
   const avgDispatchManual = average(groups.filter(g=>g.pullType==='Manual').map(g=>g.createToStartMin).filter(v=>v!==null && v!==undefined && v>=0));
 
   const dayCounts = {};
-  groups.forEach(g=>{ if(g.createdAt){ const k=periodKey(g.createdAt); dayCounts[k]=(dayCounts[k]||0)+1; } });
+  // Sunday isn't a normal operating day (same reasoning as the SLA clocks
+  // excluding it) — at Day granularity specifically, skip it so it doesn't
+  // pull the per-day average down as a mostly-idle "day." At Week/Month/Year
+  // granularity a bucket spans multiple days anyway, so this doesn't apply.
+  groups.forEach(g=>{ if(g.createdAt && !(granularity==='day' && isSunday(g.createdAt))){ const k=periodKey(g.createdAt); dayCounts[k]=(dayCounts[k]||0)+1; } });
   const dayVals = Object.values(dayCounts);
   const avgPerDay = dayVals.length ? Math.round((dayVals.reduce((a,b)=>a+b,0)/dayVals.length)*10)/10 : null;
+
+  // Same per-period totals the Total Warehouse Tasks chart bars, averaged
+  // across the periods present in range; forecast is averaged the same way
+  // (via wtForecastForPeriodKey) so a Month/Year granularity compares against
+  // its own real day count rather than a flat 300. Sunday excluded at Day
+  // granularity for the same reason as above.
+  const wtByDay = {};
+  groups.forEach(g=>{ if(g.createdAt && !(granularity==='day' && isSunday(g.createdAt))){ const k=periodKey(g.createdAt); wtByDay[k]=(wtByDay[k]||0)+g.wtCount; } });
+  const wtDayVals = Object.values(wtByDay);
+  const avgWtPerPeriod = wtDayVals.length ? Math.round((wtDayVals.reduce((a,b)=>a+b,0)/wtDayVals.length)*10)/10 : null;
+  const wtForecastVals = Object.keys(wtByDay).map(k=>wtForecastForPeriodKey(k));
+  const avgWtForecast = wtForecastVals.length ? Math.round((wtForecastVals.reduce((a,b)=>a+b,0)/wtForecastVals.length)*10)/10 : WT_DAILY_FORECAST;
 
   const lowItems = items.filter(r=>r.bayType==='Low Bay');
   const highItems = items.filter(r=>r.bayType==='High Bay');
@@ -1619,6 +1643,7 @@ function renderKPIs(items, groups){
     {label:'Auto Avg Dispatch Delay', value: formatDuration(avgDispatchAuto), sub:'created \u2192 start', accent:'var(--info)'},
     {label:'Manual Avg Dispatch Delay', value: formatDuration(avgDispatchManual), sub:'created \u2192 start', accent:'var(--hv-color)'},
     {label:'Pull IDs / '+granularityLabel(), value: avgPerDay!==null ? avgPerDay : '&mdash;', sub:'average over range', accent:'var(--accent)'},
+    {label:'Warehouse Tasks / '+granularityLabel(), value: avgWtPerPeriod!==null ? avgWtPerPeriod.toLocaleString() : '&mdash;', sub: avgWtPerPeriod!==null ? 'avg over range \u00b7 forecast: '+avgWtForecast.toLocaleString()+'/'+granularityLabel().toLowerCase() : 'no data in range', accent: avgWtPerPeriod!==null && avgWtPerPeriod<avgWtForecast ? 'var(--warn)' : 'var(--good)'},
     {label:'Pending Confirmation', value: pendingLines.toLocaleString(), sub:'line items not yet confirmed', accent: pendingLines>0 ? 'var(--warn)' : 'var(--good)'},
     {label:'Short-Pick Pulls', value: shortPickPulls.toLocaleString(), sub: shortLines+' line'+(shortLines===1?'':'s')+' under target', accent: shortPickPulls>0 ? 'var(--bad)' : 'var(--good)'},
     {label:'Over-Pick Pulls', value: overPickPulls.toLocaleString(), sub: overLines+' line'+(overLines===1?'':'s')+' over target', accent: overPickPulls>0 ? 'var(--info)' : 'var(--good)'},
@@ -1749,7 +1774,7 @@ function renderPickDurationChart(items){
   const byDay = {};
   items.forEach(r=>{
     if(!isValidDate(r.createdAt) || !isValidDate(r.confirmedAt)) return;
-    const dur = minutesBetween(r.createdAt, r.confirmedAt);
+    const dur = minutesBetweenExcludingSundays(r.createdAt, r.confirmedAt);
     if(dur===null || dur<0) return;
     const pType = classifyPullType(r.pullId);
     if(pType!=='Auto' && pType!=='Manual') return;
@@ -2033,6 +2058,24 @@ function renderWtAvgChart(groups){
 
 // Trend of the total number of distinct Warehouse Tasks created (summed
 // across Pull IDs), bucketed by each Pull ID's creation date.
+// Daily forecast/target for Warehouse Tasks created, shown as a reference
+// line on the Total Warehouse Tasks chart. Scaled up for Week/Month/Year
+// granularity so the line still represents "300/day" for that bucket size.
+const WT_DAILY_FORECAST = 300;
+function wtForecastForPeriodKey(key){
+  if(granularity==='year'){
+    const y = Number(key);
+    const isLeap = (y%4===0 && y%100!==0) || y%400===0;
+    return WT_DAILY_FORECAST * (isLeap ? 366 : 365);
+  }
+  if(granularity==='month'){
+    const [y,m] = key.split('-').map(Number);
+    return WT_DAILY_FORECAST * new Date(y, m, 0).getDate(); // days in that month
+  }
+  if(granularity==='week') return WT_DAILY_FORECAST * 7;
+  return WT_DAILY_FORECAST;
+}
+
 function renderWtTotalChart(groups){
   const byDay = {};
   groups.forEach(g=>{
@@ -2043,14 +2086,18 @@ function renderWtTotalChart(groups){
   delete byDay[periodKey(new Date())]; // never chart today — still in progress, misleadingly partial
   const labels = Object.keys(byDay).sort();
   const data = labels.map(k=>byDay[k]);
+  const forecastData = labels.map(k=>wtForecastForPeriodKey(k));
   destroyChart('wtTotal');
   const step = labelSkipStep(labels.length);
-  const opts = baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}});
+  const opts = baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}}, true);
   opts.layout = {padding:{top:20}};
   opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:(v,ctx)=> ctx.dataIndex % step === 0 ? v : ''};
   charts.wtTotal = new Chart(document.getElementById('chartWtTotal'), {
     type:'bar',
-    data:{ labels: labels.map(l=>formatPeriodLabel(l)), datasets:[{ data, backgroundColor:'#3d9fe8', borderRadius:4, maxBarThickness:36 }]},
+    data:{ labels: labels.map(l=>formatPeriodLabel(l)), datasets:[
+      { label:'Warehouse Tasks', data, backgroundColor:'#3d9fe8', borderRadius:4, maxBarThickness:36 },
+      { label:'Forecast ('+WT_DAILY_FORECAST+'/day)', data: forecastData, type:'line', borderColor:'#e8a33d', borderWidth:2, borderDash:[6,4], pointRadius:0, pointHoverRadius:0, pointHitRadius:6, fill:false, tension:0, datalabels:{display:false} }
+    ]},
     options: opts
   });
 }
@@ -2160,7 +2207,7 @@ function renderTable(rangeGroups){
         : result==='Over' ? 'color:var(--info);font-weight:700;'
         : result==='Pending' ? 'color:var(--text-faint);'
         : '';
-      const pickDurationMin = (isValidDate(l.createdAt) && isValidDate(l.confirmedAt)) ? minutesBetween(l.createdAt, l.confirmedAt) : null;
+      const pickDurationMin = (isValidDate(l.createdAt) && isValidDate(l.confirmedAt)) ? minutesBetweenExcludingSundays(l.createdAt, l.confirmedAt) : null;
       return `
       <tr>
         <td>${l.warehouseTask||'&mdash;'}</td>
@@ -2330,7 +2377,7 @@ function exportTableToExcel(){
   lastRenderedGroups.forEach(g=>{
     g.lines.forEach(l=>{
       const result = classifyPickResult(l.targetQty, l.actualQty, isValidDate(l.confirmedAt));
-      const pickDurationMin = (isValidDate(l.createdAt) && isValidDate(l.confirmedAt)) ? minutesBetween(l.createdAt, l.confirmedAt) : '';
+      const pickDurationMin = (isValidDate(l.createdAt) && isValidDate(l.confirmedAt)) ? minutesBetweenExcludingSundays(l.createdAt, l.confirmedAt) : '';
       lineRows.push({
         'Pull ID': g.pullId,
         'Pull Type': g.pullType,
@@ -3300,8 +3347,8 @@ function ibGroupByHU(items){
     }
 
     const status = putawayAt ? 'Putaway Complete' : 'In GR Zone';
-    const dockToStockMin = (receivedAt && putawayAt) ? minutesBetween(receivedAt, putawayAt) : null;
-    const dwellMin = (receivedAt && !putawayAt) ? minutesBetween(receivedAt, now) : null;
+    const dockToStockMin = (receivedAt && putawayAt) ? minutesBetweenExcludingSundays(receivedAt, putawayAt) : null;
+    const dwellMin = (receivedAt && !putawayAt) ? minutesBetweenExcludingSundays(receivedAt, now) : null;
 
     let slaStatus = 'N/A', slaElapsedMin = null;
     if(receivedAt){
@@ -3419,12 +3466,14 @@ function ibRenderKPIs(groups, backlogGroups){
   const breachedGroups = backlogOldestFirst.filter(g=>g.dwellMin!==null && g.dwellMin>IB_SLA_MINUTES);
 
   const receivedDayCounts = {};
-  groups.forEach(g=>{ if(g.receivedAt){ const k=ibPeriodKey(g.receivedAt); receivedDayCounts[k]=(receivedDayCounts[k]||0)+1; } });
+  // Sunday excluded at Day granularity — same reasoning as the Outbound tab
+  // (not a normal operating day; would otherwise drag the per-day average down).
+  groups.forEach(g=>{ if(g.receivedAt && !(ibGranularity==='day' && isSunday(g.receivedAt))){ const k=ibPeriodKey(g.receivedAt); receivedDayCounts[k]=(receivedDayCounts[k]||0)+1; } });
   const receivedDayVals = Object.values(receivedDayCounts);
   const avgReceivedPerPeriod = receivedDayVals.length ? Math.round((receivedDayVals.reduce((a,b)=>a+b,0)/receivedDayVals.length)*10)/10 : null;
 
   const putawayDayCounts = {};
-  completed.forEach(g=>{ if(g.putawayAt){ const k=ibPeriodKey(g.putawayAt); putawayDayCounts[k]=(putawayDayCounts[k]||0)+1; } });
+  completed.forEach(g=>{ if(g.putawayAt && !(ibGranularity==='day' && isSunday(g.putawayAt))){ const k=ibPeriodKey(g.putawayAt); putawayDayCounts[k]=(putawayDayCounts[k]||0)+1; } });
   const putawayDayVals = Object.values(putawayDayCounts);
   const avgPutawayPerPeriod = putawayDayVals.length ? Math.round((putawayDayVals.reduce((a,b)=>a+b,0)/putawayDayVals.length)*10)/10 : null;
 
@@ -4349,6 +4398,14 @@ function icRenderKPIs(groups, openGroups, rangeRecords){
   const completedRecordCount = rangeRecords.filter(r=>r.status==='COUN').length;
   const recountRecordCount = rangeRecords.filter(r=>r.status==='RECO').length;
 
+  // Locations counted per day — same COUN documents "Completed Counts"
+  // above tallies, just bucketed by business date so it can be averaged
+  // for the KPI card below.
+  const countedByPeriod = {};
+  rangeRecords.forEach(r=>{ if(r.status==='COUN' && r.countAt){ const k=icPeriodKey(r.countAt); countedByPeriod[k]=(countedByPeriod[k]||0)+1; } });
+  const countedPeriodVals = Object.values(countedByPeriod);
+  const avgLocationsCountedPerPeriod = countedPeriodVals.length ? Math.round((countedPeriodVals.reduce((a,b)=>a+b,0)/countedPeriodVals.length)*10)/10 : null;
+
   const resolved = groups.filter(g=>g.status==='Accurate' || g.status==='Inaccurate');
   // Unit-weighted, matching the Analysis workbook's "Unit Accuracy %":
   // (total book qty - total absolute variance) / total book qty across
@@ -4391,6 +4448,7 @@ function icRenderKPIs(groups, openGroups, rangeRecords){
       modalBody: icModalTableHtml(oldestOpenFirst),
       exportRows: icModalExportRows(oldestOpenFirst), exportFilename: 'open-counts-oldest-first'},
     {label:'Completed Counts', value: completedRecordCount.toLocaleString(), sub:'COUN documents in range', accent:'var(--accent)'},
+    {label:'Locations Counted / '+icGranularityLabel(), value: avgLocationsCountedPerPeriod!==null ? avgLocationsCountedPerPeriod : '&mdash;', sub:'average over range', accent:'var(--accent)'},
     {label:'Recounts Initiated', value: recountRecordCount.toLocaleString(), sub:'RECO documents in range', accent: recountRecordCount>0 ? 'var(--hv-color)' : 'var(--good)'},
     {label:'Recount Rate', value: recountRate!==null ? recountRate+'%' : '\u2014', sub: recountedResolved.length+' of '+resolved.length+' resolved locations needed one', accent:'var(--info)'},
     {label:'Recount Success Rate', value: recountSuccessPct!==null ? recountSuccessPct+'%' : '\u2014', sub: recountSuccessPct!==null ? recountCorrected+'/'+recountedResolved.length+' recounts matched book qty' : 'no completed recounts', accent: recountSuccessPct!==null && recountSuccessPct<80 ? 'var(--warn)' : 'var(--good)'},

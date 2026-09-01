@@ -586,6 +586,187 @@
     main{padding:18px 14px 60px;}
     .pull-header{flex-direction:column; align-items:flex-start;}
   }
+
+  /* ==================== FLOOR VIEW (big-screen board) ==================== */
+  body.floor-mode{display:flex; flex-direction:column; height:100vh; width:100%; overflow:hidden;}
+  body.floor-mode main{max-width:none; width:100%; margin:0; padding:clamp(14px,1.2vw,28px); display:flex; flex-direction:column; box-sizing:border-box; flex:1 1 auto; min-height:0;}
+  body.floor-mode header.topbar{padding:clamp(10px,1vw,16px) clamp(16px,2vw,32px); flex:0 0 auto;}
+
+  #floorView{display:flex; flex-direction:column; min-height:0; overflow:hidden; flex:1 1 auto; width:100%;}
+
+  .floor-stats{
+    display:grid;
+    grid-template-columns:repeat(4, 1fr);
+    gap:clamp(10px,0.9vw,18px);
+    margin-bottom:clamp(12px,1.1vw,20px);
+    flex:0 0 auto;
+    width:100%;
+  }
+  .floor-stat{
+    background:linear-gradient(180deg, var(--navy-panel) 0%, var(--navy) 100%);
+    border:1px solid var(--navy-border);
+    border-radius:10px;
+    padding:clamp(12px,1.1vw,20px) clamp(14px,1.3vw,24px);
+  }
+  .floor-stat .fs-label{
+    font-family:'Barlow Condensed', sans-serif;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:var(--text-faint);
+    font-size:clamp(0.7rem,0.75vw,0.95rem);
+    margin-bottom:4px;
+  }
+  .floor-stat .fs-value{
+    font-family:'Barlow Condensed', sans-serif;
+    font-weight:700;
+    font-size:clamp(1.6rem,2.6vw,3.2rem);
+    line-height:1;
+    color:#fff;
+  }
+  .floor-stat .fs-value .fs-sub{
+    font-size:0.4em;
+    color:var(--text-dim);
+    font-weight:600;
+    margin-left:6px;
+  }
+  .floor-stat.accent-ceva .fs-value{color:var(--amber);}
+  .floor-stat.accent-lenovo .fs-value{color:#5AA8FF;}
+  .floor-stat.accent-breach .fs-value{color:var(--red-bright);}
+
+  .floor-board{
+    display:grid;
+    grid-template-columns:1.3fr 1fr 1fr;
+    grid-template-rows:1fr;
+    gap:clamp(10px,0.9vw,18px);
+    flex:1 1 auto;
+    min-height:0;
+    width:100%;
+  }
+  .floor-col{
+    background:rgba(6,43,92,0.35);
+    border:1px solid var(--navy-border);
+    border-radius:12px;
+    padding:clamp(10px,0.9vw,16px);
+    display:flex;
+    flex-direction:column;
+    min-height:0;
+    overflow:hidden;
+  }
+  .floor-col-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    font-family:'Barlow Condensed', sans-serif;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    font-weight:700;
+    font-size:clamp(1rem,1.2vw,1.5rem);
+    color:var(--text);
+    padding:2px 6px 12px;
+    border-bottom:2px solid var(--navy-border);
+    margin-bottom:10px;
+    flex:0 0 auto;
+  }
+  .floor-col-header .qa-count{
+    background:var(--navy-card);
+    border:1px solid var(--navy-border);
+    border-radius:999px;
+    padding:2px 12px;
+    font-size:0.7em;
+  }
+  .floor-col.col-ceva .floor-col-header{border-bottom-color:var(--amber);}
+  .floor-col.col-lenovo .floor-col-header{border-bottom-color:#5AA8FF;}
+
+  /* Card list fills whatever vertical space is left in the column; cards split it evenly
+     via flex, so more pulls means shorter cards instead of a scrollbar. */
+  .floor-card-list{
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    gap:clamp(3px,0.4vw,8px);
+    flex:1 1 auto;
+    min-height:0;
+    overflow:hidden;
+  }
+  .floor-card{
+    background:var(--navy-panel);
+    border:1px solid var(--navy-border);
+    border-left:5px solid var(--navy-border);
+    border-radius:8px;
+    padding:8px 16px;
+    flex:1 1 0;
+    min-height:0;
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+  }
+  .floor-card.tier-ok{border-left-color:var(--green);}
+  .floor-card.tier-warn{border-left-color:var(--amber);}
+  .floor-card.tier-breach{border-left-color:var(--red-bright); background:rgba(200,16,46,0.12);}
+  .floor-card-top{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:8px;
+    margin-bottom:6px;
+  }
+  .floor-card-id{
+    font-family:'Barlow Condensed', sans-serif;
+    font-weight:700;
+    font-size:1.4rem;
+    color:#fff;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .floor-card-id .prefix{color:var(--text-faint); font-weight:500; font-size:0.6em; margin-right:0.3em;}
+  .floor-card-progress-txt{
+    font-family:'Barlow Condensed', sans-serif;
+    font-weight:700;
+    font-size:1.2rem;
+    color:var(--text-dim);
+    white-space:nowrap;
+  }
+  .floor-card-bar{
+    height:8px;
+    border-radius:5px;
+    background:var(--navy-deep);
+    overflow:hidden;
+    margin-bottom:6px;
+  }
+  .floor-card-bar-fill{
+    height:100%;
+    background:var(--green);
+    border-radius:5px;
+    transition:width .3s;
+  }
+  .floor-card-meta{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    font-size:0.95rem;
+    color:var(--text-faint);
+    white-space:nowrap;
+  }
+  .floor-card-meta .chip{font-size:0.85em; padding:0.2em 0.7em;}
+  .floor-col-empty{
+    color:var(--text-faint);
+    font-size:clamp(0.8rem,0.9vw,1.05rem);
+    text-align:center;
+    padding:24px 10px;
+  }
+
+  @media (max-width:1000px){
+    body.floor-mode{overflow:auto; height:auto; display:block;}
+    body.floor-mode main{display:block; height:auto; flex:none;}
+    #floorView{display:block; flex:none;}
+    .floor-board{grid-template-columns:1fr; display:block;}
+    .floor-col{margin-bottom:14px; max-height:60vh;}
+    .floor-card-list{overflow-y:auto;}
+    .floor-card{flex:0 0 auto;}
+    .floor-stats{grid-template-columns:repeat(2,1fr);}
+  }
 </style>
 </head>
 <body>
@@ -600,15 +781,17 @@
       <button class="btn btn-tab tab-btn active" id="tabOpenBtn">Open</button>
       <button class="btn btn-tab tab-btn" id="tabPendingBtn">Pending QA</button>
       <button class="btn btn-tab tab-btn" id="tabArchiveBtn">Archive</button>
+      <button class="btn btn-tab tab-btn" id="tabFloorBtn">Floor View</button>
     </div>
     <button class="btn" id="exportExcelBtn" style="display:none;">&#128190; Export to Excel</button>
+    <button class="btn" id="floorFullscreenBtn" style="display:none;">&#9974; Fullscreen</button>
     <button class="btn" id="openBulkModalBtn">+ Bulk Assign</button>
     <button class="btn btn-primary" id="openAddModalBtn">+ Add Warehouse Order</button>
   </div>
 </header>
 
 <main>
-  <div class="toolbar">
+  <div class="toolbar" id="mainToolbar">
     <div class="search-wrap">
       <input type="text" id="searchInput" placeholder="Search Pull ID, WO #, or picker...">
     </div>
@@ -618,6 +801,7 @@
   <div id="openView"></div>
   <div id="pendingView" style="display:none;"></div>
   <div id="archiveView" style="display:none;"></div>
+  <div id="floorView" style="display:none;"></div>
 </main>
 
 <footer>CEVA Logistics — Whitsett, NC · Picker Assignment Tracker</footer>
@@ -941,6 +1125,7 @@ function render(){
     document.getElementById('openView').style.display = '';
     document.getElementById('pendingView').style.display = 'none';
     document.getElementById('archiveView').style.display = 'none';
+    document.getElementById('floorView').style.display = 'none';
     let groups = openPullGroups();
     if (term){
       groups = groups.map(g => ({
@@ -969,6 +1154,7 @@ function render(){
     document.getElementById('openView').style.display = 'none';
     document.getElementById('pendingView').style.display = '';
     document.getElementById('archiveView').style.display = 'none';
+    document.getElementById('floorView').style.display = 'none';
     let groups = pendingQAGroups();
     if (term){
       groups = groups.filter(g =>
@@ -985,10 +1171,11 @@ function render(){
       container.innerHTML = renderPendingBoard(groups);
     }
     attachPendingViewHandlers();
-  } else {
+  } else if (currentTab === 'archive'){
     document.getElementById('openView').style.display = 'none';
     document.getElementById('pendingView').style.display = 'none';
     document.getElementById('archiveView').style.display = '';
+    document.getElementById('floorView').style.display = 'none';
     let groups = closedPullGroups();
     if (term){
       groups = groups.filter(g =>
@@ -1004,8 +1191,168 @@ function render(){
     } else {
       container.innerHTML = groups.map(renderArchiveGroup).join('');
     }
+  } else {
+    // floor
+    document.getElementById('openView').style.display = 'none';
+    document.getElementById('pendingView').style.display = 'none';
+    document.getElementById('archiveView').style.display = 'none';
+    document.getElementById('floorView').style.display = '';
+    renderFloorView();
   }
   refreshPickerAndPullDatalists();
+}
+
+/* ==================== RENDER: FLOOR VIEW (big-screen board) ==================== */
+function renderFloorView(){
+  const pickingGroups = openPullGroups();
+  const qaGroups = pendingQAGroups();
+  const cevaGroups = qaGroups.filter(g => !g.cevaQAAt);
+  const lenovoGroups = qaGroups.filter(g => !!g.cevaQAAt);
+
+  const totalOpenPulls = pickingGroups.length + qaGroups.length;
+  const totalOpenWO = pickingGroups.reduce((n,g) => n + g.orders.filter(o => !o.completed).length, 0);
+  const totalWO = pickingGroups.reduce((n,g) => n + g.orders.length, 0);
+
+  const container = document.getElementById('floorView');
+  if (totalOpenPulls === 0 && !lastSyncedAt && !syncError){
+    container.innerHTML = loadingStateHtml();
+    return;
+  }
+
+  container.innerHTML = `
+  <div class="floor-stats">
+    <div class="floor-stat">
+      <div class="fs-label">Open Pull IDs</div>
+      <div class="fs-value">${totalOpenPulls}</div>
+    </div>
+    <div class="floor-stat">
+      <div class="fs-label">Warehouse Tasks Open</div>
+      <div class="fs-value">${totalOpenWO}<span class="fs-sub">of ${totalWO}</span></div>
+    </div>
+    <div class="floor-stat accent-ceva">
+      <div class="fs-label">In CEVA QA</div>
+      <div class="fs-value">${cevaGroups.length}</div>
+    </div>
+    <div class="floor-stat accent-lenovo">
+      <div class="fs-label">In Lenovo QA</div>
+      <div class="fs-value">${lenovoGroups.length}</div>
+    </div>
+  </div>
+  <div class="floor-board">
+    <div class="floor-col col-picking">
+      <div class="floor-col-header">Picking <span class="qa-count">${pickingGroups.length}</span></div>
+      <div class="floor-card-list">
+        ${pickingGroups.length ? pickingGroups.map(renderFloorPickingCard).join('') : '<div class="floor-col-empty">No open Pull IDs</div>'}
+      </div>
+    </div>
+    <div class="floor-col col-ceva">
+      <div class="floor-col-header">CEVA QA <span class="qa-count">${cevaGroups.length}</span></div>
+      <div class="floor-card-list">
+        ${cevaGroups.length ? cevaGroups.map(renderFloorQaCard).join('') : '<div class="floor-col-empty">Nothing awaiting CEVA QA</div>'}
+      </div>
+    </div>
+    <div class="floor-col col-lenovo">
+      <div class="floor-col-header">Lenovo QA <span class="qa-count">${lenovoGroups.length}</span></div>
+      <div class="floor-card-list">
+        ${lenovoGroups.length ? lenovoGroups.map(renderFloorQaCard).join('') : '<div class="floor-col-empty">Nothing awaiting Lenovo QA</div>'}
+      </div>
+    </div>
+  </div>`;
+  sizeFloorCards();
+}
+
+/* Explicitly divides each column's available height evenly across its cards (instead of
+   relying on flex-grow), then scales each card's own font/bar/padding directly off its
+   real measured height — CSS container-query units (cqh) proved unreliable here, so this
+   is done in plain JS math for a deterministic result. Re-run after every render and on
+   resize so cards always fill the column exactly, with text that actually scales with them. */
+function sizeFloorCards(){
+  document.querySelectorAll('#floorView .floor-card-list').forEach(list => {
+    const cards = list.querySelectorAll(':scope > .floor-card');
+    const n = cards.length;
+    if (n === 0) return;
+    const gapPx = parseFloat(getComputedStyle(list).rowGap) || 0;
+    const available = list.clientHeight - gapPx * (n - 1);
+    const perCard = Math.max(0, available / n);
+    const listWidth = list.clientWidth;
+    cards.forEach(c => {
+      c.style.flex = `0 0 ${perCard}px`;
+
+      // Scale every internal element off the card's real height, with sane floors/ceilings.
+      const h = perCard;
+      const titleFs = clampNum(h * 0.30, 11, 64);
+      const progFs = clampNum(h * 0.24, 10, 52);
+      const metaFs = clampNum(h * 0.16, 9, 30);
+      const barH = clampNum(h * 0.09, 3, 24);
+      const vPad = clampNum(h * 0.10, 3, 36);
+      const hPad = clampNum(listWidth * 0.045, 8, 36);
+      const gapSm = clampNum(h * 0.05, 0, 14);
+
+      c.style.padding = `${vPad}px ${hPad}px`;
+
+      const titleEl = c.querySelector('.floor-card-id');
+      const progEl = c.querySelector('.floor-card-progress-txt');
+      const barEl = c.querySelector('.floor-card-bar');
+      const metaEl = c.querySelector('.floor-card-meta');
+      const topEl = c.querySelector('.floor-card-top');
+      if (titleEl) titleEl.style.fontSize = titleFs + 'px';
+      if (progEl) progEl.style.fontSize = progFs + 'px';
+      if (metaEl) metaEl.style.fontSize = metaFs + 'px';
+      if (topEl) topEl.style.marginBottom = gapSm + 'px';
+      if (barEl){
+        barEl.style.height = barH + 'px';
+        barEl.style.marginBottom = gapSm + 'px';
+        // Below a usable height, drop the bar first so text doesn't get crowded out.
+        barEl.style.display = (h < 46) ? 'none' : '';
+      }
+      // Below that, drop the meta line too — just Pull ID + count remains.
+      if (metaEl) metaEl.style.display = (h < 28) ? 'none' : '';
+    });
+  });
+}
+function clampNum(val, min, max){ return Math.max(min, Math.min(max, val)); }
+window.addEventListener('resize', () => { if (currentTab === 'floor') sizeFloorCards(); });
+
+function renderFloorPickingCard(g){
+  const sla = SLA_MS[g.type] || SLA_MS.Manual;
+  const elapsed = Date.now() - g.createdAt;
+  const tier = slaTier(elapsed, sla);
+  const typeClass = g.type === 'Auto' ? 'type-auto' : 'type-manual';
+  const total = g.orders.length;
+  const openCount = g.orders.filter(o => !o.completed).length;
+  const verifiedCount = total - openCount;
+  const pct = total > 0 ? Math.round((verifiedCount/total)*100) : 0;
+  return `
+  <div class="floor-card tier-${tier}">
+    <div class="floor-card-top">
+      <div class="floor-card-id"><span class="prefix">Pull ID</span>${escapeHtml(g.pullId)}</div>
+      <div class="floor-card-progress-txt">${verifiedCount}/${total} tasks</div>
+    </div>
+    <div class="floor-card-bar"><div class="floor-card-bar-fill" style="width:${pct}%;"></div></div>
+    <div class="floor-card-meta">
+      <span class="chip ${typeClass}">${escapeHtml(g.type || '—')}</span>
+      <span>${fmtElapsed(elapsed)} open</span>
+    </div>
+  </div>`;
+}
+
+function renderFloorQaCard(g){
+  const sla = SLA_MS[g.type] || SLA_MS.Manual;
+  const pickDoneAt = pickingCompletedAt(g.orders);
+  const pickingMs = pickDoneAt ? (pickDoneAt - g.createdAt) : 0;
+  const tier = slaTier(pickingMs, sla);
+  const typeClass = g.type === 'Auto' ? 'type-auto' : 'type-manual';
+  return `
+  <div class="floor-card tier-${tier}">
+    <div class="floor-card-top">
+      <div class="floor-card-id"><span class="prefix">Pull ID</span>${escapeHtml(g.pullId)}</div>
+      <div class="floor-card-progress-txt">${g.orders.length} WO${g.orders.length!==1?'s':''}</div>
+    </div>
+    <div class="floor-card-meta">
+      <span class="chip ${typeClass}">${escapeHtml(g.type || '—')}</span>
+      <span>${fmtElapsed(pickingMs)} picking</span>
+    </div>
+  </div>`;
 }
 
 function renderPullGroup(g){
@@ -1191,6 +1538,7 @@ function tick(){
     const valEl = el.querySelector('.wo-elapsed-val');
     if (valEl) valEl.textContent = fmtElapsed(elapsed);
   });
+  if (currentTab === 'floor') renderFloorView();
 }
 if (!tickHandle) tickHandle = setInterval(tick, 1000);
 
@@ -1225,13 +1573,19 @@ function refreshPickerAndPullDatalists(){
 }
 
 /* ---- Tabs ---- */
-const VALID_TABS = ['open', 'pending', 'archive'];
+const VALID_TABS = ['open', 'pending', 'archive', 'floor'];
 function setActiveTab(tab, updateHash){
   currentTab = tab;
   document.getElementById('tabOpenBtn').classList.toggle('active', tab==='open');
   document.getElementById('tabPendingBtn').classList.toggle('active', tab==='pending');
   document.getElementById('tabArchiveBtn').classList.toggle('active', tab==='archive');
+  document.getElementById('tabFloorBtn').classList.toggle('active', tab==='floor');
   document.getElementById('exportExcelBtn').style.display = (tab === 'archive') ? '' : 'none';
+  document.getElementById('floorFullscreenBtn').style.display = (tab === 'floor') ? '' : 'none';
+  document.getElementById('mainToolbar').style.display = (tab === 'floor') ? 'none' : '';
+  document.getElementById('openBulkModalBtn').style.display = (tab === 'floor') ? 'none' : '';
+  document.getElementById('openAddModalBtn').style.display = (tab === 'floor') ? 'none' : '';
+  document.body.classList.toggle('floor-mode', tab === 'floor');
   if (updateHash !== false && window.location.hash.replace('#','') !== tab){
     window.location.hash = tab;
   }
@@ -1240,6 +1594,14 @@ function setActiveTab(tab, updateHash){
 document.getElementById('tabOpenBtn').addEventListener('click', () => setActiveTab('open'));
 document.getElementById('tabPendingBtn').addEventListener('click', () => setActiveTab('pending'));
 document.getElementById('tabArchiveBtn').addEventListener('click', () => setActiveTab('archive'));
+document.getElementById('tabFloorBtn').addEventListener('click', () => setActiveTab('floor'));
+document.getElementById('floorFullscreenBtn').addEventListener('click', () => {
+  if (!document.fullscreenElement){
+    document.documentElement.requestFullscreen().catch(() => {});
+  } else {
+    document.exitFullscreen().catch(() => {});
+  }
+});
 
 window.addEventListener('hashchange', () => {
   const tab = window.location.hash.replace('#','');

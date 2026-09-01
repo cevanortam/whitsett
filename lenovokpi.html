@@ -190,6 +190,7 @@
   .badge.accurate{background:rgba(47,191,113,0.15);color:var(--good);}
   .badge.inaccurate{background:rgba(226,35,26,0.15);color:var(--accent);}
   .badge.recounted{background:rgba(167,139,250,0.15);color:var(--hv-color);margin-left:5px;}
+  .badge.omitted{background:rgba(167,139,250,0.15);color:var(--hv-color);margin-left:5px;cursor:help;}
 
   .delete-line-btn{
     background:transparent;border:1px solid var(--card-border-light);color:var(--text-faint);
@@ -491,7 +492,10 @@
     this is password-protected and cannot be undone. A completed Pull ID's SLA outcome (Met/Breached) can be
     manually overridden from the "&#9998; Override" button next to its SLA badge &mdash; a note is required and is
     kept with the override, visible on hover over the badge and in the Excel export; overrides can be cleared at
-    any time to revert to the calculated status.
+    any time to revert to the calculated status. On the Executive Summary, an off-qty line in the Fill Rate popup
+    (e.g. a customer-requested overpick held as reserve stock) can similarly be omitted from Fill Rate with a
+    required reason &mdash; it stays visible in the popup and export, marked "Omitted," and can be un-omitted at
+    any time.
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--card-border);">
       <button type="button" class="btn secondary" id="resetAllDataBtn" style="border-color:var(--accent);color:var(--accent);">&#9888; Reset All Data</button>
       <span style="color:var(--text-faint);font-size:11px;margin-left:10px;">Permanently clears all Outbound and Inbound data (both tabs) so you can start with a fresh upload. Cycle count data is untouched. Password-protected, cannot be undone.</span>
@@ -893,7 +897,10 @@
   <div class="modal-box">
     <div class="modal-head">
       <h3 id="kpiModalTitle"></h3>
-      <button type="button" class="modal-close" id="kpiModalClose" aria-label="Close">&times;</button>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button type="button" class="btn secondary" id="kpiModalExportBtn" style="display:none;">&#8595; Export to Excel</button>
+        <button type="button" class="modal-close" id="kpiModalClose" aria-label="Close">&times;</button>
+      </div>
     </div>
     <div class="modal-body" id="kpiModalBody"></div>
   </div>
@@ -919,6 +926,7 @@ const db = firebase.database();
 const lineItemsRef = db.ref('outbound_pulls');
 const uploadsRef = db.ref('outbound_pull_uploads');
 const slaOverridesRef = db.ref('outbound_sla_overrides');
+const fillRateOmissionsRef = db.ref('outbound_fillrate_omissions');
 
 /* ---------------------------------------------------------------------
    Column map — resolved by header NAME (not fixed position) each upload,
@@ -999,6 +1007,7 @@ let expandedPullIds = new Set();
 let lastRenderedGroups = []; // the exact filtered/sorted Pull ID rows currently on screen — used for Excel export
 let cachedRangeGroups = []; // Pull ID groups after date-range filtering only (pre search/sort) — reused by search/sort so they don't redo the full grouping pass
 let slaOverrides = {}; // pullId (sanitized) -> {status:'Met'|'Breached', note, setAt} — manual corrections to computed SLA outcomes
+let fillRateOmissions = {}; // line item _key (sanitized) -> {note, setAt} — lines manually excluded from the Fill Rate miss count (e.g. customer-requested overpicks/reserve stock), with a required reason
 
 /* ---------------------------------------------------------------------
    Date / time helpers
@@ -1265,6 +1274,19 @@ function sanitizeKey(k){
   return String(k).replace(/[.#$\[\]\/]/g,'_');
 }
 
+// A line item is "off qty" if actual != target. Fill Rate treats an off-qty
+// line as accurate (doesn't count against the SLA) if it's been manually
+// omitted — e.g. a customer-requested overpick held as reserve stock, which
+// isn't a real fill miss. Omission is per-line (keyed by the line's own
+// Firebase _key, i.e. its Warehouse Task) since it depends on why that
+// specific pick was over/short, not on the Pull ID or SKU in general.
+function isFillRateOmitted(line){
+  return !!(line._key && fillRateOmissions[sanitizeKey(line._key)]);
+}
+function isFillRateAccurate(line){
+  return (line.actualQty||0)===(line.targetQty||0) || isFillRateOmitted(line);
+}
+
 /* ---------------------------------------------------------------------
    Upload flow — a single uploaded SAP export is parsed for BOTH tabs
    (see combinedUploadFromFile, defined near the bottom of the script).
@@ -1312,6 +1334,12 @@ lineItemsRef.on('value', snap => {
 
 slaOverridesRef.on('value', snap=>{
   slaOverrides = snap.val() || {};
+  renderAll();
+  safeRender('executive summary', xsRenderAll);
+});
+
+fillRateOmissionsRef.on('value', snap=>{
+  fillRateOmissions = snap.val() || {};
   renderAll();
   safeRender('executive summary', xsRenderAll);
 });
@@ -1541,7 +1569,7 @@ function renderKPIs(items, groups){
   const totalLines = items.length;
   const avgPicksPerPull = totalPulls ? Math.round((totalLines/totalPulls)*10)/10 : null;
   const confirmedLines = items.filter(r=>isValidDate(r.confirmedAt));
-  const accurateLines = confirmedLines.filter(r=>(r.actualQty||0)===(r.targetQty||0)).length;
+  const accurateLines = confirmedLines.filter(r=>isFillRateAccurate(r)).length;
   const accuracyPct = confirmedLines.length ? Math.round((accurateLines/confirmedLines.length)*1000)/10 : null;
   const pendingLines = items.filter(r=>!isValidDate(r.confirmedAt)).length;
   const shortLines = items.filter(r=>classifyPickResult(r.targetQty, r.actualQty, isValidDate(r.confirmedAt))==='Short').length;
@@ -1824,7 +1852,7 @@ function renderAccuracyChart(items){
     const k = periodKey(r.createdAt);
     if(!byDay[k]) byDay[k] = {total:0, accurate:0};
     byDay[k].total++;
-    if((r.actualQty||0) === (r.targetQty||0)) byDay[k].accurate++;
+    if(isFillRateAccurate(r)) byDay[k].accurate++;
   });
   delete byDay[periodKey(new Date())]; // never chart today — still in progress, misleadingly partial
   const labels = Object.keys(byDay).sort();
@@ -2371,17 +2399,48 @@ function applyDateFormat(sheet, rows, dateCols){
 /* ---------------------------------------------------------------------
    KPI card drill-down modal — generic chrome shared by any tab. A card
    supplies a title and a pre-built HTML body (usually a small table);
-   this just handles showing/hiding/closing it.
+   this just handles showing/hiding/closing it. A card can also supply
+   exportRows (an array of plain {Column: value} objects, one per row of
+   the same data the HTML table shows) plus an exportFilename — when
+   present, an "Export to Excel" button appears in the modal header so
+   whatever's currently drilled into can be pulled out for further
+   digging (e.g. leadership tracing yesterday's misses).
 --------------------------------------------------------------------- */
-function openKpiModal(title, bodyHtml){
+let kpiModalExportRows = null;
+let kpiModalExportFilename = '';
+function openKpiModal(title, bodyHtml, exportRows, exportFilename){
   document.getElementById('kpiModalTitle').textContent = title;
   document.getElementById('kpiModalBody').innerHTML = bodyHtml;
   document.getElementById('kpiModalOverlay').style.display = 'flex';
+  kpiModalExportRows = (exportRows && exportRows.length) ? exportRows : null;
+  kpiModalExportFilename = exportFilename || 'export';
+  document.getElementById('kpiModalExportBtn').style.display = kpiModalExportRows ? 'inline-block' : 'none';
 }
 function closeKpiModal(){
   document.getElementById('kpiModalOverlay').style.display = 'none';
 }
 document.getElementById('kpiModalClose').addEventListener('click', closeKpiModal);
+document.getElementById('kpiModalExportBtn').addEventListener('click', ()=>{
+  if(!kpiModalExportRows || !kpiModalExportRows.length) return;
+  if(typeof XLSX === 'undefined'){
+    alert('Excel export library failed to load from CDN — check your network/firewall and reload.');
+    return;
+  }
+  const sheet = XLSX.utils.json_to_sheet(kpiModalExportRows, {cellDates:true});
+  const headerRow = Object.keys(kpiModalExportRows[0]||{});
+  sheet['!cols'] = headerRow.map(()=>({wch:16}));
+  headerRow.forEach((col,colIdx)=>{
+    if(!(kpiModalExportRows[0][col] instanceof Date)) return;
+    for(let r=0;r<kpiModalExportRows.length;r++){
+      const addr = XLSX.utils.encode_cell({r:r+1, c:colIdx});
+      if(sheet[addr] && sheet[addr].t==='d') sheet[addr].z = 'mm/dd/yyyy hh:mm AM/PM';
+    }
+  });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, sheet, 'Data');
+  const today = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, kpiModalExportFilename+'_'+today+'.xlsx');
+});
 document.getElementById('kpiModalOverlay').addEventListener('click', (e)=>{
   if(e.target.id==='kpiModalOverlay') closeKpiModal();
 });
@@ -2420,6 +2479,20 @@ function xsFilterOutboundGroups(groups){
   const fromVal = document.getElementById('xsDateFrom').value;
   const toVal = document.getElementById('xsDateTo').value;
   return computeRangeFilteredGroups(groups, xsRangeMode, fromVal, toVal, 'createdAt', 'In Progress');
+}
+// Line items don't carry a group-level .status, so passing this sentinel as
+// openStatusValue guarantees the "always include open items" bypass in
+// computeRangeFilteredGroups never fires — every item is checked strictly
+// against the selected date window. Needed because outboundGroups (above)
+// intentionally bypasses the range for still-open Pull IDs (so backlog isn't
+// hidden), but that means flatMapping their lines pulls in already-confirmed
+// lines from outside the selected range too — which silently skews Fill Rate
+// and shows up as an extra out-of-range day on the Fill Rate by Day chart.
+const XS_STRICT_NO_BYPASS = '\u0000__strict_no_bypass__\u0000';
+function xsFilterOutboundItemsStrict(items){
+  const fromVal = document.getElementById('xsDateFrom').value;
+  const toVal = document.getElementById('xsDateTo').value;
+  return computeRangeFilteredGroups(items, xsRangeMode, fromVal, toVal, 'createdAt', XS_STRICT_NO_BYPASS);
 }
 function xsFilterInboundGroups(groups){
   const fromVal = document.getElementById('xsDateFrom').value;
@@ -2512,12 +2585,13 @@ function xsRenderAll(){
   if(!grid) return;
 
   const outboundGroups = xsFilterOutboundGroups(groupByPullId(allLineItems));
-  const outboundItems = outboundGroups.flatMap(g=>g.lines);
+  const outboundItems = xsFilterOutboundItemsStrict(outboundGroups.flatMap(g=>g.lines));
   const inboundGroups = xsFilterInboundGroups(ibGroupByHU(ibAllRecords));
   const inventoryGroups = xsFilterInventoryGroups(icGroupByLocation(icAllRecords));
 
   const confirmedLines = outboundItems.filter(r=>isValidDate(r.confirmedAt));
-  const missedLines = confirmedLines.filter(r=>(r.actualQty||0)!==(r.targetQty||0));
+  const offQtyLines = confirmedLines.filter(r=>(r.actualQty||0)!==(r.targetQty||0)); // all qty mismatches — shown in the Fill Rate popup regardless of omission, so they stay reviewable/reversible
+  const missedLines = offQtyLines.filter(r=>!isFillRateOmitted(r)); // what actually counts against Fill Rate
   const accurateLines = confirmedLines.length - missedLines.length;
   const fillRatePct = confirmedLines.length ? Math.round((accurateLines/confirmedLines.length)*1000)/10 : null;
 
@@ -2550,28 +2624,34 @@ function xsRenderAll(){
     {label:'Fill Rate', value: fillRatePct!==null ? fillRatePct+'%' : '\u2014',
       sub: (fillRatePct!==null ? accurateLines+'/'+confirmedLines.length+' lines on qty \u00b7 ' : '')+'Target: >'+XS_SLA_TARGETS.fillRate+'%',
       accent: xsSlaAccent(fillRatePct, XS_SLA_TARGETS.fillRate),
-      modalTitle: 'Fill Rate Misses \u2014 '+missedLines.length.toLocaleString()+' line'+(missedLines.length===1?'':'s')+' off target qty',
-      modalBody: xsLineModalTableHtml(missedLines)},
+      modalTitle: 'Fill Rate Misses \u2014 '+missedLines.length.toLocaleString()+' line'+(missedLines.length===1?'':'s')+' off target qty'
+        +((offQtyLines.length-missedLines.length)>0 ? ' \u00b7 '+(offQtyLines.length-missedLines.length)+' omitted' : ''),
+      modalBody: xsLineModalTableHtml(offQtyLines),
+      exportRows: xsLineModalExportRows(offQtyLines), exportFilename: 'fill-rate-misses'},
     {label:'Dock to Stock (Goods Receiving)', value: dockSlaPct!==null ? dockSlaPct+'%' : '\u2014',
       sub: (dockSlaPct!==null ? inboundSlaMet+'/'+inboundResolved.length+' HUs on time \u00b7 ' : '')+'Target: >'+XS_SLA_TARGETS.dockToStock.toFixed(2)+'%',
       accent: xsSlaAccent(dockSlaPct, XS_SLA_TARGETS.dockToStock),
       modalTitle: 'Dock to Stock SLA Breaches \u2014 '+inboundBreached.length.toLocaleString()+' HU'+(inboundBreached.length===1?'':'s')+' over 5hr',
-      modalBody: ibModalTableHtml(inboundBreached)},
+      modalBody: ibModalTableHtml(inboundBreached),
+      exportRows: ibModalExportRows(inboundBreached), exportFilename: 'dock-to-stock-breaches'},
     {label:'On-Time Delivery (Auto Pulls)', value: autoSla.pct!==null ? autoSla.pct+'%' : '\u2014',
       sub: (autoSla.pct!==null ? autoSla.met+'/'+(autoSla.met+autoSla.breached)+' pulls on time \u00b7 ' : '')+'Target: >'+XS_SLA_TARGETS.onTimeAuto.toFixed(2)+'%',
       accent: xsSlaAccent(autoSla.pct, XS_SLA_TARGETS.onTimeAuto),
       modalTitle: 'On-Time Delivery Breaches (Auto) \u2014 '+autoSla.breached.toLocaleString()+' pull'+(autoSla.breached===1?'':'s')+' over 5hr SLA',
-      modalBody: xsPullModalTableHtml(autoSla.breachedGroups)},
+      modalBody: xsPullModalTableHtml(autoSla.breachedGroups),
+      exportRows: xsPullModalExportRows(autoSla.breachedGroups), exportFilename: 'on-time-delivery-breaches-auto'},
     {label:'On-Time Delivery (Manual Pulls)', value: manualSla.pct!==null ? manualSla.pct+'%' : '\u2014',
       sub: (manualSla.pct!==null ? manualSla.met+'/'+(manualSla.met+manualSla.breached)+' pulls on time \u00b7 ' : '')+'Target: >'+XS_SLA_TARGETS.onTimeManual.toFixed(2)+'%',
       accent: xsSlaAccent(manualSla.pct, XS_SLA_TARGETS.onTimeManual),
       modalTitle: 'On-Time Delivery Breaches (Manual) \u2014 '+manualSla.breached.toLocaleString()+' pull'+(manualSla.breached===1?'':'s')+' over 1hr SLA',
-      modalBody: xsPullModalTableHtml(manualSla.breachedGroups)},
+      modalBody: xsPullModalTableHtml(manualSla.breachedGroups),
+      exportRows: xsPullModalExportRows(manualSla.breachedGroups), exportFilename: 'on-time-delivery-breaches-manual'},
     {label:'Inventory Accuracy', value: invAccuracyPct!==null ? invAccuracyPct+'%' : '\u2014',
       sub: 'Target: >'+XS_SLA_TARGETS.inventoryAccuracy.toFixed(2)+'%',
       accent: xsSlaAccent(invAccuracyPct, XS_SLA_TARGETS.inventoryAccuracy),
       modalTitle: 'Inaccurate Locations \u2014 '+invInaccurate.length.toLocaleString()+' location'+(invInaccurate.length===1?'':'s')+' off qty, largest variance first',
-      modalBody: icModalTableHtml([...invInaccurate].sort((a,b)=>Math.abs(b.diffQty)-Math.abs(a.diffQty)))}
+      modalBody: icModalTableHtml([...invInaccurate].sort((a,b)=>Math.abs(b.diffQty)-Math.abs(a.diffQty))),
+      exportRows: icModalExportRows([...invInaccurate].sort((a,b)=>Math.abs(b.diffQty)-Math.abs(a.diffQty))), exportFilename: 'inaccurate-locations'}
   ];
 
   grid.innerHTML = cards.map((c,i)=>`
@@ -2584,20 +2664,32 @@ function xsRenderAll(){
 
   grid.querySelectorAll('[data-xs-card-idx]').forEach(el=>{
     const c = cards[Number(el.dataset.xsCardIdx)];
-    el.addEventListener('click', ()=> openKpiModal(c.modalTitle, c.modalBody));
+    el.addEventListener('click', ()=> openKpiModal(c.modalTitle, c.modalBody, c.exportRows, c.exportFilename));
   });
 
   safeRender('executive summary charts', ()=>xsRenderCharts(outboundGroups, outboundItems, inboundGroups, inventoryGroups));
 }
 
 // Drill-down table for a Fill Rate miss: individual line items where actual
-// qty didn't match target qty (Short/Over/NIL), not pull-level.
+// qty didn't match target qty (Short/Over/NIL), not pull-level. Includes an
+// Omit/Clear control per line so a customer-requested overpick (held as
+// reserve stock, not a real fill miss) can be excluded from Fill Rate with a
+// required reason — reversible, and the line stays visible either way.
+function fillRateActionCellHtml(key, omission){
+  if(!key) return '';
+  const omittedBadge = omission ? `<span class="badge omitted" title="${escapeAttr('Omitted from Fill Rate \u2014 '+omission.note)}">Omitted \u270e</span>` : '';
+  const omitBtn = omission
+    ? `<button type="button" class="sla-override-btn clear" data-fillrate-key="${escapeAttr(key)}" title="Clear omission">&#10005; Clear</button>`
+    : `<button type="button" class="sla-override-btn" data-fillrate-key="${escapeAttr(key)}" data-target="omit" title="Omit from Fill Rate">&#9998; Omit</button>`;
+  return omittedBadge+omitBtn;
+}
 function xsLineModalTableHtml(lines){
   if(!lines.length) return '<div style="color:var(--text-faint);padding:10px 0 4px;">No matching lines.</div>';
   return `<div style="overflow-x:auto;"><table><thead><tr>
-      <th>Pull ID</th><th>SKU</th><th>Description</th><th>Target Qty</th><th>Actual Qty</th><th>Diff</th><th>Confirmed</th>
+      <th>Pull ID</th><th>SKU</th><th>Description</th><th>Target Qty</th><th>Actual Qty</th><th>Diff</th><th>Confirmed</th><th>Fill Rate</th>
     </tr></thead><tbody>${lines.map(l=>{
       const diff = (l.actualQty||0)-(l.targetQty||0);
+      const omission = l._key ? fillRateOmissions[sanitizeKey(l._key)] : null;
       return `
       <tr>
         <td>${l.pullId||'&mdash;'}</td>
@@ -2607,8 +2699,67 @@ function xsLineModalTableHtml(lines){
         <td>${(l.actualQty||0).toLocaleString()}</td>
         <td>${diff>0?'+':''}${diff.toLocaleString()}</td>
         <td>${formatDateTime(l.confirmedAt)}</td>
+        <td>${fillRateActionCellHtml(l._key, omission)}</td>
       </tr>
     `;}).join('')}</tbody></table></div>`;
+}
+
+async function fillRateOmissionPrompt(key, cellEl){
+  const note = prompt('Omit this line from Fill Rate (e.g. a customer-requested overpick held as reserve stock).\n\nEnter a reason (required):');
+  if(note === null) return; // cancelled
+  if(!note.trim()){
+    alert('A reason is required to omit a line from Fill Rate.');
+    return;
+  }
+  try{
+    const omission = { note: note.trim(), setAt: new Date().toISOString() };
+    await fillRateOmissionsRef.child(sanitizeKey(key)).set(omission);
+    setSyncStatus('ok', 'Line omitted from Fill Rate');
+    if(cellEl) cellEl.innerHTML = fillRateActionCellHtml(key, omission);
+  }catch(err){
+    console.error(err);
+    setSyncStatus('err', 'Failed to save omission: '+err.message);
+  }
+}
+async function clearFillRateOmission(key, cellEl){
+  if(!confirm('Clear this omission? The line will count against Fill Rate again if it\u2019s still off qty.')) return;
+  try{
+    await fillRateOmissionsRef.child(sanitizeKey(key)).remove();
+    setSyncStatus('ok', 'Omission cleared');
+    if(cellEl) cellEl.innerHTML = fillRateActionCellHtml(key, null);
+  }catch(err){
+    console.error(err);
+    setSyncStatus('err', 'Failed to clear omission: '+err.message);
+  }
+}
+// Delegated (the modal body is replaced wholesale on every open, so listeners
+// are attached once here rather than re-bound per render).
+document.getElementById('kpiModalBody').addEventListener('click', (e)=>{
+  const btn = e.target.closest('[data-fillrate-key]');
+  if(!btn) return;
+  e.stopPropagation();
+  const key = btn.dataset.fillrateKey;
+  if(!key) return;
+  const cellEl = btn.closest('td');
+  if(btn.classList.contains('clear')) clearFillRateOmission(key, cellEl);
+  else fillRateOmissionPrompt(key, cellEl);
+});
+
+// Plain-object rows (same data as xsLineModalTableHtml) for Excel export.
+function xsLineModalExportRows(lines){
+  return lines.map(l=>{
+    const omission = l._key ? fillRateOmissions[sanitizeKey(l._key)] : null;
+    return {
+      'Pull ID': l.pullId||'',
+      'SKU': l.product||'',
+      'Description': l.productDesc||'',
+      'Target Qty': l.targetQty||0,
+      'Actual Qty': l.actualQty||0,
+      'Diff': (l.actualQty||0)-(l.targetQty||0),
+      'Confirmed At': isValidDate(l.confirmedAt) ? l.confirmedAt : '',
+      'Omitted from Fill Rate': omission ? 'Omitted: '+omission.note : ''
+    };
+  });
 }
 
 // Drill-down table for an On-Time Delivery breach: pull-group level.
@@ -2628,6 +2779,20 @@ function xsPullModalTableHtml(groups){
         <td>${g.slaElapsedMin!==null ? formatDuration(g.slaElapsedMin) : '&mdash;'}</td>
       </tr>
     `).join('')}</tbody></table></div>`;
+}
+
+// Plain-object rows (same data as xsPullModalTableHtml) for Excel export.
+function xsPullModalExportRows(groups){
+  return groups.map(g=>({
+    'Pull ID': g.pullId,
+    'Type': g.pullType,
+    'Lines': g.lineCount,
+    'Target Qty': g.targetQty||0,
+    'Actual Qty': g.actualQty||0,
+    'Created At': isValidDate(g.createdAt) ? g.createdAt : '',
+    'Confirmed At': isValidDate(g.confirmedAt) ? g.confirmedAt : '',
+    'Elapsed (min)': g.slaElapsedMin ?? ''
+  }));
 }
 
 /* ---------------------------------------------------------------------
@@ -2655,7 +2820,7 @@ function xsRenderCharts(outboundGroups, outboundItems, inboundGroups, inventoryG
     const k = xsPeriodKey(r.createdAt);
     if(!fillByPeriod[k]) fillByPeriod[k] = {total:0, accurate:0};
     fillByPeriod[k].total++;
-    if((r.actualQty||0)===(r.targetQty||0)) fillByPeriod[k].accurate++;
+    if(isFillRateAccurate(r)) fillByPeriod[k].accurate++;
   });
   delete fillByPeriod[xsPeriodKey(new Date())]; // never chart today — still in progress, misleadingly partial
   const fillLabels = Object.keys(fillByPeriod).sort();
@@ -3190,12 +3355,13 @@ function ibRenderAll(){
    KPI cards
 --------------------------------------------------------------------- */
 // Builds the small drill-down table shown inside the KPI modal for any
-// GR-Zone-backlog-flavored card (Currently in GR Zone / Oldest / SLA Breached).
+// GR-Zone-backlog-flavored card (Currently in GR Zone / Oldest / SLA Breached)
+// and the Executive Summary's Dock to Stock SLA Breaches card.
 function ibModalTableHtml(groups){
   if(!groups.length) return '<div style="color:var(--text-faint);padding:10px 0 4px;">No matching HUs.</div>';
   return `<div style="overflow-x:auto;"><table><thead><tr>
       <th>HU</th><th>SKU</th><th>Description</th><th>Qty</th><th>Received</th><th>Received By</th>
-      <th>Status</th><th>Putaway Bin</th><th>Waiting / Dock&rarr;Stock</th>
+      <th>Status</th><th>Putaway At</th><th>Putaway Bin</th><th>Waiting / Dock&rarr;Stock</th>
     </tr></thead><tbody>${groups.map(g=>`
       <tr>
         <td>${g.hu}</td>
@@ -3205,10 +3371,29 @@ function ibModalTableHtml(groups){
         <td>${formatDateTime(g.receivedAt)}</td>
         <td>${g.receivedBy||'&mdash;'}</td>
         <td>${g.status==='Putaway Complete' ? '<span class="badge complete">Putaway Complete</span>' : '<span class="badge progress">In GR Zone</span>'}</td>
+        <td>${formatDateTime(g.putawayAt)}</td>
         <td>${g.putawayBin||'&mdash;'}</td>
         <td>${g.status==='Putaway Complete' ? formatDuration(g.dockToStockMin) : (g.dwellMin!==null ? formatDuration(g.dwellMin)+' so far' : '&mdash;')}</td>
       </tr>
     `).join('')}</tbody></table></div>`;
+}
+
+// Plain-object rows (same data as ibModalTableHtml, one per HU) for Excel export.
+function ibModalExportRows(groups){
+  return groups.map(g=>({
+    'HU': g.hu,
+    'SKU': g.product||'',
+    'Description': g.productDesc||'',
+    'Qty': g.receivedQty,
+    'Received At': isValidDate(g.receivedAt) ? g.receivedAt : '',
+    'Received By': g.receivedBy||'',
+    'Status': g.status,
+    'Putaway At': isValidDate(g.putawayAt) ? g.putawayAt : '',
+    'Putaway Bin': g.putawayBin||'',
+    'Dock\u2192Stock (min)': g.dockToStockMin ?? '',
+    'Currently Waiting (min)': g.dwellMin ?? '',
+    'SLA Status': g.slaStatus
+  }));
 }
 
 function ibRenderKPIs(groups, backlogGroups){
@@ -3251,14 +3436,17 @@ function ibRenderKPIs(groups, backlogGroups){
     {label:'Putaway Completion Rate', value: putawayRate!==null ? putawayRate+'%' : '&mdash;', sub: completed.length+' of '+groups.length+' HUs in range', accent: putawayRate!==null && putawayRate<90 ? 'var(--warn)' : 'var(--good)'},
     {label:'Currently in GR Zone', value: backlogGroups.length.toLocaleString(), sub: backlogUnits.toLocaleString()+' units \u2014 live, all-time', accent: backlogGroups.length>0 ? 'var(--warn)' : 'var(--good)',
       modalTitle: 'Currently in GR Zone \u2014 '+backlogGroups.length.toLocaleString()+' HU'+(backlogGroups.length===1?'':'s')+' (oldest first)',
-      modalBody: ibModalTableHtml(backlogOldestFirst)},
+      modalBody: ibModalTableHtml(backlogOldestFirst),
+      exportRows: ibModalExportRows(backlogOldestFirst), exportFilename: 'gr-zone-backlog'},
     {label:'Avg GR Zone Age', value: formatDuration(backlogAvgAge), sub:'current backlog, live', accent:'var(--info)'},
     {label:'Oldest in GR Zone', value: oldest ? formatDuration(oldest.dwellMin) : '&mdash;', sub: oldest ? (oldest.product||oldest.hu) : 'GR Zone is empty', accent: oldest && oldest.dwellMin>IB_SLA_MINUTES ? 'var(--bad)' : 'var(--warn)',
       modalTitle: 'GR Zone Backlog \u2014 Oldest First',
-      modalBody: ibModalTableHtml(backlogOldestFirst)},
+      modalBody: ibModalTableHtml(backlogOldestFirst),
+      exportRows: ibModalExportRows(backlogOldestFirst), exportFilename: 'gr-zone-backlog-oldest-first'},
     {label:'SLA Breached (Live)', value: breachedGroups.length.toLocaleString(), sub:'over 5hr, still not putaway', accent: breachedGroups.length>0 ? 'var(--bad)' : 'var(--good)',
       modalTitle: 'SLA Breached \u2014 '+breachedGroups.length.toLocaleString()+' HU'+(breachedGroups.length===1?'':'s')+' over 5hr, still in GR Zone',
-      modalBody: ibModalTableHtml(breachedGroups)},
+      modalBody: ibModalTableHtml(breachedGroups),
+      exportRows: ibModalExportRows(breachedGroups), exportFilename: 'gr-zone-sla-breached'},
     {label:'Received Lines / '+ibGranularityLabel(), value: avgReceivedPerPeriod!==null ? avgReceivedPerPeriod : '&mdash;', sub:'average over range', accent:'var(--accent)'},
     {label:'Putaway Lines / '+ibGranularityLabel(), value: avgPutawayPerPeriod!==null ? avgPutawayPerPeriod : '&mdash;', sub:'average over range', accent:'var(--accent)'}
   ];
@@ -3273,7 +3461,7 @@ function ibRenderKPIs(groups, backlogGroups){
 
   grid.querySelectorAll('[data-card-idx]').forEach(el=>{
     const c = cards[Number(el.dataset.cardIdx)];
-    el.addEventListener('click', ()=> openKpiModal(c.modalTitle, c.modalBody));
+    el.addEventListener('click', ()=> openKpiModal(c.modalTitle, c.modalBody, c.exportRows, c.exportFilename));
   });
 
   const otherBayCount = completed.length - completed.filter(g=>g.bayType==='Low Bay'||g.bayType==='High Bay'||g.bayType==='High Value').length;
@@ -4139,6 +4327,21 @@ function icModalTableHtml(groups){
     `).join('')}</tbody></table></div>`;
 }
 
+// Plain-object rows (same data as icModalTableHtml) for Excel export.
+function icModalExportRows(groups){
+  return groups.map(g=>({
+    'Bin': g.bin,
+    'SKU': g.product||'',
+    'Description': g.productDesc||'',
+    'Book Qty': g.bookQty,
+    'Counted Qty': g.countedQty,
+    'Diff': g.diffQty,
+    'Result': g.status,
+    'Counter': g.counter||'',
+    'Count Date': isValidDate(g.countAt) ? g.countAt : ''
+  }));
+}
+
 function icRenderKPIs(groups, openGroups, rangeRecords){
   const grid = document.getElementById('icKpiGrid');
 
@@ -4185,16 +4388,19 @@ function icRenderKPIs(groups, openGroups, rangeRecords){
       accent: xsSlaAccent(locationAccuracyPct, XS_SLA_TARGETS.inventoryAccuracy)},
     {label:'Open Counts', value: openRecordCount.toLocaleString(), sub:'waiting to be counted, live', accent: openRecordCount>0 ? 'var(--warn)' : 'var(--good)',
       modalTitle:'Open Counts \u2014 '+openRecordCount.toLocaleString()+' location'+(openRecordCount===1?'':'s')+' waiting (oldest first)',
-      modalBody: icModalTableHtml(oldestOpenFirst)},
+      modalBody: icModalTableHtml(oldestOpenFirst),
+      exportRows: icModalExportRows(oldestOpenFirst), exportFilename: 'open-counts-oldest-first'},
     {label:'Completed Counts', value: completedRecordCount.toLocaleString(), sub:'COUN documents in range', accent:'var(--accent)'},
     {label:'Recounts Initiated', value: recountRecordCount.toLocaleString(), sub:'RECO documents in range', accent: recountRecordCount>0 ? 'var(--hv-color)' : 'var(--good)'},
     {label:'Recount Rate', value: recountRate!==null ? recountRate+'%' : '\u2014', sub: recountedResolved.length+' of '+resolved.length+' resolved locations needed one', accent:'var(--info)'},
     {label:'Recount Success Rate', value: recountSuccessPct!==null ? recountSuccessPct+'%' : '\u2014', sub: recountSuccessPct!==null ? recountCorrected+'/'+recountedResolved.length+' recounts matched book qty' : 'no completed recounts', accent: recountSuccessPct!==null && recountSuccessPct<80 ? 'var(--warn)' : 'var(--good)'},
     {label:'Inaccurate Locations', value: inaccurateGroups.length.toLocaleString(), sub: overages+' over, '+shortages+' short', accent: inaccurateGroups.length>0 ? 'var(--bad)' : 'var(--good)',
       modalTitle:'Inaccurate Locations \u2014 largest variance first',
-      modalBody: icModalTableHtml(inaccurateGroups)},
+      modalBody: icModalTableHtml(inaccurateGroups),
+      exportRows: icModalExportRows(inaccurateGroups), exportFilename: 'inaccurate-locations'},
     {label:'Oldest Open Count', value: oldestOpen ? formatDuration(oldestOpen.ageMin) : '\u2014', sub: oldestOpen ? (oldestOpen.product+' @ '+oldestOpen.bin) : 'nothing open', accent: oldestOpen && oldestOpen.ageMin>4320 ? 'var(--bad)' : 'var(--warn)',
-      modalTitle:'Open Counts \u2014 Oldest First', modalBody: icModalTableHtml(oldestOpenFirst)}
+      modalTitle:'Open Counts \u2014 Oldest First', modalBody: icModalTableHtml(oldestOpenFirst),
+      exportRows: icModalExportRows(oldestOpenFirst), exportFilename: 'open-counts-oldest-first'}
   ];
 
   grid.innerHTML = cards.map((c,i)=>`
@@ -4207,7 +4413,7 @@ function icRenderKPIs(groups, openGroups, rangeRecords){
 
   grid.querySelectorAll('[data-card-idx]').forEach(el=>{
     const c = cards[Number(el.dataset.cardIdx)];
-    el.addEventListener('click', ()=> openKpiModal(c.modalTitle, c.modalBody));
+    el.addEventListener('click', ()=> openKpiModal(c.modalTitle, c.modalBody, c.exportRows, c.exportFilename));
   });
 
   document.getElementById('icNote').textContent = '';

@@ -3564,11 +3564,17 @@ function ibRenderReceivedHourlyChart(groups){
   });
 }
 
+// Bucketed by receivedAt (not putawayAt) to match how `groups` was already
+// range-filtered upstream (see ibFilterByRange) — an HU received yesterday
+// but not putaway until today would otherwise land in a different day's
+// bucket here than the "Dock to Stock" KPI cards used for the same range,
+// and since slower (often-breached) HUs are the ones most likely to spill
+// into a later putaway day, that silently inflated this chart's numbers.
 function ibRenderDockToStockChart(groups){
   const byPeriod = {};
   groups.forEach(g=>{
-    if(g.status!=='Putaway Complete' || !g.putawayAt || g.dockToStockMin===null || g.dockToStockMin<0) return;
-    const k = ibPeriodKey(g.putawayAt);
+    if(g.status!=='Putaway Complete' || !g.receivedAt || g.dockToStockMin===null || g.dockToStockMin<0) return;
+    const k = ibPeriodKey(g.receivedAt);
     if(!byPeriod[k]) byPeriod[k] = [];
     byPeriod[k].push(g.dockToStockMin);
   });
@@ -3587,12 +3593,16 @@ function ibRenderDockToStockChart(groups){
   });
 }
 
+// Bucketed by receivedAt for the same reason as ibRenderDockToStockChart
+// above — keeps this chart's per-day population identical to the "Dock to
+// Stock SLA" KPI card's for the same range, instead of silently re-slicing
+// by putawayAt underneath it.
 function ibRenderSlaChart(groups){
   const byPeriod = {};
   groups.forEach(g=>{
     if(g.slaStatus!=='Met' && g.slaStatus!=='Breached') return;
-    if(!g.putawayAt) return;
-    const k = ibPeriodKey(g.putawayAt);
+    if(!g.receivedAt) return;
+    const k = ibPeriodKey(g.receivedAt);
     if(!byPeriod[k]) byPeriod[k] = {met:0, total:0};
     byPeriod[k].total++;
     if(g.slaStatus==='Met') byPeriod[k].met++;
@@ -4259,6 +4269,11 @@ function icFilterByRange(groups){
    miss that triggered the recount is superseded, not averaged in.
    Unsuccessful is only registered when the terminal record is COUN with
    a non-zero difference and no ACTI is pending against the same location.
+   A RECO record with no book/counted qty of its own — the normal case,
+   since it's just a flag pointing at a separate recount document — is
+   treated as still-pending (same as ACTI) if it's newer than the last
+   COUN on file, rather than letting that earlier, now-superseded count
+   stand in as the resolved outcome until the recount actually comes in.
 --------------------------------------------------------------------- */
 function icGroupByLocation(records){
   const map = new Map();
@@ -4281,8 +4296,19 @@ function icGroupByLocation(records){
     const sortedAll = [...recs].filter(r=>isValidDate(r.countAt)).sort((a,b)=>a.countAt-b.countAt);
     const earliest = sortedAll[0] || recs[0];
 
+    // A RECO row is just a "please recount this" flag, cross-referenced to
+    // its own recount document elsewhere — it carries no real book/counted
+    // quantities of its own. If one like that is the newest thing on file
+    // for this location (no COUN has come in yet to fulfill it), the
+    // recount is still pending: this location is active/waiting, same as
+    // an ACTI row, not resolved off of whatever an earlier, now-superseded
+    // count happened to show.
+    const pendingRecos = recs.filter(r=>r.status==='RECO' && isValidDate(r.countAt) && (r.bookQty||0)===0 && (r.countedQty||0)===0);
+    const latestPendingReco = pendingRecos.length ? pendingRecos.reduce((a,b)=>a.countAt>b.countAt?a:b) : null;
+    const recountPending = !!latestPendingReco && (!terminal || latestPendingReco.countAt > terminal.countAt);
+
     let status;
-    if(hasActi) status = 'Open';
+    if(hasActi || recountPending) status = 'Open';
     else if(terminal) status = terminal.diffQty===0 ? 'Accurate' : 'Inaccurate';
     else status = 'Open'; // only RECO on file, no terminal yet (recount not in this export window)
 
@@ -4297,7 +4323,7 @@ function icGroupByLocation(records){
       bookQty: rep.bookQty, countedQty: rep.countedQty, diffQty: rep.diffQty,
       originalDiffQty: originalDiff,
       counter: (terminal && terminal.counter) || null,
-      countAt: status==='Open' ? earliest.countAt : (terminal ? terminal.countAt : earliest.countAt),
+      countAt: status==='Open' ? (recountPending && !hasActi ? latestPendingReco.countAt : earliest.countAt) : (terminal ? terminal.countAt : earliest.countAt),
       status, hadRecount,
       recountOutcome: hadRecount && status!=='Open' ? (status==='Accurate' ? 'Corrected' : 'Confirmed') : null,
       recordCount: recs.length,

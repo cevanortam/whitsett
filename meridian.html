@@ -1203,6 +1203,12 @@
         <div id="clPreviewLabel"></div>
       </div>
     </div>
+
+    <div class="card" id="clBatchZone" style="display:none;">
+      <h3 style="margin:0 0 4px 0;font-family:var(--disp);font-size:14px;text-transform:uppercase;letter-spacing:0.5px;">Case label quantities</h3>
+      <p class="hint" id="clBatchHint">Editable per case before printing.</p>
+      <div class="sheet-wrap"><div id="clBatchTableWrap"></div></div>
+    </div>
   </div>
 </div>
 
@@ -3527,10 +3533,10 @@ function savePrintLog(){
   try{ localStorage.setItem(CL_PRINTLOG_KEY, serialized); }catch(e){}
   if(window.MeridianSync) window.MeridianSync.save(CL_PRINTLOG_KEY, serialized);
 }
-function recordPrintEvent(part, unitsPerCase, caseCount){
+function recordPrintEvent(part, totalUnits, caseCount){
   const now = new Date();
   const dateKey = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
-  printLog.push({ date: dateKey, ts: now.toISOString(), part: part, unitsPerCase: unitsPerCase, labels: caseCount });
+  printLog.push({ date: dateKey, ts: now.toISOString(), part: part, totalUnits: totalUnits, labels: caseCount });
   if(printLog.length > 20000) printLog = printLog.slice(-20000);
   savePrintLog();
 }
@@ -3545,7 +3551,10 @@ function exportPrintLog(){
     if(!byDate[d]) byDate[d] = { labels: 0, jobs: 0, units: 0 };
     byDate[d].labels += entry.labels || 0;
     byDate[d].jobs += 1;
-    byDate[d].units += (entry.unitsPerCase || 0) * (entry.labels || 0);
+    // Prefer the actual per-label total (quantities may have been edited
+    // per case); fall back to the old unitsPerCase*labels shape for any
+    // print-log entries recorded before per-case editing existed.
+    byDate[d].units += (entry.totalUnits != null) ? entry.totalUnits : (entry.unitsPerCase || 0) * (entry.labels || 0);
   });
   const dates = Object.keys(byDate).sort();
   const rows = [['Date','Labels Printed','Print Jobs','Total Units']];
@@ -3584,7 +3593,11 @@ const exportBtn = document.getElementById('clExportBtn');
 const previewLabel = document.getElementById('clPreviewLabel');
 const statusPill = document.getElementById('clStatusPill');
 const printRoot = document.getElementById('caseLabelPrintRoot');
+const batchZone = document.getElementById('clBatchZone');
+const batchHint = document.getElementById('clBatchHint');
+const batchTableWrap = document.getElementById('clBatchTableWrap');
 let printLog = loadPrintLog();
+let lastBuiltCaseCount = null; // tracks the case count the qty table was last built for, so unrelated field edits (e.g. part number) don't wipe operator edits to per-label quantities
 
 /* ---- learned case quantities (median of what's been scanned per part) ---- */
 let unitsHistory = {};
@@ -3702,6 +3715,51 @@ function buildLabelHTML(part, unitsPerCase, caseIndex, totalCases, mspn, isPrevi
     </div>`;
 }
 
+/* ---- editable per-case quantity table (mirrors the Putaway "Batch labels" table) ----
+   Rebuilt only when the case count itself changes, so edits to individual
+   quantities survive unrelated field changes (e.g. re-typing the part number). */
+function getTableQuantities(){
+  return Array.from(batchTableWrap.querySelectorAll('.cl-case-qty')).map(el=>{
+    const n = parseInt(el.value, 10);
+    return isNaN(n) || n < 0 ? 0 : n;
+  });
+}
+function tableTotalUnits(){
+  return getTableQuantities().reduce((a,b)=>a+b, 0);
+}
+function refreshBatchTable(){
+  const { units, cases } = currentValues();
+  const validUnits = !isNaN(units) && units > 0;
+  const validCases = !isNaN(cases) && cases > 0 && cases <= MAX_CASES;
+
+  if(!validUnits || !validCases){
+    batchZone.style.display = 'none';
+    batchTableWrap.innerHTML = '';
+    lastBuiltCaseCount = null;
+    return;
+  }
+
+  batchZone.style.display = 'block';
+  if(cases === lastBuiltCaseCount){
+    batchHint.textContent = `${cases} label${cases===1?'':'s'} \u2014 editable per case before printing.`;
+    return;
+  }
+
+  let rows = '<table><thead><tr><th>#</th><th>Qty</th></tr></thead><tbody>';
+  for(let i=1;i<=cases;i++){
+    rows += `<tr><td>${i}</td><td><input type="number" class="cl-case-qty" min="0" value="${esc(units)}"></td></tr>`;
+  }
+  rows += '</tbody></table>';
+  batchTableWrap.innerHTML = `<div class="batch-table-wrap">${rows}</div>`;
+  batchHint.textContent = `${cases} label${cases===1?'':'s'} \u2014 editable per case before printing.`;
+  lastBuiltCaseCount = cases;
+}
+batchTableWrap.addEventListener('input', function(e){
+  if(e.target.classList && e.target.classList.contains('cl-case-qty')){
+    statUnits.textContent = tableTotalUnits();
+  }
+});
+
 function refresh(){
   const { part, mspn, partError, units, cases } = currentValues();
   updatePartHint();
@@ -3709,8 +3767,10 @@ function refresh(){
   const validCases = !isNaN(cases) && cases > 0 && cases <= MAX_CASES;
   const validPart = part.length > 0 && !partError;
 
+  refreshBatchTable();
+
   const labelCount = validCases ? cases : 0;
-  const totalUnits = (validUnits && validCases) ? units * cases : 0;
+  const totalUnits = (validUnits && validCases) ? (lastBuiltCaseCount === cases ? tableTotalUnits() : units * cases) : 0;
   statCases.textContent = labelCount;
   statUnits.textContent = totalUnits;
 
@@ -3726,11 +3786,19 @@ function printCaseLabels(){
   if(!part || partError || isNaN(units) || units <= 0 || isNaN(cases) || cases <= 0) return;
   const n = Math.min(cases, MAX_CASES);
 
+  // Use the operator-edited per-case quantities from the table when it's
+  // built for this exact case count; otherwise fall back to the flat
+  // units-per-case value for every label.
+  const qtyList = (lastBuiltCaseCount === n) ? getTableQuantities() : [];
   const html = [];
-  for(let i=1;i<=n;i++){ html.push(buildLabelHTML(part, units, i, n, mspn)); }
+  for(let i=1;i<=n;i++){
+    const rowUnits = (qtyList.length === n) ? qtyList[i-1] : units;
+    html.push(buildLabelHTML(part, rowUnits, i, n, mspn));
+  }
   printRoot.innerHTML = html.join('');
 
-  pendingPrint = { part, units, n };
+  const totalUnits = (qtyList.length === n) ? qtyList.reduce((a,b)=>a+b, 0) : units * n;
+  pendingPrint = { part, units, n, totalUnits };
 
   // The 4x6 label modules (Putaway / Pick Ticket) each define their own
   // @page rule; since @page is a single global cascade, we can't just add
@@ -3761,7 +3829,7 @@ document.getElementById('clPrintConfirmYes').addEventListener('click', function(
   if(!pendingPrint) return;
   recordUnitsForPart(pendingPrint.part, pendingPrint.units);
   updateUnitsSuggestion();
-  recordPrintEvent(pendingPrint.part, pendingPrint.units, pendingPrint.n);
+  recordPrintEvent(pendingPrint.part, pendingPrint.totalUnits, pendingPrint.n);
   if(statusPill){
     statusPill.textContent = `Printed ${pendingPrint.n} label${pendingPrint.n===1?'':'s'}`;
     statusPill.classList.add('ok');

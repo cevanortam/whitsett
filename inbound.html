@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Whitsett Inbound Loads</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#0a1424;
+    --bg-panel:#101d33;
+    --bg-panel-alt:#15263f;
+    --bg-elevated:#1a2c48;
+    --border:#22375a;
+    --border-soft:#1a2c48;
+    --text:#e9eff7;
+    --text-dim:#8ea0bf;
+    --text-faint:#5f7292;
+    --accent:#ff7a1f;
+    --accent-dim:#c95a12;
+    --accent-glow:rgba(255,122,31,0.18);
+    --green:#34d399;
+    --green-dim:rgba(52,211,153,0.14);
+    --amber:#fbbf24;
+    --amber-dim:rgba(251,191,36,0.14);
+    --red:#f87171;
+    --red-dim:rgba(248,113,113,0.14);
+    --radius:10px;
+    --radius-sm:6px;
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 600px at 10% -10%, rgba(255,122,31,0.06), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, rgba(52,120,211,0.06), transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+    min-height:100vh;
+  }
+  ::selection{background:var(--accent-glow);}
+
+  header{
+    display:flex;align-items:center;justify-content:space-between;gap:20px;
+    padding:16px 26px;border-bottom:1px solid var(--border-soft);
+    background:rgba(16,29,51,0.55);backdrop-filter:blur(6px);
+    position:sticky;top:0;z-index:40;flex-wrap:wrap;
+  }
+  .brand{display:flex;align-items:center;gap:14px;}
+  .brand-mark{
+    font-weight:800;font-size:19px;letter-spacing:0.5px;color:#fff;
+    background:linear-gradient(135deg, var(--accent), var(--accent-dim));
+    padding:6px 11px;border-radius:8px;line-height:1;
+  }
+  .ceva-logo{height:32px;width:auto;display:block;}
+  .brand-text h1{margin:0;font-size:17px;font-weight:700;}
+  .brand-text p{margin:2px 0 0;font-size:12px;color:var(--text-dim);}
+  .header-right{display:flex;align-items:center;gap:14px;}
+  .clock{font-size:12.5px;color:var(--text-dim);text-align:right;}
+  .clock .time{font-size:15px;color:var(--text);font-variant-numeric:tabular-nums;font-weight:600;}
+
+  main{max-width:1280px;margin:0 auto;padding:24px 26px 60px;}
+
+  .btn{
+    display:inline-flex;align-items:center;gap:6px;background:var(--bg-elevated);color:var(--text);
+    border:1px solid var(--border);padding:8px 14px;border-radius:var(--radius-sm);font-size:13px;
+    font-weight:600;cursor:pointer;transition:background .15s, border-color .15s;
+  }
+  .btn:hover{background:#213862;border-color:#2c4470;}
+  .btn-primary{background:var(--accent);border-color:var(--accent);color:#191008;}
+  .btn-primary:hover{background:#ff8b3d;}
+  .btn-danger{background:transparent;border-color:var(--red);color:var(--red);}
+  .btn-danger:hover{background:var(--red-dim);}
+  .btn-sm{padding:5px 10px;font-size:12px;}
+  .icon-btn{
+    width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;
+    border-radius:6px;border:1px solid var(--border);background:var(--bg-elevated);cursor:pointer;color:var(--text-dim);
+  }
+  .icon-btn:hover{color:var(--text);border-color:#2c4470;}
+
+  /* Modal */
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(4,8,16,0.65);backdrop-filter:blur(2px);
+    display:none;align-items:center;justify-content:center;z-index:100;padding:20px;
+  }
+  .modal-overlay.open{display:flex;}
+  .modal{
+    background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius);
+    width:100%;max-width:400px;padding:22px;
+  }
+  .modal h3{margin:0 0 16px;font-size:16px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12px;color:var(--text-dim);margin-bottom:5px;font-weight:600;}
+  .field input{
+    width:100%;background:var(--bg-elevated);border:1px solid var(--border);color:var(--text);
+    padding:9px 11px;border-radius:var(--radius-sm);font-size:14px;
+  }
+  .field input:focus{outline:none;border-color:var(--accent);}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;}
+  .modal-error{color:var(--red);font-size:12.5px;margin-top:-6px;margin-bottom:12px;display:none;}
+
+  section{margin-bottom:30px;}
+  .section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;}
+  .section-head h2{margin:0;font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--text-dim);}
+  .count-pill{font-size:12px;color:var(--accent);background:var(--accent-glow);padding:2px 9px;border-radius:20px;margin-left:8px;font-weight:700;}
+
+  /* Open load cards */
+  .open-grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(240px,1fr));gap:14px;}
+  .load-card{
+    background:var(--bg-panel);border:1px solid var(--border-soft);border-radius:var(--radius);
+    padding:16px;border-left:4px solid var(--green);
+  }
+  .load-card.at-risk{border-left-color:var(--amber);}
+  .load-card.breached{border-left-color:var(--red);}
+  .load-card .top-row{display:flex;justify-content:space-between;align-items:flex-start;}
+  .load-card .load-id{font-size:17px;font-weight:800;}
+  .load-card .badge{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;padding:3px 8px;border-radius:20px;white-space:nowrap;}
+  .badge.on_time{background:var(--green-dim);color:var(--green);}
+  .badge.at_risk{background:var(--amber-dim);color:var(--amber);}
+  .badge.breached{background:var(--red-dim);color:var(--red);}
+  .load-card .meta{display:flex;gap:16px;margin-top:12px;}
+  .load-card .meta div{font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.4px;}
+  .load-card .meta strong{display:block;font-size:15px;color:var(--text);font-weight:700;margin-top:2px;}
+  .load-card .elapsed-row{
+    margin-top:14px;display:flex;align-items:center;justify-content:space-between;
+    padding-top:12px;border-top:1px dashed var(--border);
+  }
+  .load-card .elapsed{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;}
+  .load-card .elapsed.at-risk{color:var(--amber);}
+  .load-card .elapsed.breached{color:var(--red);}
+  .load-card .actions{display:flex;gap:8px;margin-top:14px;}
+  .load-card .actions .btn{flex:1;justify-content:center;}
+  .empty-state{grid-column:1/-1;padding:34px 20px;text-align:center;color:var(--text-faint);border:1px dashed var(--border);border-radius:var(--radius);font-size:13.5px;}
+
+  /* Archive */
+  .archive-toggle{cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px;}
+  .archive-toggle .chev{transition:transform .15s;font-size:11px;color:var(--text-dim);}
+  .archive-toggle.open .chev{transform:rotate(90deg);}
+  .archive-body{display:none;}
+  .archive-body.open{display:block;}
+  .filter-bar{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;}
+  .filter-bar input[type=text]{
+    background:var(--bg-elevated);border:1px solid var(--border);color:var(--text);
+    padding:7px 10px;border-radius:var(--radius-sm);font-size:12.5px;width:220px;
+  }
+  .table-wrap{background:var(--bg-panel);border:1px solid var(--border-soft);border-radius:var(--radius);overflow:hidden;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  thead th{
+    text-align:left;padding:10px 14px;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;
+    color:var(--text-dim);border-bottom:1px solid var(--border-soft);background:var(--bg-panel-alt);white-space:nowrap;
+  }
+  tbody td{padding:10px 14px;border-bottom:1px solid var(--border-soft);color:var(--text);}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:hover{background:rgba(255,255,255,0.02);}
+  .sla-pill{font-size:11px;font-weight:800;padding:2px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:0.4px;}
+  .sla-pill.met{background:var(--green-dim);color:var(--green);}
+  .sla-pill.breach{background:var(--red-dim);color:var(--red);}
+
+  footer{max-width:1280px;margin:0 auto;padding:0 26px 40px;}
+  footer p{font-size:11.5px;color:var(--text-faint);margin:0;}
+
+  .toast{
+    position:fixed;bottom:22px;right:22px;background:var(--bg-elevated);border:1px solid var(--border);
+    padding:12px 16px;border-radius:var(--radius-sm);font-size:13px;z-index:200;opacity:0;
+    transform:translateY(10px);transition:opacity .2s, transform .2s;box-shadow:0 8px 24px rgba(0,0,0,0.4);
+  }
+  .toast.show{opacity:1;transform:translateY(0);}
+  .toast.err{border-color:var(--red);color:var(--red);}
+  .toast.ok{border-color:var(--green);color:var(--green);}
+
+  @media (max-width:640px){
+    main{padding:16px 14px 50px;}
+    header{padding:12px 16px;}
+    .add-field input{width:130px;}
+  }
+
+  /* ---------------- TV MODE ---------------- */
+  body.tv-mode header, body.tv-mode .add-bar, body.tv-mode section.archive-section, body.tv-mode footer{
+    display:none !important;
+  }
+  body.tv-mode{overflow:hidden;}
+  body.tv-mode main{max-width:none;padding:0;}
+  .tv-header{
+    display:none;align-items:center;justify-content:space-between;
+    padding:22px 40px;border-bottom:1px solid var(--border-soft);
+  }
+  body.tv-mode .tv-header{display:flex;}
+  .tv-header .tv-left{display:flex;align-items:center;gap:20px;}
+  .tv-header .ceva-logo{height:46px;}
+  .tv-header h1{margin:0;font-size:28px;font-weight:800;letter-spacing:0.3px;}
+  .tv-header .tv-sub{color:var(--text-dim);font-size:15px;margin-top:4px;}
+  .tv-header .tv-clock{font-size:30px;font-weight:800;font-variant-numeric:tabular-nums;}
+  .tv-exit{position:fixed;top:14px;right:14px;z-index:300;opacity:0.25;}
+  .tv-exit:hover{opacity:1;}
+  body:not(.tv-mode) .tv-exit{display:none;}
+  body.tv-mode section:not(.archive-section) .section-head{display:none;}
+
+  body.tv-mode .open-grid{
+    grid-template-columns:repeat(auto-fill, minmax(320px,1fr));
+    gap:22px;padding:32px 40px;
+  }
+  body.tv-mode .load-card{padding:24px 26px;border-left-width:8px;}
+  body.tv-mode .load-card .load-id{font-size:28px;}
+  body.tv-mode .load-card .badge{font-size:13px;padding:4px 12px;}
+  body.tv-mode .load-card .meta strong{font-size:22px;}
+  body.tv-mode .load-card .meta div{font-size:13px;}
+  body.tv-mode .load-card .elapsed{font-size:34px;}
+  body.tv-mode .load-card .actions{display:none;}
+  body.tv-mode .load-card .icon-btn{display:none;}
+  body.tv-mode .empty-state{font-size:20px;padding:80px 20px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <img class="ceva-logo" src="https://www.cevalogistics.com/_ipx/w_1920&f_webp/images-spx/x_large_picture/CEVA_WhiteRed.png" alt="CEVA" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'brand-mark',textContent:'CEVA'}))">
+    <div class="brand-text">
+      <h1>Whitsett Inbound Loads</h1>
+      <p>Track loads in vs the 5-hour SLA</p>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="clock"><div>Today</div><div class="time" id="clockTime">--:--:--</div></div>
+    <button class="btn" id="btnTv">TV Mode</button>
+  </div>
+</header>
+
+<!-- Shown only in TV mode -->
+<div class="tv-header">
+  <div class="tv-left">
+    <img class="ceva-logo" src="https://www.cevalogistics.com/_ipx/w_1920&f_webp/images-spx/x_large_picture/CEVA_WhiteRed.png" alt="CEVA" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'brand-mark',textContent:'CEVA'}))">
+    <div>
+      <h1>Whitsett Inbound — Open Loads</h1>
+      <div class="tv-sub" id="tvOpenCount">0 loads in progress</div>
+    </div>
+  </div>
+  <div class="tv-clock" id="tvClock">--:--:--</div>
+</div>
+<button class="btn tv-exit" id="btnTvExit">Exit TV Mode</button>
+
+<main>
+
+  <section>
+    <div class="section-head">
+      <h2>Open Loads <span class="count-pill" id="openCountPill">0</span></h2>
+      <button class="btn btn-primary" id="btnNewLoad">+ New Load</button>
+    </div>
+    <div class="open-grid" id="openGrid"></div>
+  </section>
+
+  <section class="archive-section">
+    <div class="section-head">
+      <h2 class="archive-toggle" id="archiveToggle"><span class="chev">▶</span> Archive <span class="count-pill" id="archiveCountPill">0</span></h2>
+      <div class="filter-bar" style="margin:0;">
+        <input type="text" id="searchBox" placeholder="Search Load ID / Dock Door">
+        <button class="btn btn-sm" id="btnExport">Export to Excel</button>
+        <button class="btn btn-sm btn-danger" id="btnClearArchive">Clear Archive</button>
+      </div>
+    </div>
+    <div class="archive-body" id="archiveBody">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Load ID</th><th>Dock Door</th><th>Pallets</th><th>Start Time</th><th>Closed Out</th><th>Duration</th><th>SLA</th><th></th></tr>
+          </thead>
+          <tbody id="archiveTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer><p>Loads are added as they arrive and closed out when unloading is complete. Closed loads move to the Archive below.</p></footer>
+
+<div class="modal-overlay" id="loadModalOverlay">
+  <div class="modal">
+    <h3>New Inbound Load</h3>
+    <div class="field"><label>Load ID</label><input type="text" id="fLoadId" placeholder="e.g. 4471829"></div>
+    <div class="field"><label>Dock Door</label><input type="text" id="fDockDoor" placeholder="e.g. 12"></div>
+    <div class="field"><label>Number of Pallets</label><input type="number" id="fPallets" min="0" placeholder="e.g. 26"></div>
+    <div class="field"><label>Start Time</label><input type="datetime-local" id="fStartTime"></div>
+    <div class="modal-error" id="loadModalError"></div>
+    <div class="modal-actions">
+      <button class="btn" id="btnCancelLoad">Cancel</button>
+      <button class="btn btn-primary" id="btnAdd">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------------- Firebase ---------------- */
+const firebaseConfig = {
+  apiKey: "AIzaSyCiCNiM1QBgwx-w0RD_hZE_26ZrUuajd88",
+  authDomain: "lenovo-general.firebaseapp.com",
+  databaseURL: "https://lenovo-general-default-rtdb.firebaseio.com/",
+  projectId: "lenovo-general",
+  storageBucket: "lenovo-general.firebasestorage.app",
+  messagingSenderId: "589281353608",
+  appId: "1:589281353608:web:7f60f65acc7ea47e49a43d"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const loadsRef = db.ref('inboundLoads');
+
+const SLA_MS = 5 * 60 * 60 * 1000;
+const AT_RISK_MS = 4 * 60 * 60 * 1000;
+
+let allLoads = [];
+let searchTerm = '';
+let archiveOpen = false;
+
+function toast(msg, kind){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (kind ? ' ' + kind : '');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(()=> t.className = 'toast', 2200);
+}
+
+function fmtDateTime(iso){
+  if(!iso) return '—';
+  return new Date(iso).toLocaleString('en-US', {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
+}
+function fmtDuration(ms){
+  if(ms == null || isNaN(ms)) return '—';
+  const neg = ms < 0; ms = Math.abs(ms);
+  const h = Math.floor(ms/3600000), m = Math.floor((ms%3600000)/60000);
+  return (neg?'-':'') + (h>0 ? h+'h ':'') + m + 'm';
+}
+function escapeHtml(str){
+  if(str == null) return '';
+  return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function toLocalInputValue(d){
+  const pad = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function computeActiveStatus(load){
+  const elapsed = Date.now() - new Date(load.startTime).getTime();
+  let status = 'on_time';
+  if(elapsed > SLA_MS) status = 'breached';
+  else if(elapsed > AT_RISK_MS) status = 'at_risk';
+  return {elapsed, status};
+}
+function completedSla(load){
+  const dur = new Date(load.completedTime).getTime() - new Date(load.startTime).getTime();
+  return {duration: dur, met: dur <= SLA_MS};
+}
+
+/* ---------------- Firebase listener ---------------- */
+loadsRef.on('value', snap => {
+  const val = snap.val() || {};
+  allLoads = Object.entries(val).map(([id, v]) => ({id, ...v}));
+  renderAll();
+});
+
+/* ---------------- Render: Open loads ---------------- */
+function renderOpen(){
+  const grid = document.getElementById('openGrid');
+  let open = allLoads.filter(l => l.status === 'in_progress').map(l => {
+    const {elapsed, status} = computeActiveStatus(l);
+    return {...l, elapsed, activeStatus: status};
+  });
+  open.sort((a,b) => (SLA_MS - a.elapsed) - (SLA_MS - b.elapsed));
+
+  document.getElementById('openCountPill').textContent = open.length;
+  document.getElementById('tvOpenCount').textContent = open.length + (open.length === 1 ? ' load in progress' : ' loads in progress');
+
+  if(!open.length){
+    grid.innerHTML = '<div class="empty-state">No open loads right now.</div>';
+    return;
+  }
+
+  grid.innerHTML = open.map(l => {
+    const badgeText = l.activeStatus === 'breached' ? 'Breached' : (l.activeStatus==='at_risk' ? 'At Risk' : 'On Time');
+    const elapsedClass = l.activeStatus === 'breached' ? 'breached' : (l.activeStatus==='at_risk' ? 'at-risk' : '');
+    return `
+    <div class="load-card ${l.activeStatus.replace('_','-')}">
+      <div class="top-row">
+        <div class="load-id">${escapeHtml(l.loadId)}</div>
+        <div class="badge ${l.activeStatus}">${badgeText}</div>
+      </div>
+      <div class="meta">
+        <div>Dock Door<strong>${escapeHtml(l.dockDoor || '—')}</strong></div>
+        <div>Pallets<strong>${l.pallets != null ? l.pallets : '—'}</strong></div>
+      </div>
+      <div class="elapsed-row">
+        <div class="elapsed ${elapsedClass}">${fmtDuration(l.elapsed)}</div>
+        <button class="icon-btn" title="Remove" onclick="requestDelete('${l.id}')">🗑</button>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" onclick="completeLoad('${l.id}')">Close Out</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ---------------- Render: Archive ---------------- */
+function getFilteredArchive(){
+  let rows = allLoads.filter(l => l.status === 'completed').map(l => {
+    const sla = completedSla(l);
+    return {...l, durationMs: sla.duration, slaStatus: sla.met ? 'met' : 'breach'};
+  });
+  if(searchTerm){
+    const s = searchTerm.toLowerCase();
+    rows = rows.filter(l => (String(l.loadId)||'').toLowerCase().includes(s) || (String(l.dockDoor)||'').toLowerCase().includes(s));
+  }
+  rows.sort((a,b) => new Date(b.completedTime) - new Date(a.completedTime));
+  return rows;
+}
+
+function renderArchive(){
+  const rows = getFilteredArchive();
+  document.getElementById('archiveCountPill').textContent = allLoads.filter(l => l.status === 'completed').length;
+  const body = document.getElementById('archiveTableBody');
+  if(!rows.length){
+    body.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-faint);padding:24px;">No closed-out loads yet.</td></tr>';
+    return;
+  }
+  body.innerHTML = rows.map(l => `
+    <tr>
+      <td>${escapeHtml(l.loadId)}</td>
+      <td>${escapeHtml(l.dockDoor || '—')}</td>
+      <td>${l.pallets != null ? l.pallets : '—'}</td>
+      <td>${fmtDateTime(l.startTime)}</td>
+      <td>${fmtDateTime(l.completedTime)}</td>
+      <td>${fmtDuration(l.durationMs)}</td>
+      <td><span class="sla-pill ${l.slaStatus==='met'?'met':'breach'}">${l.slaStatus==='met'?'Met':'Breached'}</span></td>
+      <td><button class="icon-btn" title="Remove" onclick="requestDelete('${l.id}')">🗑</button></td>
+    </tr>
+  `).join('');
+}
+
+function renderAll(){ renderOpen(); renderArchive(); }
+setInterval(renderOpen, 15000);
+
+/* Clock */
+function tickClock(){
+  const s = new Date().toLocaleTimeString('en-US');
+  document.getElementById('clockTime').textContent = s;
+  document.getElementById('tvClock').textContent = s;
+}
+setInterval(tickClock, 1000); tickClock();
+
+/* ---------------- New Load modal ---------------- */
+const loadModalOverlay = document.getElementById('loadModalOverlay');
+
+document.getElementById('btnNewLoad').addEventListener('click', openLoadModal);
+document.getElementById('btnCancelLoad').addEventListener('click', () => loadModalOverlay.classList.remove('open'));
+loadModalOverlay.addEventListener('click', e => { if(e.target === loadModalOverlay) loadModalOverlay.classList.remove('open'); });
+
+function openLoadModal(){
+  document.getElementById('fLoadId').value = '';
+  document.getElementById('fDockDoor').value = '';
+  document.getElementById('fPallets').value = '';
+  document.getElementById('fStartTime').value = toLocalInputValue(new Date());
+  document.getElementById('loadModalError').style.display = 'none';
+  loadModalOverlay.classList.add('open');
+  setTimeout(() => document.getElementById('fLoadId').focus(), 50);
+}
+
+document.getElementById('btnAdd').addEventListener('click', addLoad);
+[document.getElementById('fLoadId'), document.getElementById('fDockDoor'), document.getElementById('fPallets')].forEach(el => {
+  el.addEventListener('keydown', e => { if(e.key === 'Enter') addLoad(); });
+});
+
+function addLoad(){
+  const loadId = document.getElementById('fLoadId').value.trim();
+  const dockDoor = document.getElementById('fDockDoor').value.trim();
+  const pallets = document.getElementById('fPallets').value;
+  const startTimeVal = document.getElementById('fStartTime').value;
+  const errEl = document.getElementById('loadModalError');
+
+  if(!loadId){ errEl.textContent = 'Load ID is required.'; errEl.style.display = 'block'; return; }
+  const startTimeIso = startTimeVal ? new Date(startTimeVal).toISOString() : new Date().toISOString();
+
+  loadsRef.push({
+    loadId, dockDoor, pallets: pallets === '' ? null : Number(pallets),
+    startTime: startTimeIso, status: 'in_progress', completedTime: null,
+    createdAt: new Date().toISOString()
+  }).then(() => {
+    toast('Load added', 'ok');
+    loadModalOverlay.classList.remove('open');
+  }).catch(e => { errEl.textContent = e.message; errEl.style.display = 'block'; });
+}
+
+/* ---------------- Complete / delete ---------------- */
+function completeLoad(id){
+  loadsRef.child(id).update({status:'completed', completedTime: new Date().toISOString()})
+    .then(() => toast('Load closed out', 'ok'))
+    .catch(e => toast(e.message, 'err'));
+}
+
+function requestDelete(id){
+  if(!confirm('Remove this load? This cannot be undone.')) return;
+  loadsRef.child(id).remove()
+    .then(() => toast('Load removed', 'ok'))
+    .catch(e => toast(e.message, 'err'));
+}
+
+document.getElementById('btnClearArchive').addEventListener('click', () => {
+  const closed = allLoads.filter(l => l.status === 'completed');
+  if(!closed.length){ toast('Archive is already empty'); return; }
+  if(!confirm(`Clear all ${closed.length} archived loads? This cannot be undone.`)) return;
+  const updates = {};
+  closed.forEach(l => updates[l.id] = null);
+  loadsRef.update(updates)
+    .then(() => toast('Archive cleared', 'ok'))
+    .catch(e => toast(e.message, 'err'));
+});
+
+/* ---------------- Archive toggle / search / export ---------------- */
+document.getElementById('archiveToggle').addEventListener('click', () => {
+  archiveOpen = !archiveOpen;
+  document.getElementById('archiveToggle').classList.toggle('open', archiveOpen);
+  document.getElementById('archiveBody').classList.toggle('open', archiveOpen);
+});
+
+document.getElementById('searchBox').addEventListener('input', e => {
+  searchTerm = e.target.value;
+  renderArchive();
+});
+
+document.getElementById('btnExport').addEventListener('click', () => {
+  const rows = getFilteredArchive();
+  if(!rows.length){ toast('No archived loads to export'); return; }
+  const data = rows.map(l => ({
+    'Load ID': l.loadId, 'Dock Door': l.dockDoor, 'Pallets': l.pallets,
+    'Start Time': fmtDateTime(l.startTime), 'Closed Out': fmtDateTime(l.completedTime),
+    'Duration': fmtDuration(l.durationMs), 'SLA Status': l.slaStatus === 'met' ? 'Met' : 'Breached'
+  }));
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Inbound Archive');
+  XLSX.writeFile(wb, `Whitsett_Inbound_Archive_${new Date().toISOString().slice(0,10)}.xlsx`);
+});
+
+/* ---------------- TV Mode ---------------- */
+document.getElementById('btnTv').addEventListener('click', () => {
+  document.body.classList.add('tv-mode');
+  if(document.documentElement.requestFullscreen){
+    document.documentElement.requestFullscreen().catch(()=>{});
+  }
+});
+document.getElementById('btnTvExit').addEventListener('click', exitTv);
+document.addEventListener('keydown', e => { if(e.key === 'Escape' && document.body.classList.contains('tv-mode')) exitTv(); });
+function exitTv(){
+  document.body.classList.remove('tv-mode');
+  if(document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+}
+</script>
+</body>
+</html>

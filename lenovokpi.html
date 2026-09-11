@@ -796,6 +796,8 @@
       </div>
       <label class="btn" for="icFileInput">&#8593; Upload Cycle Count Results</label>
       <input type="file" id="icFileInput" accept=".xlsx,.xls">
+      <label class="btn secondary" for="icPricingFileInput">&#8593; Upload Pricing Sheet</label>
+      <input type="file" id="icPricingFileInput" accept=".xlsx,.xls">
     </div>
   </header>
 
@@ -805,6 +807,13 @@
     <a class="site-tab" data-tab="inventory" href="#inventory">Inventory</a>
     <a class="site-tab" data-tab="outbound" href="#outbound">Outbound</a>
   </nav>
+
+  <div class="segmented" id="icSubpageToggle" style="margin-bottom:18px;">
+    <button type="button" class="seg-btn active" data-icsubpage="counts">Cycle Counts</button>
+    <button type="button" class="seg-btn" data-icsubpage="value">Inventory Value ($)</button>
+  </div>
+
+  <div id="icSubpageCounts">
 
   <section class="kpi-grid" id="icKpiGrid"></section>
   <div id="icNote" style="font-size:12px;color:var(--text-faint);margin:-12px 0 24px;"></div>
@@ -854,7 +863,7 @@
       </div>
     </div>
     <div style="overflow-x:auto;">
-      <table>
+      <table id="icCycleCountTable">
         <thead>
           <tr>
             <th data-ickey="bin">Storage Bin</th>
@@ -877,6 +886,68 @@
     </div>
   </section>
 
+  </div>
+
+  <div id="icSubpageValue" style="display:none;">
+
+  <div class="status-line" style="margin:-6px 0 18px;">
+    <span id="icPricingSyncStatus"><span class="dot" id="icPricingSyncDot"></span><b id="icPricingSyncText">No pricing sheet uploaded</b></span>
+    <span><b id="icPricingCount">0</b> SKUs priced</span>
+    <span id="icPricingLastUploadLine" style="display:none;">Last upload: <b id="icPricingLastUploadTime">&mdash;</b></span>
+  </div>
+  <div id="icValueScopeNote" style="font-size:12px;color:var(--text-faint);margin:-12px 0 10px;">
+    Reflects the bin/product locations counted in this system for the selected period &mdash; a subset of the
+    warehouse, not a full physical inventory.
+  </div>
+  <div id="icValueNote" style="font-size:12px;color:var(--warn);margin:0 0 20px;"></div>
+
+  <section class="table-section" style="margin-bottom:20px;">
+    <div class="table-section-head">
+      <div>
+        <h2>Inventory Results (Net Performance)</h2>
+        <div class="meta">Uses the final, recount-corrected count per location &mdash; matches "Overall Unit Accuracy" on this tab</div>
+      </div>
+      <button type="button" class="btn secondary" id="icValueExportBtn">&#8595; Export to Excel</button>
+    </div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Period</th><th>Location</th><th>Qty Pieces WMS</th><th>Qty Pieces Physical</th>
+            <th>On Hand Inventory $ &ndash; WMS</th><th>On Hand Inventory $ Physical</th>
+            <th>Negative Variance</th><th>Positive Variance</th><th>Net Variance</th><th>Gross Variance</th>
+            <th>Net Accuracy</th><th>Gross Accuracy</th>
+          </tr>
+        </thead>
+        <tbody id="icValueNetTableBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="table-section">
+    <div class="table-section-head">
+      <div>
+        <h2>Inventory Results (Gross Performance)</h2>
+        <div class="meta">Uses the original, first-count result per location &mdash; a location later fixed by recount still counts as a miss here</div>
+      </div>
+    </div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Period</th><th>Location</th><th>Qty Pieces WMS</th><th>Qty Pieces Physical</th>
+            <th>On Hand Inventory $ &ndash; WMS</th><th>On Hand Inventory $ Physical</th>
+            <th>Negative Variance</th><th>Positive Variance</th><th>Net Variance</th><th>Gross Variance</th>
+            <th>Net Accuracy</th><th>Gross Accuracy</th>
+          </tr>
+        </thead>
+        <tbody id="icValueGrossTableBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  </div>
+
   <footer class="note">
     Each row is a bin/product location, resolved from every Physical Inventory Document on file for that Storage Bin +
     Product. If a recount was generated (status RECO) and its linked recount document (status COUN) matched book qty,
@@ -890,7 +961,14 @@
     Year and date-range controls above filter strictly to that window &mdash; both the table and every KPI/chart on
     this tab, including Open/Recount Pending locations dated outside the window. The Open Counts and Oldest Open
     Count cards are the one exception: they always reflect the live, all-time backlog regardless of the range
-    selected, since that backlog needs attention no matter when it was assigned.
+    selected, since that backlog needs attention no matter when it was assigned. The "Inventory Value ($)" sub-page
+    prices resolved locations against the uploaded pricing sheet (matched by SKU) and shows Net Performance (final,
+    recount-corrected counts) and Gross Performance (original first-count results, no recount credit) side by side,
+    same as a standalone SKU/Unit Cost export &mdash; uploading a new pricing sheet replaces the entire price list,
+    it doesn't merge with the old one. A location whose SKU has no price on file is excluded from the $ figures and
+    called out in a note above the tables, so it's never silently treated as $0. These figures reflect only the
+    bin/product locations counted in this system for the selected period &mdash; a subset of the warehouse, not a
+    full physical inventory &mdash; and the export combines the Net and Gross rows onto one sheet, tagged by basis.
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--card-border);">
       <button type="button" class="btn secondary" id="icResetAllDataBtn" style="border-color:var(--accent);color:var(--accent);">&#9888; Reset All Data</button>
       <span style="color:var(--text-faint);font-size:11px;margin-left:10px;">Permanently clears all Inventory tab data so you can start with a fresh upload. Outbound/Inbound data is untouched. Password-protected, cannot be undone.</span>
@@ -2129,7 +2207,7 @@ function baseChartOptions(scalesExtra, showLegend, horizontal){
 /* ---------------------------------------------------------------------
    Table
 --------------------------------------------------------------------- */
-document.querySelectorAll('thead th').forEach(th=>{
+document.querySelectorAll('#tab-outbound thead th').forEach(th=>{
   th.addEventListener('click', ()=>{
     const key = th.dataset.key;
     if(sortKey===key){ sortDir = sortDir==='asc'?'desc':'asc'; }
@@ -2171,7 +2249,7 @@ function renderTable(rangeGroups){
     return 0;
   });
 
-  document.querySelectorAll('thead th').forEach(th=>{
+  document.querySelectorAll('#tab-outbound thead th').forEach(th=>{
     th.classList.remove('sorted','sorted-asc');
     if(th.dataset.key===sortKey) th.classList.add(sortDir==='asc'?'sorted-asc':'sorted');
   });
@@ -4165,6 +4243,10 @@ function ibExportTableToExcel(){
 const icRecordsRef = db.ref('inventory_counts');
 const icUploadsRef = db.ref('inventory_count_uploads');
 const icAccuracyOmissionsRef = db.ref('inventory_accuracy_omissions');
+// Unit-cost lookup for the "Inventory Value ($)" sub-page, keyed by
+// sanitized SKU. A pricing upload replaces this node wholesale (.set, not
+// .update) — it's the current price list, not a log to merge into.
+const icPricingRef = db.ref('inventory_pricing');
 
 const IC_COLUMN_HEADERS = {
   picDoc:      ['Physical Inventory Document'],
@@ -4214,6 +4296,8 @@ function icResolveColumns(headerRow){
 --------------------------------------------------------------------- */
 let icAllRecords = [];
 let icAccuracyOmissions = {}; // location key (sanitized) -> {note, setAt} — locations manually excluded from the Inventory Accuracy miss count on the Executive Summary (e.g. a variance later verified accurate through another count), with a required reason
+let icPricing = {}; // sanitized SKU -> {sku, unitCost, uploadedAt} — current price list for the Inventory Value ($) sub-page
+let icSubpage = 'counts'; // 'counts' | 'value' — which Inventory tab sub-page is showing
 let icSortKey = 'countAt';
 let icSortDir = 'desc';
 let icSearchTerm = '';
@@ -4358,6 +4442,105 @@ async function icParseSapExport(file){
 }
 
 /* ---------------------------------------------------------------------
+   Pricing sheet — a separate, simpler upload feeding the Inventory
+   Value ($) sub-page: just a SKU-to-unit-cost lookup. Column-matched by
+   header name like the SAP exports above, so column order can shift.
+--------------------------------------------------------------------- */
+const IC_PRICING_COLUMN_HEADERS = {
+  sku:      ['SKU','Product','Material','Part Number'],
+  unitCost: ['Unit Cost','Cost','Price','Unit Price']
+};
+const IC_PRICING_REQUIRED_COLUMNS = ['sku','unitCost'];
+
+function icResolvePricingColumns(headerRow){
+  const lookup = {};
+  (headerRow||[]).forEach((h,i)=>{
+    const norm = normalizeHeader(h);
+    if(norm && !(norm in lookup)) lookup[norm] = i;
+  });
+  const col = {};
+  const missing = [];
+  for(const field of Object.keys(IC_PRICING_COLUMN_HEADERS)){
+    const found = IC_PRICING_COLUMN_HEADERS[field].map(normalizeHeader).find(c => c in lookup);
+    if(found !== undefined) col[field] = lookup[found];
+    else missing.push(field);
+  }
+  return {col, missing};
+}
+
+async function icParsePricingSheet(file){
+  const buf = await readFileAsArrayBuffer(file);
+  const wb = XLSX.read(buf, {type:'array', cellDates:true});
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:null, raw:true});
+
+  if(rows.length === 0){
+    const err = new Error('The file has no rows.');
+    err.code = 'NO_ROWS';
+    throw err;
+  }
+
+  const {col: COL, missing} = icResolvePricingColumns(rows[0]);
+  if(missing.length){
+    const names = missing.map(f => IC_PRICING_COLUMN_HEADERS[f][0]).join(', ');
+    const err = new Error('Missing required column(s): '+names+'. Check the sheet still includes these columns (name can shift position, but must be present).');
+    err.code = 'MISSING_COLUMNS';
+    throw err;
+  }
+
+  const updates = {};
+  let totalRows=0, skippedIncomplete=0, imported=0;
+
+  for(let i=1;i<rows.length;i++){
+    const row = rows[i];
+    if(!row || row.length===0) continue;
+    totalRows++;
+
+    const skuRaw = row[COL.sku];
+    const sku = (skuRaw!==null && skuRaw!==undefined && String(skuRaw).trim()!=='') ? String(skuRaw).trim() : null;
+    const unitCost = Number(row[COL.unitCost]);
+    if(!sku || !isFinite(unitCost)){ skippedIncomplete++; continue; }
+
+    const key = sanitizeKey(sku);
+    updates[key] = { sku, unitCost, uploadedAt: new Date().toISOString() };
+    imported++;
+  }
+
+  return {updates, totalRows, skippedIncomplete, imported};
+}
+
+document.getElementById('icPricingFileInput').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  icPricingSetSyncStatus('busy','Reading file\u2026');
+  try{
+    const result = await icParsePricingSheet(file);
+    const keys = Object.keys(result.updates);
+    if(keys.length){
+      // Full replace, not merge — the pricing sheet is the current price
+      // list, so a SKU dropped from the new upload shouldn't keep its old
+      // (possibly stale) price hanging around.
+      await icPricingRef.set(result.updates);
+      icPricingSetSyncStatus('ok', result.imported+' SKU'+(result.imported===1?'':'s')+' priced'+(result.skippedIncomplete?', '+result.skippedIncomplete+' skipped (missing SKU/cost)':''));
+    } else {
+      icPricingSetSyncStatus('err','No matching rows found in that file.');
+    }
+  }catch(err){
+    console.error(err);
+    icPricingSetSyncStatus('err','Upload failed: '+err.message);
+  }
+  e.target.value='';
+});
+
+function icPricingSetSyncStatus(kind, text){
+  const dot = document.getElementById('icPricingSyncDot');
+  const txt = document.getElementById('icPricingSyncText');
+  if(!dot || !txt) return;
+  dot.className = 'dot' + (kind==='busy'?' busy':kind==='err'?' err':'');
+  txt.textContent = text;
+}
+
+/* ---------------------------------------------------------------------
    Upload flow — independent file input, this tab's own SAP export
 --------------------------------------------------------------------- */
 document.getElementById('icFileInput').addEventListener('change', async (e)=>{
@@ -4410,6 +4593,24 @@ icRecordsRef.on('value', snap=>{
 icAccuracyOmissionsRef.on('value', snap=>{
   icAccuracyOmissions = snap.val() || {};
   safeRender('executive summary', xsRenderAll);
+});
+
+icPricingRef.on('value', snap=>{
+  icPricing = snap.val() || {};
+  const count = Object.keys(icPricing).length;
+  document.getElementById('icPricingCount').textContent = count.toLocaleString();
+  if(count>0){
+    icPricingSetSyncStatus('ok', count.toLocaleString()+' SKUs priced');
+    const latest = Object.values(icPricing).reduce((a,b)=> (!a || (b.uploadedAt||'') > (a.uploadedAt||'')) ? b : a, null);
+    if(latest && latest.uploadedAt){
+      document.getElementById('icPricingLastUploadLine').style.display='inline';
+      document.getElementById('icPricingLastUploadTime').textContent =
+        new Date(latest.uploadedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+    }
+  } else {
+    icPricingSetSyncStatus('ok','No pricing sheet uploaded');
+  }
+  safeRender('inventory value summary', ()=>icRenderValueSummary(icCachedRangeGroups));
 });
 
 icUploadsRef.limitToLast(1).on('value', snap=>{
@@ -4586,6 +4787,7 @@ function icRenderAll(){
 
   safeRender('inventory KPIs', ()=>icRenderKPIs(rangeGroups, openGroups, rangeRecords));
   safeRender('inventory charts', ()=>icRenderCharts(rangeGroups, openGroups));
+  safeRender('inventory value summary', ()=>icRenderValueSummary(rangeGroups));
   safeRender('inventory table', ()=>icRenderTable(rangeGroups));
 }
 
@@ -4707,6 +4909,173 @@ async function clearIcAccuracyOmission(key, cellEl){
     icSetSyncStatus('err', 'Failed to clear omission: '+err.message);
   }
 }
+
+/* ---------------------------------------------------------------------
+   Inventory Value ($) sub-page — prices resolved locations against the
+   uploaded pricing sheet and rolls them up into Net/Gross Performance
+   rows, matching a standalone SKU/Unit Cost inventory-results report.
+--------------------------------------------------------------------- */
+function icUnitCostFor(g){
+  if(!g.product) return null;
+  const entry = icPricing[sanitizeKey(g.product)];
+  return entry ? Number(entry.unitCost) : null;
+}
+// The location's counted qty as it originally stood, before any recount
+// correction — reconstructed from bookQty + the pre-recount diff, since
+// the raw earliest-count record itself isn't kept on the group. Locations
+// with no recount have no originalDiffQty, so this equals the (single,
+// final) counted qty either way.
+function icGrossCountedQty(g){
+  return g.bookQty + (g.originalDiffQty!==null && g.originalDiffQty!==undefined ? g.originalDiffQty : g.diffQty);
+}
+function icFormatCurrency(v){
+  const sign = v<0 ? '-' : '';
+  return sign+'$'+Math.abs(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function icFormatPct(v){
+  return v===null ? '\u2014' : (Math.round(v*10000)/100).toFixed(2)+'%';
+}
+// The exact business-date span of the resolved locations actually feeding
+// the tables below, shown as the "Period" column instead of the range
+// picker's own wording ("Last 30 Days") — so the tables always state
+// what they cover, not just how it was selected.
+function icActualPeriodLabel(resolvedGroups){
+  const dates = resolvedGroups.map(g=>icBusinessDate(g.countAt)).filter(Boolean);
+  if(!dates.length) return '\u2014';
+  const min = new Date(Math.min(...dates.map(d=>d.getTime())));
+  const max = new Date(Math.max(...dates.map(d=>d.getTime())));
+  const fmt = d => d.toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'2-digit'});
+  return min.getTime()===max.getTime() ? fmt(min) : fmt(min)+'\u2013'+fmt(max);
+}
+// Builds one Net/Gross Performance row from the same resolved+priced
+// locations, differing only in which basis (final vs. original count)
+// each location contributes. Shared by the render function and the
+// Excel export so the two can never drift apart.
+function icBuildValueRow(rangeGroups, basis, periodLabel){
+  const resolved = rangeGroups.filter(g=>g.status==='Accurate' || g.status==='Inaccurate');
+  let priced=0, unpriced=0, unpricedQty=0;
+  let qtyWms=0, qtyPhysical=0, onHandWms=0, onHandPhysical=0, negVariance=0, posVariance=0;
+  resolved.forEach(g=>{
+    const unitCost = icUnitCostFor(g);
+    if(unitCost===null){ unpriced++; unpricedQty += g.bookQty; return; }
+    priced++;
+    const omitted = isInventoryAccuracyOmitted(g);
+    const diff = omitted ? 0 : (basis==='gross' ? (icGrossCountedQty(g)-g.bookQty) : g.diffQty);
+    const physicalQty = g.bookQty + diff;
+    qtyWms += g.bookQty;
+    qtyPhysical += physicalQty;
+    onHandWms += g.bookQty*unitCost;
+    onHandPhysical += physicalQty*unitCost;
+    const costDiff = diff*unitCost;
+    if(costDiff<0) negVariance += costDiff; else posVariance += costDiff;
+  });
+  const netVariance = negVariance+posVariance;
+  const grossVariance = Math.abs(negVariance)+posVariance;
+  const netAccuracy = onHandWms>0 ? 1-(Math.abs(netVariance)/onHandWms) : null;
+  const grossAccuracy = onHandWms>0 ? 1-(grossVariance/onHandWms) : null;
+  return { period: periodLabel, location:'Whitsett, NC', qtyWms, qtyPhysical, onHandWms, onHandPhysical,
+    negVariance, posVariance, netVariance, grossVariance, netAccuracy, grossAccuracy, priced, unpriced, unpricedQty,
+    locationCount: resolved.length };
+}
+function icValueRowHtml(row){
+  return `<tr>
+    <td>${escapeAttr(row.period)}</td>
+    <td>${escapeAttr(row.location)}</td>
+    <td>${row.qtyWms.toLocaleString()}</td>
+    <td>${row.qtyPhysical.toLocaleString()}</td>
+    <td>${icFormatCurrency(row.onHandWms)}</td>
+    <td>${icFormatCurrency(row.onHandPhysical)}</td>
+    <td>${icFormatCurrency(row.negVariance)}</td>
+    <td>${icFormatCurrency(row.posVariance)}</td>
+    <td>${icFormatCurrency(row.netVariance)}</td>
+    <td>${icFormatCurrency(row.grossVariance)}</td>
+    <td>${icFormatPct(row.netAccuracy)}</td>
+    <td>${icFormatPct(row.grossAccuracy)}</td>
+  </tr>`;
+}
+let icLastValueRows = null; // {net, gross} — cached from the last render, for the Export to Excel button
+function icRenderValueSummary(rangeGroups){
+  const resolved = rangeGroups.filter(g=>g.status==='Accurate' || g.status==='Inaccurate');
+  const periodLabel = icActualPeriodLabel(resolved);
+  const netRow = icBuildValueRow(rangeGroups, 'net', periodLabel);
+  const grossRow = icBuildValueRow(rangeGroups, 'gross', periodLabel);
+  icLastValueRows = {net: netRow, gross: grossRow};
+
+  const netBody = document.getElementById('icValueNetTableBody');
+  const grossBody = document.getElementById('icValueGrossTableBody');
+  if(!netBody || !grossBody) return; // sub-page not in the DOM yet
+
+  netBody.innerHTML = icValueRowHtml(netRow);
+  grossBody.innerHTML = icValueRowHtml(grossRow);
+
+  const scopeNote = document.getElementById('icValueScopeNote');
+  if(scopeNote){
+    scopeNote.textContent = 'Reflects '+netRow.locationCount.toLocaleString()+' bin/product location'+(netRow.locationCount===1?'':'s')
+      +' counted in this system for the selected period ('+periodLabel+') \u2014 a subset of the warehouse, not a full physical inventory.';
+  }
+
+  const note = document.getElementById('icValueNote');
+  if(note){
+    if(Object.keys(icPricing).length===0){
+      note.textContent = 'No pricing sheet uploaded yet — upload one above to populate these figures.';
+    } else if(netRow.unpriced>0){
+      note.textContent = netRow.unpriced.toLocaleString()+' resolved location'+(netRow.unpriced===1?'':'s')+' ('+netRow.unpricedQty.toLocaleString()+' units on book) '+(netRow.unpriced===1?'has':'have')+' no SKU match on the price list and '+(netRow.unpriced===1?'is':'are')+' excluded from the figures above.';
+    } else {
+      note.textContent = '';
+    }
+  }
+}
+function icExportValueSummary(){
+  if(typeof XLSX === 'undefined'){
+    icSetSyncStatus('err','Export failed: Excel library did not load.');
+    return;
+  }
+  if(!icLastValueRows){ return; }
+  const toExportRow = (row, basis) => ({
+    'Performance Basis': basis, 'Period': row.period, 'Location': row.location,
+    'Qty Pieces WMS': row.qtyWms, 'Qty Pieces Physical': row.qtyPhysical,
+    'On Hand Inventory $ - WMS': Math.round(row.onHandWms*100)/100,
+    'On Hand Inventory $ Physical': Math.round(row.onHandPhysical*100)/100,
+    'Negative Variance': Math.round(row.negVariance*100)/100,
+    'Positive Variance': Math.round(row.posVariance*100)/100,
+    'Net Variance': Math.round(row.netVariance*100)/100,
+    'Gross Variance': Math.round(row.grossVariance*100)/100,
+    'Net Accuracy': row.netAccuracy, 'Gross Accuracy': row.grossAccuracy
+  });
+  const dataRows = [toExportRow(icLastValueRows.net,'Net'), toExportRow(icLastValueRows.gross,'Gross')];
+  // A single sheet with both Net and Gross rows (distinguished by
+  // "Performance Basis") instead of separate tabs, plus a scope note in
+  // row 1 — these figures only cover the locations counted in this
+  // system, not a full physical inventory of the warehouse.
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([[
+    'Reflects '+icLastValueRows.net.locationCount.toLocaleString()+' bin/product location'+(icLastValueRows.net.locationCount===1?'':'s')
+    +' counted in this system for the selected period ('+icLastValueRows.net.period+') \u2014 a subset of the warehouse, not a full physical inventory.'
+  ]]);
+  XLSX.utils.sheet_add_json(ws, dataRows, {origin:'A3'});
+  ws['!merges'] = [{s:{r:0,c:0}, e:{r:0,c:12}}];
+  ws['!cols'] = [
+    {wch:16},{wch:18},{wch:14},{wch:16},{wch:18},{wch:18},{wch:20},{wch:16},{wch:16},{wch:14},{wch:14},{wch:12},{wch:12}
+  ];
+  XLSX.utils.book_append_sheet(wb, ws, 'Inventory Value');
+  const rangeSuffix = icRangeMode==='all' ? 'all-time'
+    : icRangeMode==='yesterday' ? 'yesterday'
+    : icRangeMode==='custom' ? 'custom-range'
+    : 'last-'+icRangeMode+'-days';
+  const today = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, 'whitsett-inventory-value_'+rangeSuffix+'_'+today+'.xlsx');
+}
+document.getElementById('icValueExportBtn').addEventListener('click', icExportValueSummary);
+
+document.querySelectorAll('#icSubpageToggle .seg-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    icSubpage = btn.dataset.icsubpage;
+    document.querySelectorAll('#icSubpageToggle .seg-btn').forEach(b=>b.classList.toggle('active', b===btn));
+    document.getElementById('icSubpageCounts').style.display = icSubpage==='counts' ? '' : 'none';
+    document.getElementById('icSubpageValue').style.display = icSubpage==='value' ? '' : 'none';
+    if(icSubpage==='value') icRenderValueSummary(icCachedRangeGroups);
+  });
+});
 
 function icRenderKPIs(groups, openGroups, rangeRecords){
   const grid = document.getElementById('icKpiGrid');
@@ -4970,7 +5339,7 @@ function icRenderAgingChart(openGroups){
 /* ---------------------------------------------------------------------
    Table
 --------------------------------------------------------------------- */
-document.querySelectorAll('#tab-inventory thead th').forEach(th=>{
+document.querySelectorAll('#icCycleCountTable thead th').forEach(th=>{
   th.addEventListener('click', ()=>{
     const key = th.dataset.ickey;
     if(icSortKey===key){ icSortDir = icSortDir==='asc'?'desc':'asc'; }
@@ -5002,7 +5371,7 @@ function icRenderTable(rangeGroups){
     return 0;
   });
 
-  document.querySelectorAll('#tab-inventory thead th').forEach(th=>{
+  document.querySelectorAll('#icCycleCountTable thead th').forEach(th=>{
     th.classList.remove('sorted','sorted-asc');
     if(th.dataset.ickey===icSortKey) th.classList.add(icSortDir==='asc'?'sorted-asc':'sorted');
   });

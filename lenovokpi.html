@@ -492,10 +492,14 @@
     this is password-protected and cannot be undone. A completed Pull ID's SLA outcome (Met/Breached) can be
     manually overridden from the "&#9998; Override" button next to its SLA badge &mdash; a note is required and is
     kept with the override, visible on hover over the badge and in the Excel export; overrides can be cleared at
-    any time to revert to the calculated status. On the Executive Summary, an off-qty line in the Fill Rate popup
-    (e.g. a customer-requested overpick held as reserve stock) can similarly be omitted from Fill Rate with a
-    required reason &mdash; it stays visible in the popup and export, marked "Omitted," and can be un-omitted at
-    any time.
+    any time to revert to the calculated status. On the Executive Summary, every KPI popup (Fill Rate, Dock to
+    Stock, On-Time Delivery Auto/Manual, Inventory Accuracy) offers the same "&#9998; Omit" control per row &mdash;
+    click it, give a required reason (e.g. a customer-requested overpick held as reserve stock, or a delay outside
+    the warehouse's control), and that row stops counting as a breach/miss for that metric. The row stays visible
+    in the popup and Excel export either way, marked "Omitted," and can be un-omitted at any time from the same
+    spot. Dock to Stock and On-Time Delivery omissions write to the same override data as the Inbound/Outbound
+    tabs' own "Override" buttons, so they stay in sync; Inventory Accuracy omissions are tracked separately since
+    that metric has no override elsewhere.
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--card-border);">
       <button type="button" class="btn secondary" id="resetAllDataBtn" style="border-color:var(--accent);color:var(--accent);">&#9888; Reset All Data</button>
       <span style="color:var(--text-faint);font-size:11px;margin-left:10px;">Permanently clears all Outbound and Inbound data (both tabs) so you can start with a fresh upload. Cycle count data is untouched. Password-protected, cannot be undone.</span>
@@ -882,7 +886,11 @@
     Accuracy" on the Executive Summary rolls this up one level further: a Storage Bin counts as accurate only if every
     product resolved there was accurate. This is a separate data source from the Outbound/Inbound SAP export &mdash;
     upload the cycle count results file here. Repeat uploads merge into existing data and are de-duplicated by
-    Physical Inventory Document, so re-uploading an export that overlaps a previous one is safe.
+    Physical Inventory Document, so re-uploading an export that overlaps a previous one is safe. The Day/Week/Month/
+    Year and date-range controls above filter strictly to that window &mdash; both the table and every KPI/chart on
+    this tab, including Open/Recount Pending locations dated outside the window. The Open Counts and Oldest Open
+    Count cards are the one exception: they always reflect the live, all-time backlog regardless of the range
+    selected, since that backlog needs attention no matter when it was assigned.
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--card-border);">
       <button type="button" class="btn secondary" id="icResetAllDataBtn" style="border-color:var(--accent);color:var(--accent);">&#9888; Reset All Data</button>
       <span style="color:var(--text-faint);font-size:11px;margin-left:10px;">Permanently clears all Inventory tab data so you can start with a fresh upload. Outbound/Inbound data is untouched. Password-protected, cannot be undone.</span>
@@ -1279,7 +1287,10 @@ async function parseSapExport(file){
 }
 
 function sanitizeKey(k){
-  return String(k).replace(/[.#$\[\]\/]/g,'_');
+  // Firebase RTDB keys also reject raw control characters (0x00-0x1F, 0x7F)
+  // in addition to the punctuation below — matters for the Inventory
+  // Accuracy location key, which joins bin+product with a \u0001 separator.
+  return String(k).replace(/[.#$\[\]\/]/g,'_').replace(/[\x00-\x1F\x7F]/g,'_');
 }
 
 // A line item is "off qty" if actual != target. Fill Rate treats an off-qty
@@ -2647,24 +2658,31 @@ function xsRenderAll(){
   const inboundBreached = inboundResolved.filter(g=>g.slaStatus==='Breached');
   const inboundSlaMet = inboundResolved.length - inboundBreached.length;
   const dockSlaPct = inboundResolved.length ? Math.round((inboundSlaMet/inboundResolved.length)*1000)/10 : null;
+  // Every HU the calc ever flagged Breached, omitted or not — the Omit popup
+  // needs to keep showing an omitted HU (with its badge) rather than have it
+  // vanish once slaStatus flips to Met, so it stays reviewable/reversible.
+  const inboundBreachEligible = inboundGroups.filter(g=>g.computedSlaStatus==='Breached');
 
   const slaAdherence = (type) => {
     const resolved = outboundGroups.filter(g=>g.pullType===type && (g.slaStatus==='Met' || g.slaStatus==='Breached'));
     const breached = resolved.filter(g=>g.slaStatus==='Breached');
     const met = resolved.length - breached.length;
-    return { pct: resolved.length ? Math.round((met/resolved.length)*1000)/10 : null, met, breached: breached.length, breachedGroups: breached };
+    const breachEligible = outboundGroups.filter(g=>g.pullType===type && g.computedSlaStatus==='Breached'); // same reviewable/reversible reasoning as inboundBreachEligible above
+    return { pct: resolved.length ? Math.round((met/resolved.length)*1000)/10 : null, met, breached: breached.length, breachedGroups: breached, breachEligibleGroups: breachEligible };
   };
   const autoSla = slaAdherence('Auto');
   const manualSla = slaAdherence('Manual');
 
   const invResolved = inventoryGroups.filter(g=>g.status==='Accurate' || g.status==='Inaccurate');
   const invInaccurate = invResolved.filter(g=>g.status==='Inaccurate');
+  const invMissed = invInaccurate.filter(g=>!isInventoryAccuracyOmitted(g)); // what actually counts against Inventory Accuracy
   // Unit-weighted, same formula as the Inventory tab's "Overall Unit
   // Accuracy" card and the Analysis workbook's "Unit Accuracy %": (total
   // book qty - total absolute variance) / total book qty across resolved
-  // locations. Not a location headcount.
+  // locations. Not a location headcount. An omitted location's variance is
+  // excluded from the total, same treatment as an omitted Fill Rate line.
   const invBookQty = invResolved.reduce((sum,g)=>sum+g.bookQty, 0);
-  const invAbsDiff = invResolved.reduce((sum,g)=>sum+Math.abs(g.diffQty), 0);
+  const invAbsDiff = invResolved.reduce((sum,g)=>sum+(isInventoryAccuracyOmitted(g) ? 0 : Math.abs(g.diffQty)), 0);
   const invAccuracyPct = invBookQty>0 ? Math.round(((invBookQty-invAbsDiff)/invBookQty)*1000)/10 : null;
 
   const cards = [
@@ -2678,27 +2696,31 @@ function xsRenderAll(){
     {label:'Dock to Stock (Goods Receiving)', value: dockSlaPct!==null ? dockSlaPct+'%' : '\u2014',
       sub: (dockSlaPct!==null ? inboundSlaMet+'/'+inboundResolved.length+' HUs on time \u00b7 ' : '')+'Target: >'+XS_SLA_TARGETS.dockToStock.toFixed(2)+'%',
       accent: xsSlaAccent(dockSlaPct, XS_SLA_TARGETS.dockToStock),
-      modalTitle: 'Dock to Stock SLA Breaches \u2014 '+inboundBreached.length.toLocaleString()+' HU'+(inboundBreached.length===1?'':'s')+' over 5hr',
-      modalBody: ibModalTableHtml(inboundBreached),
-      exportRows: ibModalExportRows(inboundBreached), exportFilename: 'dock-to-stock-breaches'},
+      modalTitle: 'Dock to Stock SLA Breaches \u2014 '+inboundBreached.length.toLocaleString()+' HU'+(inboundBreached.length===1?'':'s')+' over 5hr'
+        +((inboundBreachEligible.length-inboundBreached.length)>0 ? ' \u00b7 '+(inboundBreachEligible.length-inboundBreached.length)+' omitted' : ''),
+      modalBody: xsDockToStockModalTableHtml(inboundBreachEligible),
+      exportRows: xsDockToStockModalExportRows(inboundBreachEligible), exportFilename: 'dock-to-stock-breaches'},
     {label:'On-Time Delivery (Auto Pulls)', value: autoSla.pct!==null ? autoSla.pct+'%' : '\u2014',
       sub: (autoSla.pct!==null ? autoSla.met+'/'+(autoSla.met+autoSla.breached)+' pulls on time \u00b7 ' : '')+'Target: >'+XS_SLA_TARGETS.onTimeAuto.toFixed(2)+'%',
       accent: xsSlaAccent(autoSla.pct, XS_SLA_TARGETS.onTimeAuto),
-      modalTitle: 'On-Time Delivery Breaches (Auto) \u2014 '+autoSla.breached.toLocaleString()+' pull'+(autoSla.breached===1?'':'s')+' over 5hr SLA',
-      modalBody: xsPullModalTableHtml(autoSla.breachedGroups),
-      exportRows: xsPullModalExportRows(autoSla.breachedGroups), exportFilename: 'on-time-delivery-breaches-auto'},
+      modalTitle: 'On-Time Delivery Breaches (Auto) \u2014 '+autoSla.breached.toLocaleString()+' pull'+(autoSla.breached===1?'':'s')+' over 5hr SLA'
+        +((autoSla.breachEligibleGroups.length-autoSla.breached)>0 ? ' \u00b7 '+(autoSla.breachEligibleGroups.length-autoSla.breached)+' omitted' : ''),
+      modalBody: xsPullModalTableHtml(autoSla.breachEligibleGroups),
+      exportRows: xsPullModalExportRows(autoSla.breachEligibleGroups), exportFilename: 'on-time-delivery-breaches-auto'},
     {label:'On-Time Delivery (Manual Pulls)', value: manualSla.pct!==null ? manualSla.pct+'%' : '\u2014',
       sub: (manualSla.pct!==null ? manualSla.met+'/'+(manualSla.met+manualSla.breached)+' pulls on time \u00b7 ' : '')+'Target: >'+XS_SLA_TARGETS.onTimeManual.toFixed(2)+'%',
       accent: xsSlaAccent(manualSla.pct, XS_SLA_TARGETS.onTimeManual),
-      modalTitle: 'On-Time Delivery Breaches (Manual) \u2014 '+manualSla.breached.toLocaleString()+' pull'+(manualSla.breached===1?'':'s')+' over 1hr SLA',
-      modalBody: xsPullModalTableHtml(manualSla.breachedGroups),
-      exportRows: xsPullModalExportRows(manualSla.breachedGroups), exportFilename: 'on-time-delivery-breaches-manual'},
+      modalTitle: 'On-Time Delivery Breaches (Manual) \u2014 '+manualSla.breached.toLocaleString()+' pull'+(manualSla.breached===1?'':'s')+' over 1hr SLA'
+        +((manualSla.breachEligibleGroups.length-manualSla.breached)>0 ? ' \u00b7 '+(manualSla.breachEligibleGroups.length-manualSla.breached)+' omitted' : ''),
+      modalBody: xsPullModalTableHtml(manualSla.breachEligibleGroups),
+      exportRows: xsPullModalExportRows(manualSla.breachEligibleGroups), exportFilename: 'on-time-delivery-breaches-manual'},
     {label:'Inventory Accuracy', value: invAccuracyPct!==null ? invAccuracyPct+'%' : '\u2014',
-      sub: 'Target: >'+XS_SLA_TARGETS.inventoryAccuracy.toFixed(2)+'%',
+      sub: (invAccuracyPct!==null ? (invResolved.length-invMissed.length)+'/'+invResolved.length+' locations on qty \u00b7 ' : '')+'Target: >'+XS_SLA_TARGETS.inventoryAccuracy.toFixed(2)+'%',
       accent: xsSlaAccent(invAccuracyPct, XS_SLA_TARGETS.inventoryAccuracy),
-      modalTitle: 'Inaccurate Locations \u2014 '+invInaccurate.length.toLocaleString()+' location'+(invInaccurate.length===1?'':'s')+' off qty, largest variance first',
-      modalBody: icModalTableHtml([...invInaccurate].sort((a,b)=>Math.abs(b.diffQty)-Math.abs(a.diffQty))),
-      exportRows: icModalExportRows([...invInaccurate].sort((a,b)=>Math.abs(b.diffQty)-Math.abs(a.diffQty))), exportFilename: 'inaccurate-locations'}
+      modalTitle: 'Inaccurate Locations \u2014 '+invMissed.length.toLocaleString()+' location'+(invMissed.length===1?'':'s')+' off qty, largest variance first'
+        +((invInaccurate.length-invMissed.length)>0 ? ' \u00b7 '+(invInaccurate.length-invMissed.length)+' omitted' : ''),
+      modalBody: xsInventoryModalTableHtml([...invInaccurate].sort((a,b)=>Math.abs(b.diffQty)-Math.abs(a.diffQty))),
+      exportRows: xsInventoryModalExportRows([...invInaccurate].sort((a,b)=>Math.abs(b.diffQty)-Math.abs(a.diffQty))), exportFilename: 'inaccurate-locations'}
   ];
 
   grid.innerHTML = cards.map((c,i)=>`
@@ -2780,16 +2802,49 @@ async function clearFillRateOmission(key, cellEl){
   }
 }
 // Delegated (the modal body is replaced wholesale on every open, so listeners
-// are attached once here rather than re-bound per render).
+// are attached once here rather than re-bound per render). Covers the Omit/
+// Clear control for all five Executive Summary KPI popups: Fill Rate lines,
+// On-Time Delivery pulls, Dock to Stock HUs, and Inventory Accuracy locations.
 document.getElementById('kpiModalBody').addEventListener('click', (e)=>{
-  const btn = e.target.closest('[data-fillrate-key]');
-  if(!btn) return;
-  e.stopPropagation();
-  const key = btn.dataset.fillrateKey;
-  if(!key) return;
-  const cellEl = btn.closest('td');
-  if(btn.classList.contains('clear')) clearFillRateOmission(key, cellEl);
-  else fillRateOmissionPrompt(key, cellEl);
+  const fillBtn = e.target.closest('[data-fillrate-key]');
+  if(fillBtn){
+    e.stopPropagation();
+    const key = fillBtn.dataset.fillrateKey;
+    if(!key) return;
+    const cellEl = fillBtn.closest('td');
+    if(fillBtn.classList.contains('clear')) clearFillRateOmission(key, cellEl);
+    else fillRateOmissionPrompt(key, cellEl);
+    return;
+  }
+  const pullBtn = e.target.closest('[data-sla-omit-pullid]');
+  if(pullBtn){
+    e.stopPropagation();
+    const pullId = pullBtn.dataset.slaOmitPullid;
+    if(!pullId) return;
+    const cellEl = pullBtn.closest('td');
+    if(pullBtn.classList.contains('clear')) xsClearPullSlaOmission(pullId, cellEl);
+    else xsOmitPullSlaPrompt(pullId, cellEl);
+    return;
+  }
+  const huBtn = e.target.closest('[data-sla-omit-hu]');
+  if(huBtn){
+    e.stopPropagation();
+    const hu = huBtn.dataset.slaOmitHu;
+    if(!hu) return;
+    const cellEl = huBtn.closest('td');
+    if(huBtn.classList.contains('clear')) xsClearHuSlaOmission(hu, cellEl);
+    else xsOmitHuSlaPrompt(hu, cellEl);
+    return;
+  }
+  const icBtn = e.target.closest('[data-icaccuracy-key]');
+  if(icBtn){
+    e.stopPropagation();
+    const key = icBtn.dataset.icaccuracyKey;
+    if(!key) return;
+    const cellEl = icBtn.closest('td');
+    if(icBtn.classList.contains('clear')) clearIcAccuracyOmission(key, cellEl);
+    else icAccuracyOmissionPrompt(key, cellEl);
+  }
 });
 
 // Plain-object rows (same data as xsLineModalTableHtml) for Excel export.
@@ -2809,11 +2864,29 @@ function xsLineModalExportRows(lines){
   });
 }
 
-// Drill-down table for an On-Time Delivery breach: pull-group level.
+// Action cell for an On-Time Delivery pull, Executive Summary only — writes
+// to the same slaOverrides node the Outbound tab's own "Override" button
+// uses, so the two stay in sync and an omission here also clears the pull's
+// SLA badge on the Outbound tab. Offered as a one-way Breached->Met "Omit"
+// (with a required reason) since every row reaching this popup is a breach;
+// reversible via Clear at any time, same as Fill Rate.
+function xsPullSlaActionCellHtml(g){
+  const omission = g.slaOverride;
+  const omittedBadge = omission ? `<span class="badge omitted" title="${escapeAttr('Omitted from On-Time Delivery \u2014 '+omission.note)}">Omitted \u270e</span>` : '';
+  const omitBtn = omission
+    ? `<button type="button" class="sla-override-btn clear" data-sla-omit-pullid="${escapeAttr(g.pullId)}" title="Clear omission">&#10005; Clear</button>`
+    : `<button type="button" class="sla-override-btn" data-sla-omit-pullid="${escapeAttr(g.pullId)}" title="Omit from On-Time Delivery">&#9998; Omit</button>`;
+  return omittedBadge+omitBtn;
+}
+
+// Drill-down table for an On-Time Delivery breach: pull-group level. Shows
+// every pull the SLA calc ever flagged as Breached (computedSlaStatus), not
+// just currently-breached ones, so an omitted pull stays visible here with
+// its "Omitted" badge instead of disappearing from the popup.
 function xsPullModalTableHtml(groups){
   if(!groups.length) return '<div style="color:var(--text-faint);padding:10px 0 4px;">No matching pulls.</div>';
   return `<div style="overflow-x:auto;"><table><thead><tr>
-      <th>Pull ID</th><th>Type</th><th>Lines</th><th>Target Qty</th><th>Actual Qty</th><th>Created</th><th>Confirmed</th><th>Elapsed</th>
+      <th>Pull ID</th><th>Type</th><th>Lines</th><th>Target Qty</th><th>Actual Qty</th><th>Created</th><th>Confirmed</th><th>Elapsed</th><th>On-Time Delivery</th>
     </tr></thead><tbody>${groups.map(g=>`
       <tr>
         <td>${g.pullId}</td>
@@ -2824,6 +2897,7 @@ function xsPullModalTableHtml(groups){
         <td>${formatDateTime(g.createdAt)}</td>
         <td>${formatDateTime(g.confirmedAt)}</td>
         <td>${g.slaElapsedMin!==null ? formatDuration(g.slaElapsedMin) : '&mdash;'}</td>
+        <td>${xsPullSlaActionCellHtml(g)}</td>
       </tr>
     `).join('')}</tbody></table></div>`;
 }
@@ -2838,8 +2912,38 @@ function xsPullModalExportRows(groups){
     'Actual Qty': g.actualQty||0,
     'Created At': isValidDate(g.createdAt) ? g.createdAt : '',
     'Confirmed At': isValidDate(g.confirmedAt) ? g.confirmedAt : '',
-    'Elapsed (min)': g.slaElapsedMin ?? ''
+    'Elapsed (min)': g.slaElapsedMin ?? '',
+    'Omitted from On-Time Delivery': g.slaOverride ? 'Omitted: '+g.slaOverride.note : ''
   }));
+}
+
+async function xsOmitPullSlaPrompt(pullId, cellEl){
+  const note = prompt('Omit Pull ID '+pullId+' from On-Time Delivery (e.g. a delay outside the warehouse\u2019s control).\n\nEnter a reason (required):');
+  if(note === null) return; // cancelled
+  if(!note.trim()){
+    alert('A reason is required to omit a pull from On-Time Delivery.');
+    return;
+  }
+  try{
+    const omission = { status:'Met', note: note.trim(), setAt: new Date().toISOString() };
+    await slaOverridesRef.child(sanitizeKey(pullId)).set(omission);
+    setSyncStatus('ok', 'Pull omitted from On-Time Delivery');
+    if(cellEl) cellEl.innerHTML = xsPullSlaActionCellHtml({pullId, slaOverride: omission});
+  }catch(err){
+    console.error(err);
+    setSyncStatus('err', 'Failed to save omission: '+err.message);
+  }
+}
+async function xsClearPullSlaOmission(pullId, cellEl){
+  if(!confirm('Clear this omission? The pull will count against On-Time Delivery again if it\u2019s still breached.')) return;
+  try{
+    await slaOverridesRef.child(sanitizeKey(pullId)).remove();
+    setSyncStatus('ok', 'Omission cleared');
+    if(cellEl) cellEl.innerHTML = xsPullSlaActionCellHtml({pullId, slaOverride: null});
+  }catch(err){
+    console.error(err);
+    setSyncStatus('err', 'Failed to clear omission: '+err.message);
+  }
 }
 
 /* ---------------------------------------------------------------------
@@ -2969,7 +3073,9 @@ function xsRenderCharts(outboundGroups, outboundItems, inboundGroups, inventoryG
   // "Unit Inventory Accuracy" KPI card above and the Inventory tab's own
   // chart: (book qty - abs variance) / book qty per period, not a location
   // headcount. Bucketed by when each location was resolved (still-open
-  // locations are ignored here since only resolved counts chart).
+  // locations are ignored here since only resolved counts chart). An
+  // omitted location's variance is excluded from absDiff, same as the KPI
+  // card above, so a click-through Omit updates this chart too.
   const invByPeriod = {};
   inventoryGroups.forEach(loc=>{
     if(loc.status!=='Accurate' && loc.status!=='Inaccurate') return;
@@ -2977,7 +3083,7 @@ function xsRenderCharts(outboundGroups, outboundItems, inboundGroups, inventoryG
     const k = xsInventoryPeriodKey(loc.countAt);
     if(!invByPeriod[k]) invByPeriod[k] = {bookQty:0, absDiff:0};
     invByPeriod[k].bookQty += loc.bookQty;
-    invByPeriod[k].absDiff += Math.abs(loc.diffQty);
+    invByPeriod[k].absDiff += isInventoryAccuracyOmitted(loc) ? 0 : Math.abs(loc.diffQty);
   });
   delete invByPeriod[xsInventoryPeriodKey(new Date())]; // never chart today's still-in-progress shift day
   const invLabels = Object.keys(invByPeriod).sort();
@@ -3441,6 +3547,90 @@ function ibModalExportRows(groups){
     'Currently Waiting (min)': g.dwellMin ?? '',
     'SLA Status': g.slaStatus
   }));
+}
+
+// ---- Executive Summary-only variants of the two functions above, adding
+// an Omit/Clear control per HU. Kept separate from ibModalTableHtml /
+// ibModalExportRows so the Inbound tab's own popups (which reuse those)
+// don't pick up the button — the Omit control is exposed on the Executive
+// Summary page only. Writes to the same ibSlaOverrides node as the Inbound
+// tab's own "Override" button, so the two stay in sync.
+function xsHuSlaActionCellHtml(g){
+  const omission = g.slaOverride;
+  const omittedBadge = omission ? `<span class="badge omitted" title="${escapeAttr('Omitted from Dock to Stock \u2014 '+omission.note)}">Omitted \u270e</span>` : '';
+  const omitBtn = omission
+    ? `<button type="button" class="sla-override-btn clear" data-sla-omit-hu="${escapeAttr(g.hu)}" title="Clear omission">&#10005; Clear</button>`
+    : `<button type="button" class="sla-override-btn" data-sla-omit-hu="${escapeAttr(g.hu)}" title="Omit from Dock to Stock">&#9998; Omit</button>`;
+  return omittedBadge+omitBtn;
+}
+// Shows every HU the SLA calc ever flagged as Breached (computedSlaStatus),
+// not just currently-breached ones, so an omitted HU stays visible here
+// with its "Omitted" badge instead of disappearing from the popup.
+function xsDockToStockModalTableHtml(groups){
+  if(!groups.length) return '<div style="color:var(--text-faint);padding:10px 0 4px;">No matching HUs.</div>';
+  return `<div style="overflow-x:auto;"><table><thead><tr>
+      <th>HU</th><th>SKU</th><th>Description</th><th>Qty</th><th>Received</th><th>Received By</th>
+      <th>Status</th><th>Putaway At</th><th>Putaway Bin</th><th>Waiting / Dock&rarr;Stock</th><th>Dock to Stock</th>
+    </tr></thead><tbody>${groups.map(g=>`
+      <tr>
+        <td>${g.hu}</td>
+        <td>${g.product||'&mdash;'}</td>
+        <td style="white-space:normal;max-width:260px;">${g.productDesc||'&mdash;'}</td>
+        <td>${g.receivedQty.toLocaleString()}</td>
+        <td>${formatDateTime(g.receivedAt)}</td>
+        <td>${g.receivedBy||'&mdash;'}</td>
+        <td>${g.status==='Putaway Complete' ? '<span class="badge complete">Putaway Complete</span>' : '<span class="badge progress">In GR Zone</span>'}</td>
+        <td>${formatDateTime(g.putawayAt)}</td>
+        <td>${g.putawayBin||'&mdash;'}</td>
+        <td>${g.status==='Putaway Complete' ? formatDuration(g.dockToStockMin) : (g.dwellMin!==null ? formatDuration(g.dwellMin)+' so far' : '&mdash;')}</td>
+        <td>${xsHuSlaActionCellHtml(g)}</td>
+      </tr>
+    `).join('')}</tbody></table></div>`;
+}
+function xsDockToStockModalExportRows(groups){
+  return groups.map(g=>({
+    'HU': g.hu,
+    'SKU': g.product||'',
+    'Description': g.productDesc||'',
+    'Qty': g.receivedQty,
+    'Received At': isValidDate(g.receivedAt) ? g.receivedAt : '',
+    'Received By': g.receivedBy||'',
+    'Status': g.status,
+    'Putaway At': isValidDate(g.putawayAt) ? g.putawayAt : '',
+    'Putaway Bin': g.putawayBin||'',
+    'Dock\u2192Stock (min)': g.dockToStockMin ?? '',
+    'Currently Waiting (min)': g.dwellMin ?? '',
+    'SLA Status': g.slaStatus,
+    'Omitted from Dock to Stock': g.slaOverride ? 'Omitted: '+g.slaOverride.note : ''
+  }));
+}
+async function xsOmitHuSlaPrompt(hu, cellEl){
+  const note = prompt('Omit HU '+hu+' from Dock to Stock (e.g. a delay outside the warehouse\u2019s control).\n\nEnter a reason (required):');
+  if(note === null) return; // cancelled
+  if(!note.trim()){
+    alert('A reason is required to omit a HU from Dock to Stock.');
+    return;
+  }
+  try{
+    const omission = { status:'Met', note: note.trim(), setAt: new Date().toISOString() };
+    await ibSlaOverridesRef.child(sanitizeKey(hu)).set(omission);
+    ibSetSyncStatus('ok', 'HU omitted from Dock to Stock');
+    if(cellEl) cellEl.innerHTML = xsHuSlaActionCellHtml({hu, slaOverride: omission});
+  }catch(err){
+    console.error(err);
+    ibSetSyncStatus('err', 'Failed to save omission: '+err.message);
+  }
+}
+async function xsClearHuSlaOmission(hu, cellEl){
+  if(!confirm('Clear this omission? The HU will count against Dock to Stock again if it\u2019s still breached.')) return;
+  try{
+    await ibSlaOverridesRef.child(sanitizeKey(hu)).remove();
+    ibSetSyncStatus('ok', 'Omission cleared');
+    if(cellEl) cellEl.innerHTML = xsHuSlaActionCellHtml({hu, slaOverride: null});
+  }catch(err){
+    console.error(err);
+    ibSetSyncStatus('err', 'Failed to clear omission: '+err.message);
+  }
 }
 
 function ibRenderKPIs(groups, backlogGroups){
@@ -3974,6 +4164,7 @@ function ibExportTableToExcel(){
 ======================================================================= */
 const icRecordsRef = db.ref('inventory_counts');
 const icUploadsRef = db.ref('inventory_count_uploads');
+const icAccuracyOmissionsRef = db.ref('inventory_accuracy_omissions');
 
 const IC_COLUMN_HEADERS = {
   picDoc:      ['Physical Inventory Document'],
@@ -4022,6 +4213,7 @@ function icResolveColumns(headerRow){
    State
 --------------------------------------------------------------------- */
 let icAllRecords = [];
+let icAccuracyOmissions = {}; // location key (sanitized) -> {note, setAt} — locations manually excluded from the Inventory Accuracy miss count on the Executive Summary (e.g. a variance later verified accurate through another count), with a required reason
 let icSortKey = 'countAt';
 let icSortDir = 'desc';
 let icSearchTerm = '';
@@ -4215,6 +4407,11 @@ icRecordsRef.on('value', snap=>{
   icSetSyncStatus('err','Connection error: '+err.message);
 });
 
+icAccuracyOmissionsRef.on('value', snap=>{
+  icAccuracyOmissions = snap.val() || {};
+  safeRender('executive summary', xsRenderAll);
+});
+
 icUploadsRef.limitToLast(1).on('value', snap=>{
   const val = snap.val();
   if(!val) return;
@@ -4249,15 +4446,19 @@ document.getElementById('icSearchBox').addEventListener('input', e=>{
 
 // Uses the shared computeRangeFilteredGroups helper (defined on the
 // Outbound tab above) so date-cutoff behavior stays identical across tabs.
-// Open locations always show regardless of range, same as In-Progress
-// pulls and In-GR-Zone HUs elsewhere.
+// Unlike In-Progress pulls / In-GR-Zone HUs elsewhere, Open locations here
+// are NOT exempted from the range filter — selecting a date/range on this
+// tab means "only what was counted (or is still waiting, dated) in that
+// window," full stop, for both the table and every stat derived from it.
+// The Open Counts / Oldest Open Count cards stay genuinely live via the
+// separate, always-unfiltered openGroups passed alongside this.
 function icFilterByRange(groups){
   const fromVal = document.getElementById('icDateFrom').value;
   const toVal = document.getElementById('icDateTo').value;
   // icBusinessDate rolls pre-6AM counts back onto the prior day first, so
   // "today excluded from the rolling window" correctly means "the 3rd-shift
   // day still in progress," not "the calendar date since midnight."
-  return computeRangeFilteredGroups(groups, icRangeMode, fromVal, toVal, 'countAt', 'Open', icBusinessDate);
+  return computeRangeFilteredGroups(groups, icRangeMode, fromVal, toVal, 'countAt', XS_STRICT_NO_BYPASS, icBusinessDate);
 }
 
 /* ---------------------------------------------------------------------
@@ -4333,6 +4534,13 @@ function icGroupByLocation(records){
   return groups;
 }
 
+// A location manually omitted from the Inventory Accuracy metric on the
+// Executive Summary (e.g. a variance already verified accurate through
+// another count) — see icAccuracyOmissionsRef.
+function isInventoryAccuracyOmitted(g){
+  return !!(g.key && icAccuracyOmissions[sanitizeKey(g.key)]);
+}
+
 // Bin-level rollup for "Location Accuracy" — a Storage Bin is only
 // Accurate if every product resolved at that bin was Accurate; Open if
 // anything at that bin is still pending; Inaccurate if anything resolved
@@ -4369,11 +4577,12 @@ function icRenderAll(){
 
   // Raw status tallies (Open/Completed/Recount counts) work off individual
   // count documents, not the resolved-location rollup above — same date
-  // bounds, but ACTI documents are always included live (mirrors how
-  // In-Progress pulls / In-GR-Zone HUs are handled elsewhere).
+  // bounds as icFilterByRange, strictly applied (no live-ACTI exemption;
+  // the Open Counts card below sources from openGroups instead, so it
+  // stays live independent of this).
   const fromVal = document.getElementById('icDateFrom').value;
   const toVal = document.getElementById('icDateTo').value;
-  const rangeRecords = computeRangeFilteredGroups(icAllRecords, icRangeMode, fromVal, toVal, 'countAt', 'ACTI', icBusinessDate);
+  const rangeRecords = computeRangeFilteredGroups(icAllRecords, icRangeMode, fromVal, toVal, 'countAt', XS_STRICT_NO_BYPASS, icBusinessDate);
 
   safeRender('inventory KPIs', ()=>icRenderKPIs(rangeGroups, openGroups, rangeRecords));
   safeRender('inventory charts', ()=>icRenderCharts(rangeGroups, openGroups));
@@ -4417,10 +4626,97 @@ function icModalExportRows(groups){
   }));
 }
 
+// ---- Executive Summary-only variants of the two functions above, adding
+// an Omit/Clear control per location. Kept separate from icModalTableHtml /
+// icModalExportRows so the Inventory tab's own popups (which reuse those)
+// don't pick up the button — the Omit control is exposed on the Executive
+// Summary page only. Writes to icAccuracyOmissionsRef, a new node — unlike
+// Dock to Stock/On-Time Delivery, the Inventory tab has no existing
+// override mechanism this can piggyback on.
+function icAccuracyActionCellHtml(key, omission){
+  if(!key) return '';
+  const omittedBadge = omission ? `<span class="badge omitted" title="${escapeAttr('Omitted from Inventory Accuracy \u2014 '+omission.note)}">Omitted \u270e</span>` : '';
+  const omitBtn = omission
+    ? `<button type="button" class="sla-override-btn clear" data-icaccuracy-key="${escapeAttr(key)}" title="Clear omission">&#10005; Clear</button>`
+    : `<button type="button" class="sla-override-btn" data-icaccuracy-key="${escapeAttr(key)}" title="Omit from Inventory Accuracy">&#9998; Omit</button>`;
+  return omittedBadge+omitBtn;
+}
+function xsInventoryModalTableHtml(groups){
+  if(!groups.length) return '<div style="color:var(--text-faint);padding:10px 0 4px;">No matching locations.</div>';
+  return `<div style="overflow-x:auto;"><table><thead><tr>
+      <th>Bin</th><th>SKU</th><th>Description</th><th>Book</th><th>Counted</th><th>Diff</th><th>Result</th><th>Counter</th><th>Count Date</th><th>Inventory Accuracy</th>
+    </tr></thead><tbody>${groups.map(g=>{
+      const omission = g.key ? icAccuracyOmissions[sanitizeKey(g.key)] : null;
+      return `
+      <tr>
+        <td>${g.bin}</td>
+        <td>${g.product||'&mdash;'}</td>
+        <td style="white-space:normal;max-width:260px;">${g.productDesc||'&mdash;'}</td>
+        <td>${g.bookQty.toLocaleString()}</td>
+        <td>${g.countedQty.toLocaleString()}</td>
+        <td>${g.diffQty>0?'+':''}${g.diffQty.toLocaleString()}</td>
+        <td>${g.status}</td>
+        <td>${g.counter||'&mdash;'}</td>
+        <td>${formatDateTime(g.countAt)}</td>
+        <td>${icAccuracyActionCellHtml(g.key, omission)}</td>
+      </tr>
+    `;}).join('')}</tbody></table></div>`;
+}
+function xsInventoryModalExportRows(groups){
+  return groups.map(g=>{
+    const omission = g.key ? icAccuracyOmissions[sanitizeKey(g.key)] : null;
+    return {
+      'Bin': g.bin,
+      'SKU': g.product||'',
+      'Description': g.productDesc||'',
+      'Book Qty': g.bookQty,
+      'Counted Qty': g.countedQty,
+      'Diff': g.diffQty,
+      'Result': g.status,
+      'Counter': g.counter||'',
+      'Count Date': isValidDate(g.countAt) ? g.countAt : '',
+      'Omitted from Inventory Accuracy': omission ? 'Omitted: '+omission.note : ''
+    };
+  });
+}
+async function icAccuracyOmissionPrompt(key, cellEl){
+  const note = prompt('Omit this location from Inventory Accuracy (e.g. a variance already verified accurate through another count).\n\nEnter a reason (required):');
+  if(note === null) return; // cancelled
+  if(!note.trim()){
+    alert('A reason is required to omit a location from Inventory Accuracy.');
+    return;
+  }
+  try{
+    const omission = { note: note.trim(), setAt: new Date().toISOString() };
+    await icAccuracyOmissionsRef.child(sanitizeKey(key)).set(omission);
+    icSetSyncStatus('ok', 'Location omitted from Inventory Accuracy');
+    if(cellEl) cellEl.innerHTML = icAccuracyActionCellHtml(key, omission);
+  }catch(err){
+    console.error(err);
+    icSetSyncStatus('err', 'Failed to save omission: '+err.message);
+  }
+}
+async function clearIcAccuracyOmission(key, cellEl){
+  if(!confirm('Clear this omission? The location will count against Inventory Accuracy again if it\u2019s still off qty.')) return;
+  try{
+    await icAccuracyOmissionsRef.child(sanitizeKey(key)).remove();
+    icSetSyncStatus('ok', 'Omission cleared');
+    if(cellEl) cellEl.innerHTML = icAccuracyActionCellHtml(key, null);
+  }catch(err){
+    console.error(err);
+    icSetSyncStatus('err', 'Failed to clear omission: '+err.message);
+  }
+}
+
 function icRenderKPIs(groups, openGroups, rangeRecords){
   const grid = document.getElementById('icKpiGrid');
 
-  const openRecordCount = rangeRecords.filter(r=>r.status==='ACTI').length;
+  // Open Counts value comes from openGroups (always live, not range-
+  // filtered) rather than rangeRecords, so it stays a true live count of
+  // locations waiting — consistent with its "live" sub-label and with the
+  // Oldest Open Count card and Open Count Aging chart, which are also
+  // openGroups-based.
+  const openRecordCount = openGroups.length;
   const completedRecordCount = rangeRecords.filter(r=>r.status==='COUN').length;
   const recountRecordCount = rangeRecords.filter(r=>r.status==='RECO').length;
 

@@ -7,6 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
 <style>
   :root{
     --navy-deep:#00152E;
@@ -910,10 +912,24 @@
    Paste the deployed Web App /exec URL here once you've deployed
    Code.gs (Deploy > New deployment > Web app > Execute as: Me,
    Who has access: Anyone). */
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzlEkVVAE8suO2QgZkuFmpb7jgSi7UuI6VS6sMEx3KpxmxGx6mDIQiDxKa3bPjz26PQvw/exec";
-
-/* How often to poll the sheet for changes made by other users, in ms. */
-const POLL_INTERVAL_MS = 6000;
+/* ==================== FIREBASE CONFIG ====================
+   Shared "lenovo-general" project (same one the Inbound tracker uses).
+   This tool's data lives under its own /pickerAssignment node so it
+   doesn't collide with the Inbound tracker's data in the same project. */
+const firebaseConfig = {
+  apiKey: "AIzaSyCiCNiM1QBgwx-w0RD_hZE_26ZrUuajd88",
+  authDomain: "lenovo-general.firebaseapp.com",
+  databaseURL: "https://lenovo-general-default-rtdb.firebaseio.com",
+  projectId: "lenovo-general",
+  storageBucket: "lenovo-general.firebasestorage.app",
+  messagingSenderId: "589281353608",
+  appId: "1:589281353608:web:7f60f65acc7ea47e49a43d",
+  measurementId: "G-6KTKMZTY56"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const pullIdsRef = db.ref('pickerAssignment/pullIds');
+const warehouseOrdersRef = db.ref('pickerAssignment/warehouseOrders');
 
 /* ==================== CONSTANTS ==================== */
 const SLA_MS = { Manual: 60 * 60 * 1000, Auto: 5 * 60 * 60 * 1000 };
@@ -929,44 +945,61 @@ let lastSyncedAt = null;
 let syncInFlight = false;
 let syncError = false;
 
-/* ==================== SHEETS SYNC (via Apps Script) ==================== */
-async function fetchData(){
-  if (syncInFlight) return;
-  syncInFlight = true;
-  try {
-    const res = await fetch(APPS_SCRIPT_URL + '?action=getData');
-    const json = await res.json();
-    if (json.ok){
-      pullIds = json.data.pullIds || {};
-      warehouseOrders = json.data.warehouseOrders || {};
-      lastSyncedAt = Date.now();
-      syncError = false;
-    } else {
-      console.error('getData error:', json.error);
-      syncError = true;
-    }
-  } catch (err) {
-    console.error('fetchData failed:', err);
-    syncError = true;
-  } finally {
-    syncInFlight = false;
-    render();
-  }
+/* ==================== FIREBASE SYNC ====================
+   Live listeners replace the old poll-every-6s Apps Script fetch — changes
+   from any user (or tab) show up immediately instead of on the next poll. */
+let pullIdsLoaded = false;
+let warehouseOrdersLoaded = false;
+
+function markSynced(){
+  lastSyncedAt = Date.now();
+  syncError = false;
+  render();
 }
 
-async function postAction(action, payload){
-  const res = await fetch(APPS_SCRIPT_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // avoids CORS preflight against Apps Script
-    body: JSON.stringify(Object.assign({ action: action }, payload))
-  });
-  const json = await res.json();
-  if (!json.ok) throw new Error(json.error || 'Request failed');
-  return json;
-}
+pullIdsRef.on('value', snap => {
+  pullIds = snap.val() || {};
+  pullIdsLoaded = true;
+  markSynced();
+}, err => {
+  console.error('pullIds sync error:', err);
+  syncError = true;
+  render();
+});
 
-fetchData();
-setInterval(fetchData, POLL_INTERVAL_MS);
+warehouseOrdersRef.on('value', snap => {
+  warehouseOrders = snap.val() || {};
+  warehouseOrdersLoaded = true;
+  markSynced();
+}, err => {
+  console.error('warehouseOrders sync error:', err);
+  syncError = true;
+  render();
+});
+
+/* ---- Write helpers (replace the old postAction/Apps Script calls) ---- */
+async function addPullId(pullId, type, createdAt){
+  const ref = pullIdsRef.push();
+  await ref.set({ pullId, type, createdAt });
+  return ref.key;
+}
+async function addWarehouseOrder({ pullIdKey, pullId, woNumber, assignedPicker, addedAt }){
+  const ref = warehouseOrdersRef.push();
+  await ref.set({ pullIdKey, pullId, woNumber, assignedPicker, addedAt, completed: false });
+}
+async function reopenPullId(key){
+  await pullIdsRef.child(key).update({ cevaQAAt: null, lenovoQAAt: null, closedAt: null });
+}
+async function completeWarehouseOrder(key, completedAt){
+  await warehouseOrdersRef.child(key).update({ completed: true, completedAt });
+}
+async function markCevaQA(key, cevaQAAt){
+  await pullIdsRef.child(key).update({ cevaQAAt });
+}
+async function markLenovoQA(key, lenovoQAAt){
+  // Lenovo QA sign-off is also what archives the Pull ID.
+  await pullIdsRef.child(key).update({ lenovoQAAt, closedAt: lenovoQAAt });
+}
 
 /* ==================== HELPERS ==================== */
 function fmtElapsed(ms){
@@ -1699,22 +1732,20 @@ document.getElementById('saveAddBtn').addEventListener('click', async () => {
   try {
     let pullKey = matchedExistingPullKey;
     if (!pullKey){
-      const pullRes = await postAction('addPullId', { pullId: pullIdVal, type: selectedType, createdAt: now });
-      pullKey = pullRes.key;
+      pullKey = await addPullId(pullIdVal, selectedType, now);
     } else {
       const existing = pullIds[pullKey];
       if (existing && (existing.cevaQAAt || existing.lenovoQAAt)){
-        await postAction('reopenPullId', { key: pullKey });
+        await reopenPullId(pullKey);
       }
     }
-    await postAction('addWarehouseOrder', {
+    await addWarehouseOrder({
       pullIdKey: pullKey,
       pullId: pullIdVal,
       woNumber: woNumVal,
       assignedPicker: pickerVal,
       addedAt: now
     });
-    await fetchData();
     addModalOverlay.classList.remove('open');
   } catch (err) {
     errEl.textContent = 'Could not save: ' + err.message;
@@ -1894,20 +1925,19 @@ document.getElementById('saveBulkBtn').addEventListener('click', async () => {
     let pullKey = bulkMatchedExistingPullKey;
     if (!pullKey){
       saveBtn.innerHTML = '<span class="inline-spinner"></span>Creating Pull ID...';
-      const pullRes = await postAction('addPullId', { pullId: pullIdVal, type: bulkSelectedType, createdAt: now });
-      pullKey = pullRes.key;
+      pullKey = await addPullId(pullIdVal, bulkSelectedType, now);
     } else {
       const existing = pullIds[pullKey];
       if (existing && (existing.cevaQAAt || existing.lenovoQAAt)){
         saveBtn.innerHTML = '<span class="inline-spinner"></span>Reopening Pull ID...';
-        await postAction('reopenPullId', { key: pullKey });
+        await reopenPullId(pullKey);
       }
     }
 
     for (let i = 0; i < touchedRows.length; i++){
       const r = touchedRows[i];
       saveBtn.innerHTML = `<span class="inline-spinner"></span>Assigning ${i+1} of ${touchedRows.length}...`;
-      await postAction('addWarehouseOrder', {
+      await addWarehouseOrder({
         pullIdKey: pullKey,
         pullId: pullIdVal,
         woNumber: r.woNumber,
@@ -1916,7 +1946,6 @@ document.getElementById('saveBulkBtn').addEventListener('click', async () => {
       });
     }
 
-    await fetchData();
     bulkModalOverlay.classList.remove('open');
   } catch (err) {
     errEl.textContent = 'Could not save: ' + err.message;
@@ -1973,13 +2002,12 @@ document.getElementById('acceptConfirmBtn').addEventListener('click', async () =
   acceptBtn.innerHTML = '<span class="inline-spinner"></span>Saving...';
   try {
     if (type === 'completeWO'){
-      await postAction('completeWarehouseOrder', { key, completedAt: now });
+      await completeWarehouseOrder(key, now);
     } else if (type === 'cevaQA'){
-      await postAction('markCevaQA', { key, cevaQAAt: now });
+      await markCevaQA(key, now);
     } else if (type === 'lenovoQA'){
-      await postAction('markLenovoQA', { key, lenovoQAAt: now });
+      await markLenovoQA(key, now);
     }
-    await fetchData();
     confirmModalOverlay.classList.remove('open');
     pendingAction = null;
   } catch (err) {

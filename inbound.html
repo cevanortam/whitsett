@@ -82,27 +82,6 @@
   }
   .icon-btn:hover{color:var(--text);border-color:#2c4470;}
 
-  /* Modal */
-  .modal-overlay{
-    position:fixed;inset:0;background:rgba(4,8,16,0.65);backdrop-filter:blur(2px);
-    display:none;align-items:center;justify-content:center;z-index:100;padding:20px;
-  }
-  .modal-overlay.open{display:flex;}
-  .modal{
-    background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius);
-    width:100%;max-width:400px;padding:22px;
-  }
-  .modal h3{margin:0 0 16px;font-size:16px;}
-  .field{margin-bottom:14px;}
-  .field label{display:block;font-size:12px;color:var(--text-dim);margin-bottom:5px;font-weight:600;}
-  .field input{
-    width:100%;background:var(--bg-elevated);border:1px solid var(--border);color:var(--text);
-    padding:9px 11px;border-radius:var(--radius-sm);font-size:14px;
-  }
-  .field input:focus{outline:none;border-color:var(--accent);}
-  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;}
-  .modal-error{color:var(--red);font-size:12.5px;margin-top:-6px;margin-bottom:12px;display:none;}
-
   section{margin-bottom:30px;}
   .section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;}
   .section-head h2{margin:0;font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--text-dim);}
@@ -112,12 +91,14 @@
   .open-grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(240px,1fr));gap:14px;}
   .load-card{
     background:var(--bg-panel);border:1px solid var(--border-soft);border-radius:var(--radius);
-    padding:16px;border-left:4px solid var(--green);
+    padding:16px;border-left:4px solid var(--green);cursor:pointer;transition:border-color .15s, transform .1s;
   }
+  .load-card:hover{border-color:#2c4470;transform:translateY(-1px);}
   .load-card.at-risk{border-left-color:var(--amber);}
   .load-card.breached{border-left-color:var(--red);}
   .load-card .top-row{display:flex;justify-content:space-between;align-items:flex-start;}
-  .load-card .load-id{font-size:17px;font-weight:800;}
+  .load-card .load-id{font-size:17px;font-weight:800;display:flex;align-items:center;gap:6px;}
+  .load-card .issue-flag{color:var(--red);font-size:14px;}
   .load-card .badge{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;padding:3px 8px;border-radius:20px;white-space:nowrap;}
   .badge.on_time{background:var(--green-dim);color:var(--green);}
   .badge.at_risk{background:var(--amber-dim);color:var(--amber);}
@@ -147,14 +128,15 @@
     background:var(--bg-elevated);border:1px solid var(--border);color:var(--text);
     padding:7px 10px;border-radius:var(--radius-sm);font-size:12.5px;width:220px;
   }
-  .table-wrap{background:var(--bg-panel);border:1px solid var(--border-soft);border-radius:var(--radius);overflow:hidden;}
+  .table-wrap{background:var(--bg-panel);border:1px solid var(--border-soft);border-radius:var(--radius);overflow:hidden;overflow-x:auto;}
   table{width:100%;border-collapse:collapse;font-size:13px;}
   thead th{
     text-align:left;padding:10px 14px;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;
     color:var(--text-dim);border-bottom:1px solid var(--border-soft);background:var(--bg-panel-alt);white-space:nowrap;
   }
-  tbody td{padding:10px 14px;border-bottom:1px solid var(--border-soft);color:var(--text);}
+  tbody td{padding:10px 14px;border-bottom:1px solid var(--border-soft);color:var(--text);white-space:nowrap;}
   tbody tr:last-child td{border-bottom:none;}
+  tbody tr{cursor:pointer;}
   tbody tr:hover{background:rgba(255,255,255,0.02);}
   .sla-pill{font-size:11px;font-weight:800;padding:2px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:0.4px;}
   .sla-pill.met{background:var(--green-dim);color:var(--green);}
@@ -175,13 +157,55 @@
   @media (max-width:640px){
     main{padding:16px 14px 50px;}
     header{padding:12px 16px;}
-    .add-field input{width:130px;}
   }
 
-  /* ---------------- TV MODE ---------------- */
-  body.tv-mode header, body.tv-mode .add-bar, body.tv-mode section.archive-section, body.tv-mode footer{
-    display:none !important;
+  /* Modal */
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(4,8,16,0.65);backdrop-filter:blur(2px);
+    display:none;align-items:center;justify-content:center;z-index:100;padding:20px;
   }
+  .modal-overlay.open{display:flex;}
+  .modal{
+    background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius);
+    width:100%;max-width:680px;padding:24px;max-height:90vh;overflow-y:auto;
+  }
+  .modal h3{margin:0 0 4px;font-size:17px;}
+  .modal .modal-sub{font-size:12px;color:var(--text-dim);margin-bottom:18px;}
+  .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 16px;}
+  .field{margin-bottom:14px;}
+  .field.full{grid-column:1/-1;}
+  .field label{display:block;font-size:11.5px;color:var(--text-dim);margin-bottom:5px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;}
+  .field input, .field textarea{
+    width:100%;background:var(--bg-elevated);border:1px solid var(--border);color:var(--text);
+    padding:9px 11px;border-radius:var(--radius-sm);font-size:14px;font-family:inherit;
+  }
+  .field textarea{resize:vertical;min-height:60px;}
+  .field input:focus, .field textarea:focus{outline:none;border-color:var(--accent);}
+  .yesno{display:flex;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;}
+  .yesno button{
+    flex:1;background:var(--bg-elevated);border:none;color:var(--text-dim);padding:9px 0;font-size:13px;
+    cursor:pointer;font-weight:700;border-right:1px solid var(--border);
+  }
+  .yesno button:last-child{border-right:none;}
+  .yesno button.active{background:var(--accent);color:#191008;}
+  .yesno button.active.no-active{background:var(--red);color:#fff;}
+  .section-divider{border:none;border-top:1px solid var(--border-soft);margin:18px 0;}
+  .status-banner{
+    display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;
+    padding:12px 14px;border-radius:var(--radius-sm);margin-bottom:18px;border:1px solid var(--border);
+  }
+  .status-banner.in-progress{background:var(--amber-dim);border-color:var(--amber);}
+  .status-banner.completed{background:var(--green-dim);border-color:var(--green);}
+  .status-banner .status-text{font-size:13px;font-weight:700;}
+  .status-banner.completed .status-text{color:var(--green);}
+  .status-banner.in-progress .status-text{color:var(--amber);}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;}
+  .modal-error{color:var(--red);font-size:12.5px;margin-top:-6px;margin-bottom:12px;display:none;}
+
+  /* ---------------- TV MODE ---------------- */
+  body.tv-mode header, body.tv-mode footer{display:none !important;}
+  body.tv-mode section.archive-section{display:none !important;}
+  body.tv-mode section:not(.archive-section) .section-head{display:none;}
   body.tv-mode{overflow:hidden;}
   body.tv-mode main{max-width:none;padding:0;}
   .tv-header{
@@ -197,21 +221,35 @@
   .tv-exit{position:fixed;top:14px;right:14px;z-index:300;opacity:0.25;}
   .tv-exit:hover{opacity:1;}
   body:not(.tv-mode) .tv-exit{display:none;}
-  body.tv-mode section:not(.archive-section) .section-head{display:none;}
 
   body.tv-mode .open-grid{
-    grid-template-columns:repeat(auto-fill, minmax(320px,1fr));
+    grid-template-columns:repeat(auto-fill, minmax(440px,1fr));
     gap:22px;padding:32px 40px;
   }
-  body.tv-mode .load-card{padding:24px 26px;border-left-width:8px;}
-  body.tv-mode .load-card .load-id{font-size:28px;}
+  body.tv-mode .load-card{padding:24px 26px;border-left-width:8px;cursor:default;}
+  body.tv-mode .load-card:hover{transform:none;}
+  body.tv-mode .load-card .load-id{font-size:26px;}
   body.tv-mode .load-card .badge{font-size:13px;padding:4px 12px;}
-  body.tv-mode .load-card .meta strong{font-size:22px;}
-  body.tv-mode .load-card .meta div{font-size:13px;}
-  body.tv-mode .load-card .elapsed{font-size:34px;}
+  body.tv-mode .load-card .meta strong{font-size:20px;}
+  body.tv-mode .load-card .meta div{font-size:12.5px;}
+  body.tv-mode .load-card .elapsed{font-size:32px;}
   body.tv-mode .load-card .actions{display:none;}
   body.tv-mode .load-card .icon-btn{display:none;}
   body.tv-mode .empty-state{font-size:20px;padding:80px 20px;}
+
+  .tv-extra{display:none;}
+  body.tv-mode .load-card .tv-extra{
+    display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;
+    margin-top:14px;padding-top:14px;border-top:1px dashed var(--border);
+  }
+  body.tv-mode .load-card .tv-row{display:flex;flex-direction:column;}
+  body.tv-mode .load-card .tv-row span{font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.4px;}
+  body.tv-mode .load-card .tv-row strong{font-size:16px;color:var(--text);font-weight:700;margin-top:2px;word-break:break-word;}
+  .tv-issue{display:none;}
+  body.tv-mode .load-card .tv-issue{
+    display:block;margin-top:12px;padding:10px 12px;background:var(--red-dim);border:1px solid var(--red);
+    border-radius:6px;font-size:13.5px;color:var(--red);line-height:1.4;
+  }
 </style>
 </head>
 <body>
@@ -225,7 +263,7 @@
     </div>
   </div>
   <div class="header-right">
-    <div class="clock"><div>Today</div><div class="time" id="clockTime">--:--:--</div></div>
+    <div class="clock"><div id="clockDate">—</div><div class="time" id="clockTime">--:--:--</div></div>
     <button class="btn" id="btnTv">TV Mode</button>
   </div>
 </header>
@@ -257,7 +295,7 @@
     <div class="section-head">
       <h2 class="archive-toggle" id="archiveToggle"><span class="chev">▶</span> Archive <span class="count-pill" id="archiveCountPill">0</span></h2>
       <div class="filter-bar" style="margin:0;">
-        <input type="text" id="searchBox" placeholder="Search Load ID / Dock Door">
+        <input type="text" id="searchBox" placeholder="Search Load ID / Dock Door / Trailer #">
         <button class="btn btn-sm" id="btnExport">Export to Excel</button>
         <button class="btn btn-sm btn-danger" id="btnClearArchive">Clear Archive</button>
       </div>
@@ -266,7 +304,7 @@
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>Load ID</th><th>Dock Door</th><th>Pallets</th><th>Start Time</th><th>Closed Out</th><th>Duration</th><th>SLA</th><th></th></tr>
+            <tr><th>Load ID</th><th>Trailer #</th><th>Dock Door</th><th>Carrier</th><th>Pallets In Trailer / Container</th><th>Start Time</th><th>Putaway Completed</th><th>Duration</th><th>SLA</th><th></th></tr>
           </thead>
           <tbody id="archiveTableBody"></tbody>
         </table>
@@ -276,19 +314,68 @@
 
 </main>
 
-<footer><p>Loads are added as they arrive and closed out when unloading is complete. Closed loads move to the Archive below.</p></footer>
+<footer><p>Click a load to view or edit its details. A load closes once all putaways are completed — mark it complete from the card or the edit pane.</p></footer>
 
 <div class="modal-overlay" id="loadModalOverlay">
   <div class="modal">
-    <h3>New Inbound Load</h3>
-    <div class="field"><label>Load ID</label><input type="text" id="fLoadId" placeholder="e.g. 4471829"></div>
-    <div class="field"><label>Dock Door</label><input type="text" id="fDockDoor" placeholder="e.g. 12"></div>
-    <div class="field"><label>Number of Pallets</label><input type="number" id="fPallets" min="0" placeholder="e.g. 26"></div>
-    <div class="field"><label>Start Time</label><input type="datetime-local" id="fStartTime"></div>
+    <h3 id="loadModalTitle">New Inbound Load</h3>
+    <div class="modal-sub" id="loadModalSub">Enter what you know now — you can edit the rest later.</div>
+
+    <div id="statusBannerWrap"></div>
+
+    <div class="field-grid">
+      <div class="field"><label>Load ID</label><input type="text" id="fLoadId" placeholder="e.g. 4471829"></div>
+      <div class="field"><label>Trailer Number</label><input type="text" id="fTrailerNumber" placeholder="e.g. TR-5521"></div>
+
+      <div class="field"><label>Dock Door</label><input type="text" id="fDockDoor" placeholder="e.g. 12"></div>
+      <div class="field"><label>Carrier</label><input type="text" id="fCarrier" placeholder="e.g. Werner"></div>
+
+      <div class="field"><label>Unloader</label><input type="text" id="fUnloader" placeholder="Name"></div>
+      <div class="field"><label>Receiver</label><input type="text" id="fReceiver" placeholder="Name"></div>
+
+      <div class="field"><label>Pallets In Trailer / Container</label><input type="number" id="fPallets" min="0" placeholder="e.g. 26"></div>
+      <div class="field"><label>Seal #</label><input type="text" id="fSealNumber" placeholder="e.g. 0083421"></div>
+
+      <div class="field"><label>BOL</label><input type="text" id="fBol" placeholder="Bill of Lading #"></div>
+      <div class="field"><label>PO #</label><input type="text" id="fPoNumber" placeholder="Purchase Order #"></div>
+
+      <div class="field full"><label>Supplier</label><input type="text" id="fSupplier" placeholder="Supplier name"></div>
+
+      <div class="field"><label>Start Time</label><input type="datetime-local" id="fStartTime"></div>
+      <div class="field"><label>Time Unloaded</label><input type="datetime-local" id="fTimeUnloaded"></div>
+
+      <div class="field">
+        <label>High Value Parts?</label>
+        <div class="yesno" id="toggleHighValue">
+          <button type="button" data-val="no">No</button>
+          <button type="button" data-val="yes">Yes</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Issue With This Load?</label>
+        <div class="yesno" id="toggleIssue">
+          <button type="button" data-val="no">No</button>
+          <button type="button" data-val="yes">Yes</button>
+        </div>
+      </div>
+
+      <div class="field full" id="issueDetailsWrap" style="display:none;">
+        <hr class="section-divider" style="margin:0 0 14px;">
+        <div class="field">
+          <label>Description of Issue</label>
+          <textarea id="fIssueDescription" placeholder="What happened?"></textarea>
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Name of Supervisor Informed</label>
+          <input type="text" id="fSupervisorNotified" placeholder="Name">
+        </div>
+      </div>
+    </div>
+
     <div class="modal-error" id="loadModalError"></div>
     <div class="modal-actions">
       <button class="btn" id="btnCancelLoad">Cancel</button>
-      <button class="btn btn-primary" id="btnAdd">Save</button>
+      <button class="btn btn-primary" id="btnSaveLoad">Save</button>
     </div>
   </div>
 </div>
@@ -316,6 +403,14 @@ const AT_RISK_MS = 4 * 60 * 60 * 1000;
 let allLoads = [];
 let searchTerm = '';
 let archiveOpen = false;
+let editingLoadId = null; // null = creating a new load
+
+const TEXT_FIELDS = [
+  ['loadId','fLoadId'], ['trailerNumber','fTrailerNumber'], ['dockDoor','fDockDoor'],
+  ['carrier','fCarrier'], ['unloader','fUnloader'], ['receiver','fReceiver'],
+  ['sealNumber','fSealNumber'], ['bol','fBol'], ['poNumber','fPoNumber'],
+  ['supplier','fSupplier'], ['issueDescription','fIssueDescription'], ['supervisorNotified','fSupervisorNotified']
+];
 
 function toast(msg, kind){
   const t = document.getElementById('toast');
@@ -383,22 +478,40 @@ function renderOpen(){
   grid.innerHTML = open.map(l => {
     const badgeText = l.activeStatus === 'breached' ? 'Breached' : (l.activeStatus==='at_risk' ? 'At Risk' : 'On Time');
     const elapsedClass = l.activeStatus === 'breached' ? 'breached' : (l.activeStatus==='at_risk' ? 'at-risk' : '');
+    const issueFlag = l.hasIssue === 'yes' ? '<span class="issue-flag" title="Issue reported">⚠</span>' : '';
+    const tvExtra = `
+      <div class="tv-extra">
+        <div class="tv-row"><span>Trailer #</span><strong>${escapeHtml(l.trailerNumber || '—')}</strong></div>
+        <div class="tv-row"><span>Carrier</span><strong>${escapeHtml(l.carrier || '—')}</strong></div>
+        <div class="tv-row"><span>Unloader</span><strong>${escapeHtml(l.unloader || '—')}</strong></div>
+        <div class="tv-row"><span>Receiver</span><strong>${escapeHtml(l.receiver || '—')}</strong></div>
+        <div class="tv-row"><span>Seal #</span><strong>${escapeHtml(l.sealNumber || '—')}</strong></div>
+        <div class="tv-row"><span>High Value</span><strong>${l.highValue === 'yes' ? 'Yes' : 'No'}</strong></div>
+        <div class="tv-row"><span>BOL</span><strong>${escapeHtml(l.bol || '—')}</strong></div>
+        <div class="tv-row"><span>PO #</span><strong>${escapeHtml(l.poNumber || '—')}</strong></div>
+        <div class="tv-row"><span>Supplier</span><strong>${escapeHtml(l.supplier || '—')}</strong></div>
+        <div class="tv-row"><span>Start Time</span><strong>${fmtDateTime(l.startTime)}</strong></div>
+        <div class="tv-row"><span>Time Unloaded</span><strong>${fmtDateTime(l.timeUnloaded)}</strong></div>
+      </div>
+      ${l.hasIssue === 'yes' ? `<div class="tv-issue">⚠ <strong>Issue:</strong> ${escapeHtml(l.issueDescription || 'No description provided')}${l.supervisorNotified ? ' — Supervisor: ' + escapeHtml(l.supervisorNotified) : ''}</div>` : ''}
+    `;
     return `
-    <div class="load-card ${l.activeStatus.replace('_','-')}">
+    <div class="load-card ${l.activeStatus.replace('_','-')}" onclick="openEditModal('${l.id}')">
       <div class="top-row">
-        <div class="load-id">${escapeHtml(l.loadId)}</div>
+        <div class="load-id">${escapeHtml(l.loadId)}${issueFlag}</div>
         <div class="badge ${l.activeStatus}">${badgeText}</div>
       </div>
       <div class="meta">
         <div>Dock Door<strong>${escapeHtml(l.dockDoor || '—')}</strong></div>
-        <div>Pallets<strong>${l.pallets != null ? l.pallets : '—'}</strong></div>
+        <div>Pallets In Trailer<strong>${l.pallets != null ? l.pallets : '—'}</strong></div>
       </div>
+      ${tvExtra}
       <div class="elapsed-row">
         <div class="elapsed ${elapsedClass}">${fmtDuration(l.elapsed)}</div>
-        <button class="icon-btn" title="Remove" onclick="requestDelete('${l.id}')">🗑</button>
+        <button class="icon-btn" title="Remove" onclick="event.stopPropagation(); requestDelete('${l.id}')">🗑</button>
       </div>
       <div class="actions">
-        <button class="btn btn-primary" onclick="completeLoad('${l.id}')">Close Out</button>
+        <button class="btn btn-primary" onclick="event.stopPropagation(); completeLoad('${l.id}')">Mark Complete</button>
       </div>
     </div>`;
   }).join('');
@@ -412,7 +525,11 @@ function getFilteredArchive(){
   });
   if(searchTerm){
     const s = searchTerm.toLowerCase();
-    rows = rows.filter(l => (String(l.loadId)||'').toLowerCase().includes(s) || (String(l.dockDoor)||'').toLowerCase().includes(s));
+    rows = rows.filter(l =>
+      (String(l.loadId)||'').toLowerCase().includes(s) ||
+      (String(l.dockDoor)||'').toLowerCase().includes(s) ||
+      (String(l.trailerNumber)||'').toLowerCase().includes(s)
+    );
   }
   rows.sort((a,b) => new Date(b.completedTime) - new Date(a.completedTime));
   return rows;
@@ -423,19 +540,21 @@ function renderArchive(){
   document.getElementById('archiveCountPill').textContent = allLoads.filter(l => l.status === 'completed').length;
   const body = document.getElementById('archiveTableBody');
   if(!rows.length){
-    body.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-faint);padding:24px;">No closed-out loads yet.</td></tr>';
+    body.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-faint);padding:24px;">No closed-out loads yet.</td></tr>';
     return;
   }
   body.innerHTML = rows.map(l => `
-    <tr>
+    <tr onclick="openEditModal('${l.id}')">
       <td>${escapeHtml(l.loadId)}</td>
+      <td>${escapeHtml(l.trailerNumber || '—')}</td>
       <td>${escapeHtml(l.dockDoor || '—')}</td>
+      <td>${escapeHtml(l.carrier || '—')}</td>
       <td>${l.pallets != null ? l.pallets : '—'}</td>
       <td>${fmtDateTime(l.startTime)}</td>
       <td>${fmtDateTime(l.completedTime)}</td>
       <td>${fmtDuration(l.durationMs)}</td>
       <td><span class="sla-pill ${l.slaStatus==='met'?'met':'breach'}">${l.slaStatus==='met'?'Met':'Breached'}</span></td>
-      <td><button class="icon-btn" title="Remove" onclick="requestDelete('${l.id}')">🗑</button></td>
+      <td><button class="icon-btn" title="Remove" onclick="event.stopPropagation(); requestDelete('${l.id}')">🗑</button></td>
     </tr>
   `).join('');
 }
@@ -444,66 +563,164 @@ function renderAll(){ renderOpen(); renderArchive(); }
 setInterval(renderOpen, 15000);
 
 /* Clock */
+let lastClockDay = null;
 function tickClock(){
-  const s = new Date().toLocaleTimeString('en-US');
+  const now = new Date();
+  const s = now.toLocaleTimeString('en-US');
   document.getElementById('clockTime').textContent = s;
   document.getElementById('tvClock').textContent = s;
+  const day = now.getDate();
+  if(day !== lastClockDay){
+    document.getElementById('clockDate').textContent = now.toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric', year:'numeric'});
+    lastClockDay = day;
+  }
 }
 setInterval(tickClock, 1000); tickClock();
 
-/* ---------------- New Load modal ---------------- */
+/* ---------------- Yes/No toggle helper ---------------- */
+function setupYesNo(containerId, initial, onChange){
+  const el = document.getElementById(containerId);
+  let value = initial || 'no';
+  function paint(){
+    [...el.children].forEach(btn => {
+      const active = btn.dataset.val === value;
+      btn.classList.toggle('active', active);
+      btn.classList.toggle('no-active', active && value === 'no');
+    });
+  }
+  el.onclick = null;
+  el.addEventListener('click', e => {
+    if(e.target.tagName !== 'BUTTON') return;
+    value = e.target.dataset.val;
+    paint();
+    if(onChange) onChange(value);
+  });
+  paint();
+  return {get: () => value, set: v => { value = v; paint(); }};
+}
+
+let highValueToggle, issueToggle;
+
+function initToggles(){
+  highValueToggle = setupYesNo('toggleHighValue', 'no');
+  issueToggle = setupYesNo('toggleIssue', 'no', val => {
+    document.getElementById('issueDetailsWrap').style.display = val === 'yes' ? 'block' : 'none';
+  });
+}
+initToggles();
+
+/* ---------------- New / Edit Load modal ---------------- */
 const loadModalOverlay = document.getElementById('loadModalOverlay');
 
-document.getElementById('btnNewLoad').addEventListener('click', openLoadModal);
+document.getElementById('btnNewLoad').addEventListener('click', () => openLoadModal(null));
 document.getElementById('btnCancelLoad').addEventListener('click', () => loadModalOverlay.classList.remove('open'));
 loadModalOverlay.addEventListener('click', e => { if(e.target === loadModalOverlay) loadModalOverlay.classList.remove('open'); });
 
-function openLoadModal(){
-  document.getElementById('fLoadId').value = '';
-  document.getElementById('fDockDoor').value = '';
-  document.getElementById('fPallets').value = '';
-  document.getElementById('fStartTime').value = toLocalInputValue(new Date());
-  document.getElementById('loadModalError').style.display = 'none';
+function openLoadModal(id){
+  editingLoadId = id;
+  const l = id ? allLoads.find(x => x.id === id) : null;
+  const errEl = document.getElementById('loadModalError');
+  errEl.style.display = 'none';
+
+  document.getElementById('loadModalTitle').textContent = l ? 'Edit Inbound Load' : 'New Inbound Load';
+  document.getElementById('loadModalSub').textContent = l ? 'Update load details below.' : 'Enter what you know now — you can edit the rest later.';
+
+  TEXT_FIELDS.forEach(([key, elId]) => { document.getElementById(elId).value = l ? (l[key] || '') : ''; });
+  document.getElementById('fPallets').value = l && l.pallets != null ? l.pallets : '';
+  document.getElementById('fStartTime').value = toLocalInputValue(l ? new Date(l.startTime) : new Date());
+  document.getElementById('fTimeUnloaded').value = l && l.timeUnloaded ? toLocalInputValue(new Date(l.timeUnloaded)) : '';
+
+  highValueToggle.set(l && l.highValue === 'yes' ? 'yes' : 'no');
+  issueToggle.set(l && l.hasIssue === 'yes' ? 'yes' : 'no');
+  document.getElementById('issueDetailsWrap').style.display = (l && l.hasIssue === 'yes') ? 'block' : 'none';
+
+  renderStatusBanner(l);
+
   loadModalOverlay.classList.add('open');
   setTimeout(() => document.getElementById('fLoadId').focus(), 50);
 }
+function openEditModal(id){ openLoadModal(id); }
 
-document.getElementById('btnAdd').addEventListener('click', addLoad);
-[document.getElementById('fLoadId'), document.getElementById('fDockDoor'), document.getElementById('fPallets')].forEach(el => {
-  el.addEventListener('keydown', e => { if(e.key === 'Enter') addLoad(); });
-});
-
-function addLoad(){
-  const loadId = document.getElementById('fLoadId').value.trim();
-  const dockDoor = document.getElementById('fDockDoor').value.trim();
-  const pallets = document.getElementById('fPallets').value;
-  const startTimeVal = document.getElementById('fStartTime').value;
-  const errEl = document.getElementById('loadModalError');
-
-  if(!loadId){ errEl.textContent = 'Load ID is required.'; errEl.style.display = 'block'; return; }
-  const startTimeIso = startTimeVal ? new Date(startTimeVal).toISOString() : new Date().toISOString();
-
-  loadsRef.push({
-    loadId, dockDoor, pallets: pallets === '' ? null : Number(pallets),
-    startTime: startTimeIso, status: 'in_progress', completedTime: null,
-    createdAt: new Date().toISOString()
-  }).then(() => {
-    toast('Load added', 'ok');
-    loadModalOverlay.classList.remove('open');
-  }).catch(e => { errEl.textContent = e.message; errEl.style.display = 'block'; });
+function renderStatusBanner(l){
+  const wrap = document.getElementById('statusBannerWrap');
+  if(!l){ wrap.innerHTML = ''; return; }
+  if(l.status === 'completed'){
+    wrap.innerHTML = `
+      <div class="status-banner completed">
+        <div class="status-text">✓ Putaway Completed — ${fmtDateTime(l.completedTime)}</div>
+        <button type="button" class="btn btn-sm" onclick="reopenLoad('${l.id}')">Reopen Load</button>
+      </div>`;
+  } else {
+    wrap.innerHTML = `
+      <div class="status-banner in-progress">
+        <div class="status-text">In Progress — putaways not yet complete</div>
+        <button type="button" class="btn btn-sm btn-primary" onclick="completeLoad('${l.id}')">Mark Putaway Complete</button>
+      </div>`;
+  }
 }
 
-/* ---------------- Complete / delete ---------------- */
+document.getElementById('btnSaveLoad').addEventListener('click', saveLoad);
+
+function saveLoad(){
+  const errEl = document.getElementById('loadModalError');
+  const loadId = document.getElementById('fLoadId').value.trim();
+  if(!loadId){ errEl.textContent = 'Load ID is required.'; errEl.style.display = 'block'; return; }
+
+  const startVal = document.getElementById('fStartTime').value;
+  const unloadedVal = document.getElementById('fTimeUnloaded').value;
+
+  const data = {
+    dockDoor: document.getElementById('fDockDoor').value.trim(),
+    trailerNumber: document.getElementById('fTrailerNumber').value.trim(),
+    carrier: document.getElementById('fCarrier').value.trim(),
+    unloader: document.getElementById('fUnloader').value.trim(),
+    receiver: document.getElementById('fReceiver').value.trim(),
+    sealNumber: document.getElementById('fSealNumber').value.trim(),
+    bol: document.getElementById('fBol').value.trim(),
+    poNumber: document.getElementById('fPoNumber').value.trim(),
+    supplier: document.getElementById('fSupplier').value.trim(),
+    loadId,
+    pallets: document.getElementById('fPallets').value === '' ? null : Number(document.getElementById('fPallets').value),
+    startTime: startVal ? new Date(startVal).toISOString() : new Date().toISOString(),
+    timeUnloaded: unloadedVal ? new Date(unloadedVal).toISOString() : null,
+    highValue: highValueToggle.get(),
+    hasIssue: issueToggle.get(),
+    issueDescription: issueToggle.get() === 'yes' ? document.getElementById('fIssueDescription').value.trim() : '',
+    supervisorNotified: issueToggle.get() === 'yes' ? document.getElementById('fSupervisorNotified').value.trim() : ''
+  };
+
+  if(editingLoadId){
+    loadsRef.child(editingLoadId).update(data)
+      .then(() => { toast('Load updated', 'ok'); loadModalOverlay.classList.remove('open'); })
+      .catch(e => { errEl.textContent = e.message; errEl.style.display = 'block'; });
+  } else {
+    data.status = 'in_progress';
+    data.completedTime = null;
+    data.createdAt = new Date().toISOString();
+    loadsRef.push(data)
+      .then(() => { toast('Load added', 'ok'); loadModalOverlay.classList.remove('open'); })
+      .catch(e => { errEl.textContent = e.message; errEl.style.display = 'block'; });
+  }
+}
+
+/* ---------------- Complete / reopen / delete ---------------- */
 function completeLoad(id){
   loadsRef.child(id).update({status:'completed', completedTime: new Date().toISOString()})
-    .then(() => toast('Load closed out', 'ok'))
+    .then(() => {
+      toast('Load marked putaway complete', 'ok');
+      if(editingLoadId === id) loadModalOverlay.classList.remove('open');
+    })
     .catch(e => toast(e.message, 'err'));
 }
-
+function reopenLoad(id){
+  loadsRef.child(id).update({status:'in_progress', completedTime: null})
+    .then(() => { toast('Load reopened', 'ok'); loadModalOverlay.classList.remove('open'); })
+    .catch(e => toast(e.message, 'err'));
+}
 function requestDelete(id){
   if(!confirm('Remove this load? This cannot be undone.')) return;
   loadsRef.child(id).remove()
-    .then(() => toast('Load removed', 'ok'))
+    .then(() => { toast('Load removed', 'ok'); if(editingLoadId === id) loadModalOverlay.classList.remove('open'); })
     .catch(e => toast(e.message, 'err'));
 }
 
@@ -534,9 +751,15 @@ document.getElementById('btnExport').addEventListener('click', () => {
   const rows = getFilteredArchive();
   if(!rows.length){ toast('No archived loads to export'); return; }
   const data = rows.map(l => ({
-    'Load ID': l.loadId, 'Dock Door': l.dockDoor, 'Pallets': l.pallets,
-    'Start Time': fmtDateTime(l.startTime), 'Closed Out': fmtDateTime(l.completedTime),
-    'Duration': fmtDuration(l.durationMs), 'SLA Status': l.slaStatus === 'met' ? 'Met' : 'Breached'
+    'Load ID': l.loadId, 'Trailer Number': l.trailerNumber, 'Dock Door': l.dockDoor, 'Carrier': l.carrier,
+    'Unloader': l.unloader, 'Receiver': l.receiver, 'Pallets In Trailer / Container': l.pallets,
+    'Seal #': l.sealNumber, 'BOL': l.bol, 'PO #': l.poNumber, 'Supplier': l.supplier,
+    'High Value Parts': l.highValue === 'yes' ? 'Yes' : 'No',
+    'Start Time': fmtDateTime(l.startTime), 'Time Unloaded': fmtDateTime(l.timeUnloaded),
+    'Putaway Completed': fmtDateTime(l.completedTime), 'Duration': fmtDuration(l.durationMs),
+    'SLA Status': l.slaStatus === 'met' ? 'Met' : 'Breached',
+    'Issue?': l.hasIssue === 'yes' ? 'Yes' : 'No', 'Issue Description': l.issueDescription,
+    'Supervisor Informed': l.supervisorNotified
   }));
   const ws = XLSX.utils.json_to_sheet(data);
   const wb = XLSX.utils.book_new();

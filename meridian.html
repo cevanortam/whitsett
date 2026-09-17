@@ -121,6 +121,7 @@
   .field input:focus, .field select:focus{outline:none;border-color:var(--amber);}
   .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
   .field-grid3{display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:8px;}
+  .field-grid4{display:grid;grid-template-columns:1fr 1fr 1fr 1.4fr;gap:8px;}
   .prefix-group{display:flex;align-items:stretch;border-radius:7px;overflow:hidden;border:1px solid var(--border);background:var(--panel-alt);}
   .prefix-group:focus-within{border-color:var(--amber);}
   .prefix-group .prefix{display:flex;align-items:center;padding:0 9px;font-family:var(--mono);font-size:12.5px;color:var(--muted);background:var(--border-soft);border-right:1px solid var(--border);white-space:nowrap;}
@@ -732,9 +733,10 @@
     <div class="pin-section">
       <h4 class="section-title">Pin a SKU</h4>
       <p class="hint">Pins a SKU to a fixed aisle — always wins over velocity and BOM grouping (e.g. oversized items, customer-requested placement).</p>
-      <div class="field-grid3">
+      <div class="field-grid4">
         <input id="planSku" type="text" placeholder="SKU">
         <input id="planAisle" type="number" min="0" placeholder="Aisle">
+        <input id="planLevel" type="text" placeholder="Level (optional)">
         <input id="planNote" type="text" placeholder="Note (optional)">
       </div>
       <button class="btn ghost sm" id="planAddBtn" style="width:100%;margin-top:8px;">Add to plan</button>
@@ -1202,12 +1204,6 @@
       <div class="cl-preview-shell">
         <div id="clPreviewLabel"></div>
       </div>
-    </div>
-
-    <div class="card" id="clBatchZone" style="display:none;">
-      <h3 style="margin:0 0 4px 0;font-family:var(--disp);font-size:14px;text-transform:uppercase;letter-spacing:0.5px;">Case label quantities</h3>
-      <p class="hint" id="clBatchHint">Editable per case before printing.</p>
-      <div class="sheet-wrap"><div id="clBatchTableWrap"></div></div>
     </div>
   </div>
 </div>
@@ -1746,9 +1742,10 @@ function recommendAisle(rawInput){
   const partnerLocDetail = buildPartnerDetail(product);
 
   if(planEntry){
-    const reasons = [`Fixed location per manual slotting plan${planEntry.note ? ' — ' + planEntry.note : ''}.`];
+    const levelNote = planEntry.level ? ` (level ${planEntry.level})` : '';
+    const reasons = [`Fixed location per manual slotting plan${levelNote}${planEntry.note ? ' — ' + planEntry.note : ''}.`];
     return {
-      product, desc, cls, manualAssignment:true, aisle: planEntry.aisle,
+      product, desc, cls, manualAssignment:true, aisle: planEntry.aisle, level: planEntry.level || null,
       targetZone: zones.zoneOfAisle.get(planEntry.aisle) || null,
       alternates: [], reasons, partnerLocDetail
     };
@@ -2084,6 +2081,7 @@ function renderResult(res){
 
   const clsBadge = `<span class="badge class${res.cls}">${res.cls==='New'?'NEW SKU':'CLASS '+res.cls}</span>`;
   const manualBadge = res.manualAssignment ? `<span class="badge warn">FIXED PLAN</span>` : '';
+  const levelBadge = res.level ? `<span class="badge plain">LEVEL ${esc(res.level)}</span>` : '';
   const bomBadge = res.bomGroup ? `<span class="badge warn">BOM: ${esc(res.bomGroup)}</span>` : '';
   const overrideBadge = res.manualOverride ? `<span class="badge warn">OVERRIDE</span>` : '';
   const qtyBadge = res.qty ? `<span class="badge plain">QTY ${esc(res.qty)}</span>` : '';
@@ -2094,7 +2092,7 @@ function renderResult(res){
     <div class="tag">PART ${esc(res.product)}${res.desc? ' — '+esc(res.desc):''}</div>
     <div class="aisle-label">Recommended aisle</div>
     <div class="aisle-num">${esc(aisleDisplay)}</div>
-    <div class="meta-row">${overrideBadge}${manualBadge}${bomBadge}${clsBadge}${qtyBadge}${huBadge}</div>
+    <div class="meta-row">${overrideBadge}${manualBadge}${levelBadge}${bomBadge}${clsBadge}${qtyBadge}${huBadge}</div>
     <ul class="reasons">${res.reasons.map(r=>`<li>${esc(r)}</li>`).join('')}</ul>
   `;
 
@@ -2154,25 +2152,27 @@ function wirePlan(){
     const sku = norm(document.getElementById('planSku').value);
     const aisleRaw = document.getElementById('planAisle').value;
     const aisle = parseInt(aisleRaw, 10);
+    const level = norm(document.getElementById('planLevel').value);
     const note = norm(document.getElementById('planNote').value);
     if(!sku || isNaN(aisle)){ toast('Enter a SKU and an aisle number.', true); return; }
     SLOTTING_PLAN = SLOTTING_PLAN.filter(p=> !flexEquals(p.sku, sku));
-    SLOTTING_PLAN.push({sku, aisle, note, addedAt:new Date().toISOString()});
+    SLOTTING_PLAN.push({sku, aisle, level, note, addedAt:new Date().toISOString()});
     persist(LS.plan, SLOTTING_PLAN);
     document.getElementById('planSku').value = '';
     document.getElementById('planAisle').value = '';
+    document.getElementById('planLevel').value = '';
     document.getElementById('planNote').value = '';
     renderPlanTable();
     refreshDataStatus();
-    toast(`${sku} pinned to aisle ${String(aisle).padStart(2,'0')}.`);
+    toast(`${sku} pinned to aisle ${String(aisle).padStart(2,'0')}${level ? ', level ' + level : ''}.`);
   });
 }
 function renderPlanTable(){
   const wrap = document.getElementById('planTableWrap');
   if(!SLOTTING_PLAN.length){ wrap.innerHTML = '<div class="plan-empty">No fixed placements yet.</div>'; return; }
-  let html = '<table class="plan-table"><thead><tr><th>SKU</th><th>Aisle</th><th>Note</th><th></th></tr></thead><tbody>';
+  let html = '<table class="plan-table"><thead><tr><th>SKU</th><th>Aisle</th><th>Level</th><th>Note</th><th></th></tr></thead><tbody>';
   SLOTTING_PLAN.slice().sort((a,b)=>a.sku.localeCompare(b.sku)).forEach(p=>{
-    html += `<tr><td>${esc(p.sku)}</td><td>${String(p.aisle).padStart(2,'0')}</td><td class="note-cell">${esc(p.note||'')}</td><td><button class="btn danger-outline icon-x" data-remove-plan="${esc(p.sku)}">&times;</button></td></tr>`;
+    html += `<tr><td>${esc(p.sku)}</td><td>${String(p.aisle).padStart(2,'0')}</td><td>${esc(p.level||'—')}</td><td class="note-cell">${esc(p.note||'')}</td><td><button class="btn danger-outline icon-x" data-remove-plan="${esc(p.sku)}">&times;</button></td></tr>`;
   });
   html += '</tbody></table>';
   wrap.innerHTML = html;
@@ -3533,10 +3533,10 @@ function savePrintLog(){
   try{ localStorage.setItem(CL_PRINTLOG_KEY, serialized); }catch(e){}
   if(window.MeridianSync) window.MeridianSync.save(CL_PRINTLOG_KEY, serialized);
 }
-function recordPrintEvent(part, totalUnits, caseCount){
+function recordPrintEvent(part, unitsPerCase, caseCount){
   const now = new Date();
   const dateKey = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
-  printLog.push({ date: dateKey, ts: now.toISOString(), part: part, totalUnits: totalUnits, labels: caseCount });
+  printLog.push({ date: dateKey, ts: now.toISOString(), part: part, unitsPerCase: unitsPerCase, labels: caseCount });
   if(printLog.length > 20000) printLog = printLog.slice(-20000);
   savePrintLog();
 }
@@ -3551,10 +3551,7 @@ function exportPrintLog(){
     if(!byDate[d]) byDate[d] = { labels: 0, jobs: 0, units: 0 };
     byDate[d].labels += entry.labels || 0;
     byDate[d].jobs += 1;
-    // Prefer the actual per-label total (quantities may have been edited
-    // per case); fall back to the old unitsPerCase*labels shape for any
-    // print-log entries recorded before per-case editing existed.
-    byDate[d].units += (entry.totalUnits != null) ? entry.totalUnits : (entry.unitsPerCase || 0) * (entry.labels || 0);
+    byDate[d].units += (entry.unitsPerCase || 0) * (entry.labels || 0);
   });
   const dates = Object.keys(byDate).sort();
   const rows = [['Date','Labels Printed','Print Jobs','Total Units']];
@@ -3593,11 +3590,7 @@ const exportBtn = document.getElementById('clExportBtn');
 const previewLabel = document.getElementById('clPreviewLabel');
 const statusPill = document.getElementById('clStatusPill');
 const printRoot = document.getElementById('caseLabelPrintRoot');
-const batchZone = document.getElementById('clBatchZone');
-const batchHint = document.getElementById('clBatchHint');
-const batchTableWrap = document.getElementById('clBatchTableWrap');
 let printLog = loadPrintLog();
-let lastBuiltCaseCount = null; // tracks the case count the qty table was last built for, so unrelated field edits (e.g. part number) don't wipe operator edits to per-label quantities
 
 /* ---- learned case quantities (median of what's been scanned per part) ---- */
 let unitsHistory = {};
@@ -3715,51 +3708,6 @@ function buildLabelHTML(part, unitsPerCase, caseIndex, totalCases, mspn, isPrevi
     </div>`;
 }
 
-/* ---- editable per-case quantity table (mirrors the Putaway "Batch labels" table) ----
-   Rebuilt only when the case count itself changes, so edits to individual
-   quantities survive unrelated field changes (e.g. re-typing the part number). */
-function getTableQuantities(){
-  return Array.from(batchTableWrap.querySelectorAll('.cl-case-qty')).map(el=>{
-    const n = parseInt(el.value, 10);
-    return isNaN(n) || n < 0 ? 0 : n;
-  });
-}
-function tableTotalUnits(){
-  return getTableQuantities().reduce((a,b)=>a+b, 0);
-}
-function refreshBatchTable(){
-  const { units, cases } = currentValues();
-  const validUnits = !isNaN(units) && units > 0;
-  const validCases = !isNaN(cases) && cases > 0 && cases <= MAX_CASES;
-
-  if(!validUnits || !validCases){
-    batchZone.style.display = 'none';
-    batchTableWrap.innerHTML = '';
-    lastBuiltCaseCount = null;
-    return;
-  }
-
-  batchZone.style.display = 'block';
-  if(cases === lastBuiltCaseCount){
-    batchHint.textContent = `${cases} label${cases===1?'':'s'} \u2014 editable per case before printing.`;
-    return;
-  }
-
-  let rows = '<table><thead><tr><th>#</th><th>Qty</th></tr></thead><tbody>';
-  for(let i=1;i<=cases;i++){
-    rows += `<tr><td>${i}</td><td><input type="number" class="cl-case-qty" min="0" value="${esc(units)}"></td></tr>`;
-  }
-  rows += '</tbody></table>';
-  batchTableWrap.innerHTML = `<div class="batch-table-wrap">${rows}</div>`;
-  batchHint.textContent = `${cases} label${cases===1?'':'s'} \u2014 editable per case before printing.`;
-  lastBuiltCaseCount = cases;
-}
-batchTableWrap.addEventListener('input', function(e){
-  if(e.target.classList && e.target.classList.contains('cl-case-qty')){
-    statUnits.textContent = tableTotalUnits();
-  }
-});
-
 function refresh(){
   const { part, mspn, partError, units, cases } = currentValues();
   updatePartHint();
@@ -3767,10 +3715,8 @@ function refresh(){
   const validCases = !isNaN(cases) && cases > 0 && cases <= MAX_CASES;
   const validPart = part.length > 0 && !partError;
 
-  refreshBatchTable();
-
   const labelCount = validCases ? cases : 0;
-  const totalUnits = (validUnits && validCases) ? (lastBuiltCaseCount === cases ? tableTotalUnits() : units * cases) : 0;
+  const totalUnits = (validUnits && validCases) ? units * cases : 0;
   statCases.textContent = labelCount;
   statUnits.textContent = totalUnits;
 
@@ -3786,19 +3732,11 @@ function printCaseLabels(){
   if(!part || partError || isNaN(units) || units <= 0 || isNaN(cases) || cases <= 0) return;
   const n = Math.min(cases, MAX_CASES);
 
-  // Use the operator-edited per-case quantities from the table when it's
-  // built for this exact case count; otherwise fall back to the flat
-  // units-per-case value for every label.
-  const qtyList = (lastBuiltCaseCount === n) ? getTableQuantities() : [];
   const html = [];
-  for(let i=1;i<=n;i++){
-    const rowUnits = (qtyList.length === n) ? qtyList[i-1] : units;
-    html.push(buildLabelHTML(part, rowUnits, i, n, mspn));
-  }
+  for(let i=1;i<=n;i++){ html.push(buildLabelHTML(part, units, i, n, mspn)); }
   printRoot.innerHTML = html.join('');
 
-  const totalUnits = (qtyList.length === n) ? qtyList.reduce((a,b)=>a+b, 0) : units * n;
-  pendingPrint = { part, units, n, totalUnits };
+  pendingPrint = { part, units, n };
 
   // The 4x6 label modules (Putaway / Pick Ticket) each define their own
   // @page rule; since @page is a single global cascade, we can't just add
@@ -3829,7 +3767,7 @@ document.getElementById('clPrintConfirmYes').addEventListener('click', function(
   if(!pendingPrint) return;
   recordUnitsForPart(pendingPrint.part, pendingPrint.units);
   updateUnitsSuggestion();
-  recordPrintEvent(pendingPrint.part, pendingPrint.totalUnits, pendingPrint.n);
+  recordPrintEvent(pendingPrint.part, pendingPrint.units, pendingPrint.n);
   if(statusPill){
     statusPill.textContent = `Printed ${pendingPrint.n} label${pendingPrint.n===1?'':'s'}`;
     statusPill.classList.add('ok');

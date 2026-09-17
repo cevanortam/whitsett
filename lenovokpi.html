@@ -123,13 +123,57 @@
   @media (max-width:1500px){.charts-grid{grid-template-columns:repeat(3,1fr);}}
   @media (max-width:1100px){.charts-grid{grid-template-columns:repeat(2,1fr);}}
   @media (max-width:700px){.charts-grid{grid-template-columns:1fr;}}
+
+  .xs-charts-grid{
+    display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-bottom:26px;
+  }
+  @media (max-width:900px){.xs-charts-grid{grid-template-columns:1fr;}}
   .chart-card{
     background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius);
-    padding:16px 16px 8px;
+    padding:16px 16px 8px;position:relative;cursor:pointer;
+    transition:box-shadow .15s ease, border-color .15s ease;
   }
+  .chart-card:hover{border-color:var(--info);box-shadow:0 0 0 1px var(--info), 0 6px 18px rgba(0,0,0,0.35);}
+  .chart-card .expand-hint{
+    position:absolute;top:10px;right:12px;font-size:10px;color:var(--text-faint);
+    opacity:0;transition:opacity .15s ease;pointer-events:none;display:flex;align-items:center;gap:4px;
+  }
+  .chart-card:hover .expand-hint{opacity:1;}
   .chart-card h3{margin:0 0 2px;font-size:12.5px;font-weight:700;}
   .chart-card .chart-note{font-size:10.5px;color:var(--text-faint);margin-bottom:8px;}
   .chart-card .chart-holder{position:relative;height:190px;}
+
+  .chart-modal-overlay{
+    display:none;position:fixed;inset:0;background:rgba(6,12,22,0.72);z-index:1000;
+    align-items:center;justify-content:center;padding:24px;
+  }
+  .chart-modal-overlay.open{display:flex;}
+  .chart-modal{
+    background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius);
+    width:min(1100px,94vw);max-height:90vh;display:flex;flex-direction:column;
+    box-shadow:0 20px 60px rgba(0,0,0,0.5);
+  }
+  .chart-modal-head{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:16px 18px;border-bottom:1px solid var(--card-border);
+  }
+  .chart-modal-head h3{margin:0;font-size:15px;font-weight:700;color:var(--text);}
+  .chart-modal-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .chart-modal-btn{
+    background:var(--bg-alt);border:1px solid var(--card-border-light);
+    color:var(--text-dim);font-size:12px;font-weight:600;border-radius:6px;
+    padding:7px 12px;cursor:pointer;display:flex;align-items:center;gap:6px;
+  }
+  .chart-modal-btn:hover{border-color:var(--info);color:#fff;}
+  .chart-modal-btn.primary{background:var(--info);border-color:var(--info);color:#fff;}
+  .chart-modal-close{
+    background:transparent;border:none;color:var(--text-faint);font-size:20px;line-height:1;
+    cursor:pointer;padding:4px 8px;border-radius:6px;
+  }
+  .chart-modal-close:hover{color:#fff;background:rgba(255,255,255,0.08);}
+  .chart-modal-body{padding:18px;overflow:auto;display:flex;align-items:center;justify-content:center;}
+  .chart-modal-body img{max-width:100%;height:auto;border-radius:8px;background:var(--bg);}
+  .chart-modal-status{font-size:11px;color:var(--text-faint);padding:0 18px 14px;min-height:14px;}
 
   .table-section{
     background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius);
@@ -552,7 +596,7 @@
 
     <section class="xs-kpi-grid" id="xsKpiGrid"></section>
 
-    <section class="charts-grid">
+    <section class="xs-charts-grid">
       <div class="chart-card">
         <h3 id="xsTitleFillRate">Fill Rate by Day</h3>
         <div class="chart-holder"><canvas id="xsChartFillRate"></canvas></div>
@@ -796,8 +840,6 @@
       </div>
       <label class="btn" for="icFileInput">&#8593; Upload Cycle Count Results</label>
       <input type="file" id="icFileInput" accept=".xlsx,.xls">
-      <label class="btn secondary" for="icPricingFileInput">&#8593; Upload Pricing Sheet</label>
-      <input type="file" id="icPricingFileInput" accept=".xlsx,.xls">
     </div>
   </header>
 
@@ -808,15 +850,9 @@
     <a class="site-tab" data-tab="outbound" href="#outbound">Outbound</a>
   </nav>
 
-  <div class="segmented" id="icSubpageToggle" style="margin-bottom:18px;">
-    <button type="button" class="seg-btn active" data-icsubpage="counts">Cycle Counts</button>
-    <button type="button" class="seg-btn" data-icsubpage="value">Inventory Value ($)</button>
-  </div>
-
-  <div id="icSubpageCounts">
-
   <section class="kpi-grid" id="icKpiGrid"></section>
   <div id="icNote" style="font-size:12px;color:var(--text-faint);margin:-12px 0 24px;"></div>
+
 
   <section class="charts-grid">
     <div class="chart-card">
@@ -886,68 +922,6 @@
     </div>
   </section>
 
-  </div>
-
-  <div id="icSubpageValue" style="display:none;">
-
-  <div class="status-line" style="margin:-6px 0 18px;">
-    <span id="icPricingSyncStatus"><span class="dot" id="icPricingSyncDot"></span><b id="icPricingSyncText">No pricing sheet uploaded</b></span>
-    <span><b id="icPricingCount">0</b> SKUs priced</span>
-    <span id="icPricingLastUploadLine" style="display:none;">Last upload: <b id="icPricingLastUploadTime">&mdash;</b></span>
-  </div>
-  <div id="icValueScopeNote" style="font-size:12px;color:var(--text-faint);margin:-12px 0 10px;">
-    Reflects the bin/product locations counted in this system for the selected period &mdash; a subset of the
-    warehouse, not a full physical inventory.
-  </div>
-  <div id="icValueNote" style="font-size:12px;color:var(--warn);margin:0 0 20px;"></div>
-
-  <section class="table-section" style="margin-bottom:20px;">
-    <div class="table-section-head">
-      <div>
-        <h2>Inventory Results (Net Performance)</h2>
-        <div class="meta">Uses the final, recount-corrected count per location &mdash; matches "Overall Unit Accuracy" on this tab</div>
-      </div>
-      <button type="button" class="btn secondary" id="icValueExportBtn">&#8595; Export to Excel</button>
-    </div>
-    <div style="overflow-x:auto;">
-      <table>
-        <thead>
-          <tr>
-            <th>Period</th><th>Location</th><th>Qty Pieces WMS</th><th>Qty Pieces Physical</th>
-            <th>On Hand Inventory $ &ndash; WMS</th><th>On Hand Inventory $ Physical</th>
-            <th>Negative Variance</th><th>Positive Variance</th><th>Net Variance</th><th>Gross Variance</th>
-            <th>Net Accuracy</th><th>Gross Accuracy</th>
-          </tr>
-        </thead>
-        <tbody id="icValueNetTableBody"></tbody>
-      </table>
-    </div>
-  </section>
-
-  <section class="table-section">
-    <div class="table-section-head">
-      <div>
-        <h2>Inventory Results (Gross Performance)</h2>
-        <div class="meta">Uses the original, first-count result per location &mdash; a location later fixed by recount still counts as a miss here</div>
-      </div>
-    </div>
-    <div style="overflow-x:auto;">
-      <table>
-        <thead>
-          <tr>
-            <th>Period</th><th>Location</th><th>Qty Pieces WMS</th><th>Qty Pieces Physical</th>
-            <th>On Hand Inventory $ &ndash; WMS</th><th>On Hand Inventory $ Physical</th>
-            <th>Negative Variance</th><th>Positive Variance</th><th>Net Variance</th><th>Gross Variance</th>
-            <th>Net Accuracy</th><th>Gross Accuracy</th>
-          </tr>
-        </thead>
-        <tbody id="icValueGrossTableBody"></tbody>
-      </table>
-    </div>
-  </section>
-
-  </div>
-
   <footer class="note">
     Each row is a bin/product location, resolved from every Physical Inventory Document on file for that Storage Bin +
     Product. If a recount was generated (status RECO) and its linked recount document (status COUN) matched book qty,
@@ -961,14 +935,8 @@
     Year and date-range controls above filter strictly to that window &mdash; both the table and every KPI/chart on
     this tab, including Open/Recount Pending locations dated outside the window. The Open Counts and Oldest Open
     Count cards are the one exception: they always reflect the live, all-time backlog regardless of the range
-    selected, since that backlog needs attention no matter when it was assigned. The "Inventory Value ($)" sub-page
-    prices resolved locations against the uploaded pricing sheet (matched by SKU) and shows Net Performance (final,
-    recount-corrected counts) and Gross Performance (original first-count results, no recount credit) side by side,
-    same as a standalone SKU/Unit Cost export &mdash; uploading a new pricing sheet replaces the entire price list,
-    it doesn't merge with the old one. A location whose SKU has no price on file is excluded from the $ figures and
-    called out in a note above the tables, so it's never silently treated as $0. These figures reflect only the
-    bin/product locations counted in this system for the selected period &mdash; a subset of the warehouse, not a
-    full physical inventory &mdash; and the export combines the Net and Gross rows onto one sheet, tagged by basis.
+    selected, since that backlog needs attention no matter when it was assigned. Priced Net/Gross inventory value
+    reporting now lives on the standalone Inventory Reconciliation dashboard, which reads this same cycle count data.
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--card-border);">
       <button type="button" class="btn secondary" id="icResetAllDataBtn" style="border-color:var(--accent);color:var(--accent);">&#9888; Reset All Data</button>
       <span style="color:var(--text-faint);font-size:11px;margin-left:10px;">Permanently clears all Inventory tab data so you can start with a fresh upload. Outbound/Inbound data is untouched. Password-protected, cannot be undone.</span>
@@ -1773,17 +1741,232 @@ if(typeof Chart !== 'undefined'){
 }
 const LABEL_COLOR = '#e7eef7';
 
+/* ---------------------------------------------------------------------
+   Click-to-enlarge chart modal — works for every .chart-card on every
+   tab. Clicking a chart card opens a larger snapshot of it with buttons
+   to copy the image (for pasting into PowerPoint/email) or download it
+   as a PNG. Uses Chart.getChart() to find the live Chart.js instance
+   for whatever canvas lives inside the clicked card, so nothing here
+   needs to know about individual charts by name.
+--------------------------------------------------------------------- */
+(function initChartExpand(){
+  const overlay = document.createElement('div');
+  overlay.className = 'chart-modal-overlay';
+  overlay.innerHTML = `
+    <div class="chart-modal" role="dialog" aria-modal="true">
+      <div class="chart-modal-head">
+        <h3 id="chartModalTitle">Chart</h3>
+        <div class="chart-modal-actions">
+          <button type="button" class="chart-modal-btn primary" id="chartModalCopy">Copy Image</button>
+          <button type="button" class="chart-modal-btn" id="chartModalDownload">Download PNG</button>
+          <button type="button" class="chart-modal-close" id="chartModalCloseBtn" aria-label="Close">&times;</button>
+        </div>
+      </div>
+      <div class="chart-modal-body"><img id="chartModalImg" alt=""></div>
+      <div class="chart-modal-status" id="chartModalStatus"></div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const modalTitle = overlay.querySelector('#chartModalTitle');
+  const modalImg = overlay.querySelector('#chartModalImg');
+  const modalStatus = overlay.querySelector('#chartModalStatus');
+  const copyBtn = overlay.querySelector('#chartModalCopy');
+  const downloadBtn = overlay.querySelector('#chartModalDownload');
+  const closeBtn = overlay.querySelector('#chartModalCloseBtn');
+  let currentTitle = 'chart';
+
+  function setStatus(msg){ modalStatus.textContent = msg || ''; }
+
+  function closeModal(){
+    overlay.classList.remove('open');
+    modalImg.src = '';
+    setStatus('');
+  }
+
+  // Recursively finds every {font:{size:N}} in a chart's live options tree
+  // (ticks, legend labels, datalabels, etc.) and scales each size in place,
+  // returning a function that restores the original values exactly.
+  function scaleChartFonts(root, factor){
+    const restores = [];
+    (function walk(obj){
+      if(!obj || typeof obj !== 'object') return;
+      if(Array.isArray(obj)){ obj.forEach(walk); return; }
+      for(const key in obj){
+        const val = obj[key];
+        if(key === 'font' && val && typeof val === 'object' && typeof val.size === 'number'){
+          const orig = val.size;
+          val.size = Math.round(orig * factor);
+          restores.push(()=>{ val.size = orig; });
+        } else if(val && typeof val === 'object'){
+          walk(val);
+        }
+      }
+    })(root);
+    return ()=> restores.forEach(fn=>fn());
+  }
+
+  // Deep-clones a plain object/array tree while leaving functions (and any
+  // non-plain object, like a Date) as shared references — used to build a
+  // fully independent copy of a chart's data/options for export so nothing
+  // we do to the clone can ever touch the live chart or any shared object
+  // (e.g. the CHART_FONT object every chart's default font points at).
+  function cloneKeepFn(value, seen){
+    seen = seen || new WeakMap();
+    if(value === null || typeof value !== 'object') return value;
+    if(seen.has(value)) return seen.get(value);
+    if(Array.isArray(value)){
+      const out = [];
+      seen.set(value, out);
+      value.forEach((v,i)=>{ out[i] = cloneKeepFn(v, seen); });
+      return out;
+    }
+    const proto = Object.getPrototypeOf(value);
+    if(proto !== Object.prototype && proto !== null) return value; // e.g. Date, DOM nodes — keep as-is
+    const out = {};
+    seen.set(value, out);
+    for(const k in value) out[k] = cloneKeepFn(value[k], seen);
+    return out;
+  }
+
+  // Renders a completely separate, off-screen Chart.js instance built from
+  // a cloned copy of the on-page chart's type/data/options — larger, with
+  // bigger fonts — and captures that as the export image. Doing this on an
+  // independent chart (instead of resizing the live one) avoids two problems
+  // we hit earlier: Chart.js's resize/update can defer its actual redraw to
+  // an animation frame (so a synchronous "resize, capture, resize back"
+  // sometimes captured a half-drawn or already-reverted canvas), and it
+  // avoids mutating any object — like the shared default font — that other
+  // charts elsewhere on the page also read from.
+  const CHART_EXPORT_FONT_SCALE = 1.6;
+  function exportChartPNG(chart, targetWidth){
+    const canvas = chart.canvas;
+    const originalWidth = canvas.clientWidth;
+    const originalHeight = canvas.clientHeight;
+    const aspect = originalHeight / originalWidth || 0.5;
+    const bg = getComputedStyle(document.documentElement).getPropertyValue('--card').trim() || '#122A47';
+    const bigWidth = targetWidth || 1300;
+    const bigHeight = Math.round(bigWidth * aspect);
+
+    const clonedData = cloneKeepFn(chart.data);
+    const clonedOptions = cloneKeepFn(chart.options);
+    scaleChartFonts(clonedOptions, CHART_EXPORT_FONT_SCALE); // scales any font explicitly set per chart (e.g. datalabels)
+
+    // Axis ticks and the legend don't set their own font in this dashboard —
+    // they just inherit the shared default (10px) at draw time, so there's
+    // no {font:{size}} for the walk above to find and scale. Set them
+    // explicitly here instead, only on this throwaway clone.
+    const scaledBaseSize = Math.round(CHART_FONT.size * CHART_EXPORT_FONT_SCALE);
+    clonedOptions.font = Object.assign({}, CHART_FONT, {size: scaledBaseSize});
+    if(clonedOptions.scales){
+      Object.values(clonedOptions.scales).forEach(scale=>{
+        if(!scale || typeof scale !== 'object') return;
+        scale.ticks = Object.assign({}, scale.ticks, {font: Object.assign({}, CHART_FONT, {size: scaledBaseSize})});
+      });
+    }
+    if(clonedOptions.plugins?.legend?.labels){
+      clonedOptions.plugins.legend.labels.font = Object.assign({}, CHART_FONT, {size: scaledBaseSize});
+      if(typeof clonedOptions.plugins.legend.labels.boxWidth === 'number'){
+        clonedOptions.plugins.legend.labels.boxWidth = Math.round(clonedOptions.plugins.legend.labels.boxWidth * CHART_EXPORT_FONT_SCALE);
+      }
+    }
+
+    clonedOptions.responsive = true;
+    clonedOptions.maintainAspectRatio = false;
+    clonedOptions.animation = false;
+    clonedOptions.devicePixelRatio = window.devicePixelRatio || 1;
+
+    const holder = document.createElement('div');
+    holder.style.cssText = 'position:fixed;left:-10000px;top:0;width:'+bigWidth+'px;height:'+bigHeight+'px;';
+    const tempCanvas = document.createElement('canvas');
+    holder.appendChild(tempCanvas);
+    document.body.appendChild(holder);
+
+    let dataUrl;
+    let tempChart;
+    try{
+      tempChart = new Chart(tempCanvas, { type: chart.config.type, data: clonedData, options: clonedOptions });
+      const out = document.createElement('canvas');
+      out.width = tempCanvas.width;   // backing-store pixels — already devicePixelRatio-scaled for crispness
+      out.height = tempCanvas.height;
+      const ctx = out.getContext('2d');
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, out.width, out.height);
+      ctx.drawImage(tempCanvas, 0, 0);
+      dataUrl = out.toDataURL('image/png');
+    } finally {
+      if(tempChart) tempChart.destroy();
+      holder.remove();
+    }
+    return dataUrl;
+  }
+
+  function openModalForCard(card){
+    const canvas = card.querySelector('canvas');
+    if(!canvas) return;
+    const chart = (typeof Chart !== 'undefined' && Chart.getChart) ? Chart.getChart(canvas) : null;
+    if(!chart) return; // no data rendered yet on this chart
+    currentTitle = card.querySelector('h3')?.textContent?.trim() || 'chart';
+    modalTitle.textContent = currentTitle;
+    modalImg.alt = currentTitle;
+    modalImg.src = exportChartPNG(chart);
+    setStatus('');
+    overlay.classList.add('open');
+  }
+
+  document.addEventListener('click', (e)=>{
+    const card = e.target.closest('.chart-card');
+    if(card){ openModalForCard(card); return; }
+    if(e.target === overlay) closeModal();
+  });
+  document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && overlay.classList.contains('open')) closeModal(); });
+  closeBtn.addEventListener('click', closeModal);
+
+  downloadBtn.addEventListener('click', ()=>{
+    const a = document.createElement('a');
+    a.href = modalImg.src;
+    a.download = currentTitle.replace(/[^\w\-]+/g,'_').replace(/^_+|_+$/g,'') + '.png';
+    document.body.appendChild(a); a.click(); a.remove();
+    setStatus('Downloaded as PNG.');
+  });
+
+  copyBtn.addEventListener('click', async ()=>{
+    try{
+      if(!navigator.clipboard || !window.ClipboardItem) throw new Error('unsupported');
+      const res = await fetch(modalImg.src);
+      const blob = await res.blob();
+      await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
+      setStatus('Copied — paste it into PowerPoint, email, or anywhere else.');
+    }catch(err){
+      setStatus('Copy isn\u2019t supported in this browser — use Download PNG instead.');
+    }
+  });
+
+  // Small "click to enlarge" hint on every chart card, added once so it
+  // doesn't need to be baked into each card's markup by hand.
+  document.querySelectorAll('.chart-card').forEach(card=>{
+    if(card.querySelector('.expand-hint')) return;
+    const hint = document.createElement('div');
+    hint.className = 'expand-hint';
+    hint.innerHTML = '&#8599; Click to enlarge';
+    card.appendChild(hint);
+  });
+})();
+
+
 function destroyChart(id){ if(charts[id]){ charts[id].destroy(); delete charts[id]; } }
 
 // How many bars to skip between shown data labels, based on how many bars
 // are on screen — keeps wide date ranges (e.g. 30 days) readable instead of
 // every label overlapping its neighbors. Every label still appears on hover
 // via the tooltip regardless of this.
-function labelSkipStep(barCount){
-  if(barCount <= 10) return 1;
-  if(barCount <= 16) return 2;
-  if(barCount <= 24) return 3;
-  return Math.ceil(barCount/8);
+// seriesCount is how many datasets share the same x position and both show
+// labels (e.g. Auto vs. Manual bars side by side) — with more than one, each
+// shown x position draws multiple stacked labels, so we thin them out
+// further to keep the same total number of labels on screen.
+function labelSkipStep(barCount, seriesCount=1){
+  const targetLabels = Math.max(3, Math.floor(8/seriesCount));
+  if(barCount <= Math.ceil(targetLabels*1.3)) return 1;
+  return Math.ceil(barCount/targetLabels);
 }
 
 function renderCharts(items, groups){
@@ -2203,6 +2386,21 @@ function baseChartOptions(scalesExtra, showLegend, horizontal){
     }
   };
 }
+
+// A flat, dashed reference line at a KPI's target value, drawn as a
+// zero-point 'line' dataset mixed into an otherwise-bar chart (no
+// annotation plugin loaded, so this is the mixed-type-dataset approach).
+// order:1 (vs. bars' default order:0) puts it on top of the bars; its own
+// datalabels are switched off so it doesn't compete with the bar labels.
+function xsTargetDataset(label, target, pointCount, color){
+  return {
+    label, type:'line', data: Array(pointCount).fill(target),
+    borderColor: color, borderWidth:1.5, borderDash:[6,4],
+    pointRadius:0, pointHoverRadius:0, fill:false, tension:0,
+    order:1, datalabels:{display:false}
+  };
+}
+
 
 /* ---------------------------------------------------------------------
    Table
@@ -2754,14 +2952,24 @@ function xsRenderAll(){
   const invResolved = inventoryGroups.filter(g=>g.status==='Accurate' || g.status==='Inaccurate');
   const invInaccurate = invResolved.filter(g=>g.status==='Inaccurate');
   const invMissed = invInaccurate.filter(g=>!isInventoryAccuracyOmitted(g)); // what actually counts against Inventory Accuracy
-  // Unit-weighted, same formula as the Inventory tab's "Overall Unit
-  // Accuracy" card and the Analysis workbook's "Unit Accuracy %": (total
-  // book qty - total absolute variance) / total book qty across resolved
-  // locations. Not a location headcount. An omitted location's variance is
-  // excluded from the total, same treatment as an omitted Fill Rate line.
+  // Two distinct accuracy metrics, shown as separate KPI cards below and as
+  // two series on the shared "Inventory Accuracy by Day" bar chart:
+  //  - Unit Accuracy: book-qty-weighted \u2014 (total book qty - total absolute
+  //    variance) / total book qty across resolved locations. Matches the
+  //    Inventory tab's "Overall Unit Accuracy" card.
+  //  - Location Accuracy: a location headcount \u2014 resolved locations on
+  //    qty (Accurate, or Inaccurate-but-omitted) / all resolved locations.
+  //    Note this is a bin+product location count, not a bin-level rollup
+  //    like the Inventory tab's own "Location Accuracy" card \u2014 the two
+  //    are related but not identical (a multi-product bin counts once
+  //    there, once per product here).
+  // Both share the same omission treatment: an omitted location's variance
+  // is excluded from Unit Accuracy's absDiff, and an omitted-but-inaccurate
+  // location still counts as "on qty" for Location Accuracy.
   const invBookQty = invResolved.reduce((sum,g)=>sum+g.bookQty, 0);
   const invAbsDiff = invResolved.reduce((sum,g)=>sum+(isInventoryAccuracyOmitted(g) ? 0 : Math.abs(g.diffQty)), 0);
-  const invAccuracyPct = invBookQty>0 ? Math.round(((invBookQty-invAbsDiff)/invBookQty)*1000)/10 : null;
+  const unitAccuracyPct = invBookQty>0 ? Math.round(((invBookQty-invAbsDiff)/invBookQty)*1000)/10 : null;
+  const invAccuracyPct = invResolved.length>0 ? Math.round(((invResolved.length-invMissed.length)/invResolved.length)*1000)/10 : null;
 
   const cards = [
     {label:'Fill Rate', value: fillRatePct!==null ? fillRatePct+'%' : '\u2014',
@@ -2792,7 +3000,14 @@ function xsRenderAll(){
         +((manualSla.breachEligibleGroups.length-manualSla.breached)>0 ? ' \u00b7 '+(manualSla.breachEligibleGroups.length-manualSla.breached)+' omitted' : ''),
       modalBody: xsPullModalTableHtml(manualSla.breachEligibleGroups),
       exportRows: xsPullModalExportRows(manualSla.breachEligibleGroups), exportFilename: 'on-time-delivery-breaches-manual'},
-    {label:'Inventory Accuracy', value: invAccuracyPct!==null ? invAccuracyPct+'%' : '\u2014',
+    {label:'Unit Accuracy', value: unitAccuracyPct!==null ? unitAccuracyPct+'%' : '\u2014',
+      sub: (unitAccuracyPct!==null ? (invBookQty-invAbsDiff).toLocaleString()+'/'+invBookQty.toLocaleString()+' units on qty \u00b7 ' : '')+'Target: >'+XS_SLA_TARGETS.inventoryAccuracy.toFixed(2)+'%',
+      accent: xsSlaAccent(unitAccuracyPct, XS_SLA_TARGETS.inventoryAccuracy),
+      modalTitle: 'Inaccurate Locations \u2014 '+invMissed.length.toLocaleString()+' location'+(invMissed.length===1?'':'s')+' off qty, largest variance first'
+        +((invInaccurate.length-invMissed.length)>0 ? ' \u00b7 '+(invInaccurate.length-invMissed.length)+' omitted' : ''),
+      modalBody: xsInventoryModalTableHtml([...invInaccurate].sort((a,b)=>Math.abs(b.diffQty)-Math.abs(a.diffQty))),
+      exportRows: xsInventoryModalExportRows([...invInaccurate].sort((a,b)=>Math.abs(b.diffQty)-Math.abs(a.diffQty))), exportFilename: 'inaccurate-locations'},
+    {label:'Location Accuracy', value: invAccuracyPct!==null ? invAccuracyPct+'%' : '\u2014',
       sub: (invAccuracyPct!==null ? (invResolved.length-invMissed.length)+'/'+invResolved.length+' locations on qty \u00b7 ' : '')+'Target: >'+XS_SLA_TARGETS.inventoryAccuracy.toFixed(2)+'%',
       accent: xsSlaAccent(invAccuracyPct, XS_SLA_TARGETS.inventoryAccuracy),
       modalTitle: 'Inaccurate Locations \u2014 '+invMissed.length.toLocaleString()+' location'+(invMissed.length===1?'':'s')+' off qty, largest variance first'
@@ -3056,16 +3271,20 @@ function xsRenderCharts(outboundGroups, outboundItems, inboundGroups, inventoryG
   const fillData = fillLabels.map(k => fillByPeriod[k].total ? Math.round((fillByPeriod[k].accurate/fillByPeriod[k].total)*1000)/10 : null);
   xsDestroyChart('fillRate');
   const fillStep = labelSkipStep(fillLabels.length);
-  const fillOpts = baseChartOptions({y:{beginAtZero:true, suggestedMax:112, max:112, ticks:{callback:v=>v<=100?v+'%':'', stepSize:20}}});
-  fillOpts.layout = {padding:{top:20}};
+  const fillOpts = baseChartOptions({y:{beginAtZero:true, suggestedMax:112, max:112, ticks:{callback:v=>v<=100?v+'%':'', stepSize:20}}}, true);
+  fillOpts.layout = {padding:{top:8}};
   fillOpts.plugins.tooltip = { callbacks:{ label: ctx => {
+    if(ctx.dataset.label==='Target') return 'Target: '+ctx.parsed.y+'%';
     const k = fillLabels[ctx.dataIndex]; const d = fillByPeriod[k];
     return 'Fill Rate: '+ctx.parsed.y+'% ('+d.accurate+'/'+d.total+' lines)';
   }}};
-  fillOpts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:(v,ctx)=> ctx.dataIndex % fillStep === 0 ? v+'%' : ''};
+  fillOpts.plugins.datalabels = {display:true, anchor:'end', align:'start', rotation:-90, clamp:true, color:'#000000', font:{weight:600, size:10}, formatter:v=> v+'%'};
   xsCharts.fillRate = new Chart(document.getElementById('xsChartFillRate'), {
     type:'bar',
-    data:{ labels: fillLabels.map(l=>xsFormatPeriodLabel(l)), datasets:[{ data: fillData, backgroundColor:'#2fbf71', borderRadius:4, maxBarThickness:36 }]},
+    data:{ labels: fillLabels.map(l=>xsFormatPeriodLabel(l)), datasets:[
+      {label:'Fill Rate', data: fillData, backgroundColor:'#2fbf71', borderRadius:4, maxBarThickness:36},
+      xsTargetDataset('Target', XS_SLA_TARGETS.fillRate, fillLabels.length, 'rgba(232,163,61,0.9)')
+    ]},
     options: fillOpts
   });
 
@@ -3092,16 +3311,20 @@ function xsRenderCharts(outboundGroups, outboundItems, inboundGroups, inventoryG
   });
   xsDestroyChart('dockToStock');
   const dtsStep = labelSkipStep(dtsLabels.length);
-  const dtsOpts = baseChartOptions({y:{beginAtZero:true, suggestedMax:112, max:112, ticks:{callback:v=>v<=100?v+'%':'', stepSize:20}}});
-  dtsOpts.layout = {padding:{top:20}};
+  const dtsOpts = baseChartOptions({y:{beginAtZero:true, suggestedMax:112, max:112, ticks:{callback:v=>v<=100?v+'%':'', stepSize:20}}}, true);
+  dtsOpts.layout = {padding:{top:8}};
   dtsOpts.plugins.tooltip = { callbacks:{ label: ctx => {
+    if(ctx.dataset.label==='Target') return 'Target: '+ctx.parsed.y+'%';
     const k = dtsLabels[ctx.dataIndex]; const d = dtsByPeriod[k];
     return ctx.parsed.y===null ? 'no completed HUs' : ctx.parsed.y+'% ('+d.met+'/'+d.total+')';
   }}};
-  dtsOpts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:(v,ctx)=> (v===null || ctx.dataIndex % dtsStep !== 0) ? '' : v+'%'};
+  dtsOpts.plugins.datalabels = {display:true, anchor:'end', align:'start', rotation:-90, clamp:true, color:'#000000', font:{weight:600, size:10}, formatter:v=> v===null ? '' : v+'%'};
   xsCharts.dockToStock = new Chart(document.getElementById('xsChartDockToStock'), {
     type:'bar',
-    data:{ labels: dtsLabels.map(l=>xsFormatPeriodLabel(l)), datasets:[{ data: dtsData, backgroundColor:'#2fbf71', borderRadius:4, maxBarThickness:36 }]},
+    data:{ labels: dtsLabels.map(l=>xsFormatPeriodLabel(l)), datasets:[
+      {label:'Dock to Stock', data: dtsData, backgroundColor:'#2fbf71', borderRadius:4, maxBarThickness:36},
+      xsTargetDataset('Target', XS_SLA_TARGETS.dockToStock, dtsLabels.length, 'rgba(232,163,61,0.9)')
+    ]},
     options: dtsOpts
   });
 
@@ -3130,11 +3353,13 @@ function xsRenderCharts(outboundGroups, outboundItems, inboundGroups, inventoryG
   const otAuto = otPctFor('Auto');
   const otManual = otPctFor('Manual');
   xsDestroyChart('onTime');
-  const otStep = labelSkipStep(otLabels.length);
+  const otStep = labelSkipStep(otLabels.length, 2);
   const otOpts = baseChartOptions({y:{beginAtZero:true, suggestedMax:118, max:118, ticks:{callback:v=>v<=100?v+'%':'', stepSize:20}}}, true);
-  otOpts.layout = {padding:{top:24}};
-  otOpts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:10}, formatter:(v,ctx)=> (v===null || ctx.dataIndex % otStep !== 0) ? '' : v+'%'};
+  otOpts.layout = {padding:{top:8}};
+  otOpts.plugins.datalabels = {display:true, anchor:'end', align:'start', rotation:-90, clamp:true, color:'#000000', font:{weight:600, size:9}, formatter:v=> v===null ? '' : v+'%'};
   otOpts.plugins.tooltip = { callbacks:{ label: ctx => {
+    if(ctx.dataset.label==='Target (Auto)') return 'Target (Auto): '+ctx.parsed.y+'%';
+    if(ctx.dataset.label==='Target (Manual)') return 'Target (Manual): '+ctx.parsed.y+'%';
     const k = otLabels[ctx.dataIndex]; const d = otByPeriod[k][ctx.dataset.label];
     return ctx.dataset.label+': '+(ctx.parsed.y===null?'no completed pulls':ctx.parsed.y+'% ('+d.met+'/'+d.total+')');
   }}};
@@ -3142,45 +3367,62 @@ function xsRenderCharts(outboundGroups, outboundItems, inboundGroups, inventoryG
     type:'bar',
     data:{ labels: otLabels.map(l=>xsFormatPeriodLabel(l)), datasets:[
       {label:'Auto', data:otAuto, backgroundColor:'#3d9fe8', borderRadius:4, maxBarThickness:26},
-      {label:'Manual', data:otManual, backgroundColor:'#a78bfa', borderRadius:4, maxBarThickness:26}
+      {label:'Manual', data:otManual, backgroundColor:'#a78bfa', borderRadius:4, maxBarThickness:26},
+      xsTargetDataset('Target (Auto)', XS_SLA_TARGETS.onTimeAuto, otLabels.length, 'rgba(61,159,232,0.65)'),
+      xsTargetDataset('Target (Manual)', XS_SLA_TARGETS.onTimeManual, otLabels.length, 'rgba(167,139,250,0.65)')
     ]},
     options: otOpts
   });
 
-  // Inventory Accuracy by period — unit-weighted, same formula as the
-  // "Unit Inventory Accuracy" KPI card above and the Inventory tab's own
-  // chart: (book qty - abs variance) / book qty per period, not a location
-  // headcount. Bucketed by when each location was resolved (still-open
-  // locations are ignored here since only resolved counts chart). An
-  // omitted location's variance is excluded from absDiff, same as the KPI
-  // card above, so a click-through Omit updates this chart too.
+  // Inventory Accuracy by period — two series sharing one chart, same
+  // period bucketing (by when each location was resolved; still-open
+  // locations excluded, today's in-progress shift day excluded):
+  //  - Unit: book-qty-weighted, matches the Unit Accuracy KPI card above.
+  //  - Location: location headcount, matches the Location Accuracy KPI
+  //    card above. An omitted location's variance/miss is excluded from
+  //    both, same as both KPI cards, so a click-through Omit updates this
+  //    chart too.
   const invByPeriod = {};
   inventoryGroups.forEach(loc=>{
     if(loc.status!=='Accurate' && loc.status!=='Inaccurate') return;
     if(!loc.countAt) return;
     const k = xsInventoryPeriodKey(loc.countAt);
-    if(!invByPeriod[k]) invByPeriod[k] = {bookQty:0, absDiff:0};
+    if(!invByPeriod[k]) invByPeriod[k] = {bookQty:0, absDiff:0, resolved:0, missed:0};
     invByPeriod[k].bookQty += loc.bookQty;
     invByPeriod[k].absDiff += isInventoryAccuracyOmitted(loc) ? 0 : Math.abs(loc.diffQty);
+    invByPeriod[k].resolved += 1;
+    if(loc.status==='Inaccurate' && !isInventoryAccuracyOmitted(loc)) invByPeriod[k].missed += 1;
   });
   delete invByPeriod[xsInventoryPeriodKey(new Date())]; // never chart today's still-in-progress shift day
   const invLabels = Object.keys(invByPeriod).sort();
-  const invData = invLabels.map(k=>{
+  const invUnitData = invLabels.map(k=>{
     const d = invByPeriod[k];
     return d.bookQty>0 ? Math.round(((d.bookQty-d.absDiff)/d.bookQty)*1000)/10 : null;
   });
+  const invLocData = invLabels.map(k=>{
+    const d = invByPeriod[k];
+    return d.resolved>0 ? Math.round(((d.resolved-d.missed)/d.resolved)*1000)/10 : null;
+  });
   xsDestroyChart('inventoryAccuracy');
-  const invStep = labelSkipStep(invLabels.length);
-  const invOpts = baseChartOptions({y:{beginAtZero:true, suggestedMax:112, max:112, ticks:{callback:v=>v<=100?v+'%':'', stepSize:20}}});
-  invOpts.layout = {padding:{top:20}};
+  const invStep = labelSkipStep(invLabels.length, 2);
+  const invOpts = baseChartOptions({y:{beginAtZero:true, suggestedMax:112, max:112, ticks:{callback:v=>v<=100?v+'%':'', stepSize:20}}}, true);
+  invOpts.layout = {padding:{top:8}};
   invOpts.plugins.tooltip = { callbacks:{ label: ctx => {
+    if(ctx.dataset.label==='Target') return 'Target: '+ctx.parsed.y+'%';
     const k = invLabels[ctx.dataIndex]; const d = invByPeriod[k];
-    return ctx.parsed.y===null ? 'no resolved locations' : 'Accuracy: '+ctx.parsed.y+'% ('+(d.bookQty-d.absDiff).toLocaleString()+'/'+d.bookQty.toLocaleString()+' units)';
+    if(ctx.dataset.label==='Unit'){
+      return ctx.parsed.y===null ? 'Unit: no resolved locations' : 'Unit: '+ctx.parsed.y+'% ('+(d.bookQty-d.absDiff).toLocaleString()+'/'+d.bookQty.toLocaleString()+' units)';
+    }
+    return ctx.parsed.y===null ? 'Location: no resolved locations' : 'Location: '+ctx.parsed.y+'% ('+(d.resolved-d.missed)+'/'+d.resolved+' locations)';
   }}};
-  invOpts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:(v,ctx)=> (v===null || ctx.dataIndex % invStep !== 0) ? '' : v+'%'};
+  invOpts.plugins.datalabels = {display:true, anchor:'end', align:'start', rotation:-90, clamp:true, color:'#000000', font:{weight:600, size:9}, formatter:v=> v===null ? '' : v+'%'};
   xsCharts.inventoryAccuracy = new Chart(document.getElementById('xsChartInventoryAccuracy'), {
     type:'bar',
-    data:{ labels: invLabels.map(l=>xsFormatPeriodLabel(l)), datasets:[{ data: invData, backgroundColor:'#2fbf71', borderRadius:4, maxBarThickness:36 }]},
+    data:{ labels: invLabels.map(l=>xsFormatPeriodLabel(l)), datasets:[
+      {label:'Unit', data: invUnitData, backgroundColor:'#2fbf71', borderRadius:4, maxBarThickness:26},
+      {label:'Location', data: invLocData, backgroundColor:'#3d9fe8', borderRadius:4, maxBarThickness:26},
+      xsTargetDataset('Target', XS_SLA_TARGETS.inventoryAccuracy, invLabels.length, 'rgba(232,163,61,0.9)')
+    ]},
     options: invOpts
   });
 }
@@ -4243,10 +4485,6 @@ function ibExportTableToExcel(){
 const icRecordsRef = db.ref('inventory_counts');
 const icUploadsRef = db.ref('inventory_count_uploads');
 const icAccuracyOmissionsRef = db.ref('inventory_accuracy_omissions');
-// Unit-cost lookup for the "Inventory Value ($)" sub-page, keyed by
-// sanitized SKU. A pricing upload replaces this node wholesale (.set, not
-// .update) — it's the current price list, not a log to merge into.
-const icPricingRef = db.ref('inventory_pricing');
 
 const IC_COLUMN_HEADERS = {
   picDoc:      ['Physical Inventory Document'],
@@ -4296,8 +4534,6 @@ function icResolveColumns(headerRow){
 --------------------------------------------------------------------- */
 let icAllRecords = [];
 let icAccuracyOmissions = {}; // location key (sanitized) -> {note, setAt} — locations manually excluded from the Inventory Accuracy miss count on the Executive Summary (e.g. a variance later verified accurate through another count), with a required reason
-let icPricing = {}; // sanitized SKU -> {sku, unitCost, uploadedAt} — current price list for the Inventory Value ($) sub-page
-let icSubpage = 'counts'; // 'counts' | 'value' — which Inventory tab sub-page is showing
 let icSortKey = 'countAt';
 let icSortDir = 'desc';
 let icSearchTerm = '';
@@ -4442,105 +4678,6 @@ async function icParseSapExport(file){
 }
 
 /* ---------------------------------------------------------------------
-   Pricing sheet — a separate, simpler upload feeding the Inventory
-   Value ($) sub-page: just a SKU-to-unit-cost lookup. Column-matched by
-   header name like the SAP exports above, so column order can shift.
---------------------------------------------------------------------- */
-const IC_PRICING_COLUMN_HEADERS = {
-  sku:      ['SKU','Product','Material','Part Number'],
-  unitCost: ['Unit Cost','Cost','Price','Unit Price']
-};
-const IC_PRICING_REQUIRED_COLUMNS = ['sku','unitCost'];
-
-function icResolvePricingColumns(headerRow){
-  const lookup = {};
-  (headerRow||[]).forEach((h,i)=>{
-    const norm = normalizeHeader(h);
-    if(norm && !(norm in lookup)) lookup[norm] = i;
-  });
-  const col = {};
-  const missing = [];
-  for(const field of Object.keys(IC_PRICING_COLUMN_HEADERS)){
-    const found = IC_PRICING_COLUMN_HEADERS[field].map(normalizeHeader).find(c => c in lookup);
-    if(found !== undefined) col[field] = lookup[found];
-    else missing.push(field);
-  }
-  return {col, missing};
-}
-
-async function icParsePricingSheet(file){
-  const buf = await readFileAsArrayBuffer(file);
-  const wb = XLSX.read(buf, {type:'array', cellDates:true});
-  const sheet = wb.Sheets[wb.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:null, raw:true});
-
-  if(rows.length === 0){
-    const err = new Error('The file has no rows.');
-    err.code = 'NO_ROWS';
-    throw err;
-  }
-
-  const {col: COL, missing} = icResolvePricingColumns(rows[0]);
-  if(missing.length){
-    const names = missing.map(f => IC_PRICING_COLUMN_HEADERS[f][0]).join(', ');
-    const err = new Error('Missing required column(s): '+names+'. Check the sheet still includes these columns (name can shift position, but must be present).');
-    err.code = 'MISSING_COLUMNS';
-    throw err;
-  }
-
-  const updates = {};
-  let totalRows=0, skippedIncomplete=0, imported=0;
-
-  for(let i=1;i<rows.length;i++){
-    const row = rows[i];
-    if(!row || row.length===0) continue;
-    totalRows++;
-
-    const skuRaw = row[COL.sku];
-    const sku = (skuRaw!==null && skuRaw!==undefined && String(skuRaw).trim()!=='') ? String(skuRaw).trim() : null;
-    const unitCost = Number(row[COL.unitCost]);
-    if(!sku || !isFinite(unitCost)){ skippedIncomplete++; continue; }
-
-    const key = sanitizeKey(sku);
-    updates[key] = { sku, unitCost, uploadedAt: new Date().toISOString() };
-    imported++;
-  }
-
-  return {updates, totalRows, skippedIncomplete, imported};
-}
-
-document.getElementById('icPricingFileInput').addEventListener('change', async (e)=>{
-  const file = e.target.files[0];
-  if(!file) return;
-  icPricingSetSyncStatus('busy','Reading file\u2026');
-  try{
-    const result = await icParsePricingSheet(file);
-    const keys = Object.keys(result.updates);
-    if(keys.length){
-      // Full replace, not merge — the pricing sheet is the current price
-      // list, so a SKU dropped from the new upload shouldn't keep its old
-      // (possibly stale) price hanging around.
-      await icPricingRef.set(result.updates);
-      icPricingSetSyncStatus('ok', result.imported+' SKU'+(result.imported===1?'':'s')+' priced'+(result.skippedIncomplete?', '+result.skippedIncomplete+' skipped (missing SKU/cost)':''));
-    } else {
-      icPricingSetSyncStatus('err','No matching rows found in that file.');
-    }
-  }catch(err){
-    console.error(err);
-    icPricingSetSyncStatus('err','Upload failed: '+err.message);
-  }
-  e.target.value='';
-});
-
-function icPricingSetSyncStatus(kind, text){
-  const dot = document.getElementById('icPricingSyncDot');
-  const txt = document.getElementById('icPricingSyncText');
-  if(!dot || !txt) return;
-  dot.className = 'dot' + (kind==='busy'?' busy':kind==='err'?' err':'');
-  txt.textContent = text;
-}
-
-/* ---------------------------------------------------------------------
    Upload flow — independent file input, this tab's own SAP export
 --------------------------------------------------------------------- */
 document.getElementById('icFileInput').addEventListener('change', async (e)=>{
@@ -4593,24 +4730,6 @@ icRecordsRef.on('value', snap=>{
 icAccuracyOmissionsRef.on('value', snap=>{
   icAccuracyOmissions = snap.val() || {};
   safeRender('executive summary', xsRenderAll);
-});
-
-icPricingRef.on('value', snap=>{
-  icPricing = snap.val() || {};
-  const count = Object.keys(icPricing).length;
-  document.getElementById('icPricingCount').textContent = count.toLocaleString();
-  if(count>0){
-    icPricingSetSyncStatus('ok', count.toLocaleString()+' SKUs priced');
-    const latest = Object.values(icPricing).reduce((a,b)=> (!a || (b.uploadedAt||'') > (a.uploadedAt||'')) ? b : a, null);
-    if(latest && latest.uploadedAt){
-      document.getElementById('icPricingLastUploadLine').style.display='inline';
-      document.getElementById('icPricingLastUploadTime').textContent =
-        new Date(latest.uploadedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
-    }
-  } else {
-    icPricingSetSyncStatus('ok','No pricing sheet uploaded');
-  }
-  safeRender('inventory value summary', ()=>icRenderValueSummary(icCachedRangeGroups));
 });
 
 icUploadsRef.limitToLast(1).on('value', snap=>{
@@ -4787,7 +4906,6 @@ function icRenderAll(){
 
   safeRender('inventory KPIs', ()=>icRenderKPIs(rangeGroups, openGroups, rangeRecords));
   safeRender('inventory charts', ()=>icRenderCharts(rangeGroups, openGroups));
-  safeRender('inventory value summary', ()=>icRenderValueSummary(rangeGroups));
   safeRender('inventory table', ()=>icRenderTable(rangeGroups));
 }
 
@@ -4826,6 +4944,148 @@ function icModalExportRows(groups){
     'Counter': g.counter||'',
     'Count Date': isValidDate(g.countAt) ? g.countAt : ''
   }));
+}
+
+/* ---------------------------------------------------------------------
+   Completed Counts reconciliation — explains why the raw "Completed
+   Counts" tally (every COUN document in the date range) doesn't match
+   the denominator behind "Location Accuracy" (resolved bins, deduped).
+   A COUN document in range lands in exactly one bucket:
+     - stillOpen:    it was the terminal count for its location, but the
+                      location as a whole is still Open (a newer ACTI or
+                      pending recount exists) — excluded from accuracy.
+     - superseded:   a later COUN at the same bin/product replaced it —
+                      only the newest count represents that location.
+     - multiProduct: terminal and resolved, but its bin holds more than
+                      one product/location, so several resolved counts
+                      here collapse into a single bin result.
+     - counted:      terminal, resolved, and the only product at its bin —
+                      contributes exactly one bin to Location Accuracy.
+   Location status/terminal-record logic mirrors icGroupByLocation, but is
+   computed over ALL records on file (not range-filtered), so a count that
+   was later reopened or recounted outside the selected range is still
+   correctly classified.
+--------------------------------------------------------------------- */
+function icCompletedCountsBreakdown(rangeCounRecords, allRecords){
+  const byKey = new Map();
+  for(const r of allRecords){
+    const key = r.bin+'\u0001'+r.product;
+    if(!byKey.has(key)) byKey.set(key, []);
+    byKey.get(key).push(r);
+  }
+
+  const terminalKeyOf = new Map(); // location key -> terminal COUN record's _key
+  const statusOf = new Map();      // location key -> 'Open'|'Accurate'|'Inaccurate'
+  for(const [key, recs] of byKey.entries()){
+    const hasActi = recs.some(r=>r.status==='ACTI');
+    const couns = recs.filter(r=>r.status==='COUN' && isValidDate(r.countAt));
+    const sortedCouns = [...couns].sort((a,b)=>b.countAt-a.countAt);
+    const terminal = sortedCouns[0] || null;
+    const pendingRecos = recs.filter(r=>r.status==='RECO' && isValidDate(r.countAt) && (r.bookQty||0)===0 && (r.countedQty||0)===0);
+    const latestPendingReco = pendingRecos.length ? pendingRecos.reduce((a,b)=>a.countAt>b.countAt?a:b) : null;
+    const recountPending = !!latestPendingReco && (!terminal || latestPendingReco.countAt > terminal.countAt);
+    let status;
+    if(hasActi || recountPending) status = 'Open';
+    else if(terminal) status = terminal.diffQty===0 ? 'Accurate' : 'Inaccurate';
+    else status = 'Open';
+    terminalKeyOf.set(key, terminal ? terminal._key : null);
+    statusOf.set(key, status);
+  }
+
+  // Bins (across ALL locations on file) that hold more than one
+  // bin/product key — i.e. multiple products share the same storage bin.
+  const keysByBin = new Map();
+  for(const [key, recs] of byKey.entries()){
+    const bin = recs[0].bin;
+    if(!keysByBin.has(bin)) keysByBin.set(bin, new Set());
+    keysByBin.get(bin).add(key);
+  }
+
+  const buckets = { superseded: [], stillOpen: [], multiProduct: [], counted: [] };
+  for(const r of rangeCounRecords){
+    const key = r.bin+'\u0001'+r.product;
+    const isTerminal = terminalKeyOf.get(key) === r._key;
+    const status = statusOf.get(key);
+    if(!isTerminal){
+      buckets.superseded.push(r);
+    } else if(status==='Open'){
+      buckets.stillOpen.push(r);
+    } else if((keysByBin.get(r.bin)||new Set()).size > 1){
+      buckets.multiProduct.push(r);
+    } else {
+      buckets.counted.push(r);
+    }
+  }
+  return buckets;
+}
+
+const IC_RECON_REASON_INFO = {
+  stillOpen: {title:'Reopened after this count', note:'This COUN completed, but a newer ACTI (or a pending recount) reopened the location afterward \u2014 it isn\u2019t resolved, so it\u2019s excluded from Location Accuracy.'},
+  superseded: {title:'Superseded by a later recount', note:'An earlier COUN at this bin/SKU that a later COUN document replaced \u2014 only the newest count represents this location.'},
+  multiProduct: {title:'Shares a bin with another product', note:'This bin holds more than one product/location. Each is counted separately here, but Location Accuracy rolls up to one result per bin.'},
+  counted: {title:'Counted 1:1 into Location Accuracy', note:'The terminal, resolved count for a single-product bin \u2014 contributes exactly one accurate/inaccurate bin.'}
+};
+
+function icReconSectionHtml(key, records){
+  if(!records.length) return '';
+  const info = IC_RECON_REASON_INFO[key];
+  return `<div style="margin-bottom:18px;">
+    <div style="font-size:12.5px;font-weight:700;margin-bottom:2px;">${info.title} &mdash; ${records.length.toLocaleString()}</div>
+    <div style="font-size:11px;color:var(--text-faint);margin-bottom:8px;">${info.note}</div>
+    <div style="overflow-x:auto;"><table><thead><tr>
+      <th>Bin</th><th>SKU</th><th>Description</th><th>Book</th><th>Counted</th><th>Diff</th><th>Counter</th><th>Count Date</th>
+    </tr></thead><tbody>${records.map(r=>`
+      <tr>
+        <td>${r.bin}</td>
+        <td>${r.product||'&mdash;'}</td>
+        <td style="white-space:normal;max-width:260px;">${r.productDesc||'&mdash;'}</td>
+        <td>${(r.bookQty||0).toLocaleString()}</td>
+        <td>${(r.countedQty||0).toLocaleString()}</td>
+        <td>${(r.diffQty||0)>0?'+':''}${(r.diffQty||0).toLocaleString()}</td>
+        <td>${r.counter||'&mdash;'}</td>
+        <td>${formatDateTime(r.countAt)}</td>
+      </tr>
+    `).join('')}</tbody></table></div>
+  </div>`;
+}
+
+function icReconModalHtml(buckets){
+  const total = buckets.superseded.length + buckets.stillOpen.length + buckets.multiProduct.length + buckets.counted.length;
+  const summary = `<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:16px;">
+    ${total.toLocaleString()} COUN documents in range &mdash;
+    ${buckets.counted.length.toLocaleString()} counted 1:1 into Location Accuracy,
+    ${buckets.multiProduct.length.toLocaleString()} shared a multi-product bin,
+    ${buckets.stillOpen.length.toLocaleString()} reopened after completion,
+    ${buckets.superseded.length.toLocaleString()} superseded by a later recount.
+  </div>`;
+  return summary
+    + icReconSectionHtml('stillOpen', buckets.stillOpen)
+    + icReconSectionHtml('superseded', buckets.superseded)
+    + icReconSectionHtml('multiProduct', buckets.multiProduct)
+    + icReconSectionHtml('counted', buckets.counted);
+}
+
+function icReconExportRows(buckets){
+  const rows = [];
+  const add = (key, records)=>{
+    const label = IC_RECON_REASON_INFO[key].title;
+    records.forEach(r=>rows.push({
+      'Reason': label,
+      'Bin': r.bin,
+      'SKU': r.product||'',
+      'Description': r.productDesc||'',
+      'Book Qty': r.bookQty||0,
+      'Counted Qty': r.countedQty||0,
+      'Diff': r.diffQty||0,
+      'Counter': r.counter||'',
+      'Count Date': isValidDate(r.countAt) ? r.countAt : ''
+    }));
+  };
+  add('stillOpen', buckets.stillOpen);
+  add('superseded', buckets.superseded);
+  add('multiProduct', buckets.multiProduct);
+  add('counted', buckets.counted);
+  return rows;
 }
 
 // ---- Executive Summary-only variants of the two functions above, adding
@@ -4910,173 +5170,6 @@ async function clearIcAccuracyOmission(key, cellEl){
   }
 }
 
-/* ---------------------------------------------------------------------
-   Inventory Value ($) sub-page — prices resolved locations against the
-   uploaded pricing sheet and rolls them up into Net/Gross Performance
-   rows, matching a standalone SKU/Unit Cost inventory-results report.
---------------------------------------------------------------------- */
-function icUnitCostFor(g){
-  if(!g.product) return null;
-  const entry = icPricing[sanitizeKey(g.product)];
-  return entry ? Number(entry.unitCost) : null;
-}
-// The location's counted qty as it originally stood, before any recount
-// correction — reconstructed from bookQty + the pre-recount diff, since
-// the raw earliest-count record itself isn't kept on the group. Locations
-// with no recount have no originalDiffQty, so this equals the (single,
-// final) counted qty either way.
-function icGrossCountedQty(g){
-  return g.bookQty + (g.originalDiffQty!==null && g.originalDiffQty!==undefined ? g.originalDiffQty : g.diffQty);
-}
-function icFormatCurrency(v){
-  const sign = v<0 ? '-' : '';
-  return sign+'$'+Math.abs(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
-}
-function icFormatPct(v){
-  return v===null ? '\u2014' : (Math.round(v*10000)/100).toFixed(2)+'%';
-}
-// The exact business-date span of the resolved locations actually feeding
-// the tables below, shown as the "Period" column instead of the range
-// picker's own wording ("Last 30 Days") — so the tables always state
-// what they cover, not just how it was selected.
-function icActualPeriodLabel(resolvedGroups){
-  const dates = resolvedGroups.map(g=>icBusinessDate(g.countAt)).filter(Boolean);
-  if(!dates.length) return '\u2014';
-  const min = new Date(Math.min(...dates.map(d=>d.getTime())));
-  const max = new Date(Math.max(...dates.map(d=>d.getTime())));
-  const fmt = d => d.toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'2-digit'});
-  return min.getTime()===max.getTime() ? fmt(min) : fmt(min)+'\u2013'+fmt(max);
-}
-// Builds one Net/Gross Performance row from the same resolved+priced
-// locations, differing only in which basis (final vs. original count)
-// each location contributes. Shared by the render function and the
-// Excel export so the two can never drift apart.
-function icBuildValueRow(rangeGroups, basis, periodLabel){
-  const resolved = rangeGroups.filter(g=>g.status==='Accurate' || g.status==='Inaccurate');
-  let priced=0, unpriced=0, unpricedQty=0;
-  let qtyWms=0, qtyPhysical=0, onHandWms=0, onHandPhysical=0, negVariance=0, posVariance=0;
-  resolved.forEach(g=>{
-    const unitCost = icUnitCostFor(g);
-    if(unitCost===null){ unpriced++; unpricedQty += g.bookQty; return; }
-    priced++;
-    const omitted = isInventoryAccuracyOmitted(g);
-    const diff = omitted ? 0 : (basis==='gross' ? (icGrossCountedQty(g)-g.bookQty) : g.diffQty);
-    const physicalQty = g.bookQty + diff;
-    qtyWms += g.bookQty;
-    qtyPhysical += physicalQty;
-    onHandWms += g.bookQty*unitCost;
-    onHandPhysical += physicalQty*unitCost;
-    const costDiff = diff*unitCost;
-    if(costDiff<0) negVariance += costDiff; else posVariance += costDiff;
-  });
-  const netVariance = negVariance+posVariance;
-  const grossVariance = Math.abs(negVariance)+posVariance;
-  const netAccuracy = onHandWms>0 ? 1-(Math.abs(netVariance)/onHandWms) : null;
-  const grossAccuracy = onHandWms>0 ? 1-(grossVariance/onHandWms) : null;
-  return { period: periodLabel, location:'Whitsett, NC', qtyWms, qtyPhysical, onHandWms, onHandPhysical,
-    negVariance, posVariance, netVariance, grossVariance, netAccuracy, grossAccuracy, priced, unpriced, unpricedQty,
-    locationCount: resolved.length };
-}
-function icValueRowHtml(row){
-  return `<tr>
-    <td>${escapeAttr(row.period)}</td>
-    <td>${escapeAttr(row.location)}</td>
-    <td>${row.qtyWms.toLocaleString()}</td>
-    <td>${row.qtyPhysical.toLocaleString()}</td>
-    <td>${icFormatCurrency(row.onHandWms)}</td>
-    <td>${icFormatCurrency(row.onHandPhysical)}</td>
-    <td>${icFormatCurrency(row.negVariance)}</td>
-    <td>${icFormatCurrency(row.posVariance)}</td>
-    <td>${icFormatCurrency(row.netVariance)}</td>
-    <td>${icFormatCurrency(row.grossVariance)}</td>
-    <td>${icFormatPct(row.netAccuracy)}</td>
-    <td>${icFormatPct(row.grossAccuracy)}</td>
-  </tr>`;
-}
-let icLastValueRows = null; // {net, gross} — cached from the last render, for the Export to Excel button
-function icRenderValueSummary(rangeGroups){
-  const resolved = rangeGroups.filter(g=>g.status==='Accurate' || g.status==='Inaccurate');
-  const periodLabel = icActualPeriodLabel(resolved);
-  const netRow = icBuildValueRow(rangeGroups, 'net', periodLabel);
-  const grossRow = icBuildValueRow(rangeGroups, 'gross', periodLabel);
-  icLastValueRows = {net: netRow, gross: grossRow};
-
-  const netBody = document.getElementById('icValueNetTableBody');
-  const grossBody = document.getElementById('icValueGrossTableBody');
-  if(!netBody || !grossBody) return; // sub-page not in the DOM yet
-
-  netBody.innerHTML = icValueRowHtml(netRow);
-  grossBody.innerHTML = icValueRowHtml(grossRow);
-
-  const scopeNote = document.getElementById('icValueScopeNote');
-  if(scopeNote){
-    scopeNote.textContent = 'Reflects '+netRow.locationCount.toLocaleString()+' bin/product location'+(netRow.locationCount===1?'':'s')
-      +' counted in this system for the selected period ('+periodLabel+') \u2014 a subset of the warehouse, not a full physical inventory.';
-  }
-
-  const note = document.getElementById('icValueNote');
-  if(note){
-    if(Object.keys(icPricing).length===0){
-      note.textContent = 'No pricing sheet uploaded yet — upload one above to populate these figures.';
-    } else if(netRow.unpriced>0){
-      note.textContent = netRow.unpriced.toLocaleString()+' resolved location'+(netRow.unpriced===1?'':'s')+' ('+netRow.unpricedQty.toLocaleString()+' units on book) '+(netRow.unpriced===1?'has':'have')+' no SKU match on the price list and '+(netRow.unpriced===1?'is':'are')+' excluded from the figures above.';
-    } else {
-      note.textContent = '';
-    }
-  }
-}
-function icExportValueSummary(){
-  if(typeof XLSX === 'undefined'){
-    icSetSyncStatus('err','Export failed: Excel library did not load.');
-    return;
-  }
-  if(!icLastValueRows){ return; }
-  const toExportRow = (row, basis) => ({
-    'Performance Basis': basis, 'Period': row.period, 'Location': row.location,
-    'Qty Pieces WMS': row.qtyWms, 'Qty Pieces Physical': row.qtyPhysical,
-    'On Hand Inventory $ - WMS': Math.round(row.onHandWms*100)/100,
-    'On Hand Inventory $ Physical': Math.round(row.onHandPhysical*100)/100,
-    'Negative Variance': Math.round(row.negVariance*100)/100,
-    'Positive Variance': Math.round(row.posVariance*100)/100,
-    'Net Variance': Math.round(row.netVariance*100)/100,
-    'Gross Variance': Math.round(row.grossVariance*100)/100,
-    'Net Accuracy': row.netAccuracy, 'Gross Accuracy': row.grossAccuracy
-  });
-  const dataRows = [toExportRow(icLastValueRows.net,'Net'), toExportRow(icLastValueRows.gross,'Gross')];
-  // A single sheet with both Net and Gross rows (distinguished by
-  // "Performance Basis") instead of separate tabs, plus a scope note in
-  // row 1 — these figures only cover the locations counted in this
-  // system, not a full physical inventory of the warehouse.
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet([[
-    'Reflects '+icLastValueRows.net.locationCount.toLocaleString()+' bin/product location'+(icLastValueRows.net.locationCount===1?'':'s')
-    +' counted in this system for the selected period ('+icLastValueRows.net.period+') \u2014 a subset of the warehouse, not a full physical inventory.'
-  ]]);
-  XLSX.utils.sheet_add_json(ws, dataRows, {origin:'A3'});
-  ws['!merges'] = [{s:{r:0,c:0}, e:{r:0,c:12}}];
-  ws['!cols'] = [
-    {wch:16},{wch:18},{wch:14},{wch:16},{wch:18},{wch:18},{wch:20},{wch:16},{wch:16},{wch:14},{wch:14},{wch:12},{wch:12}
-  ];
-  XLSX.utils.book_append_sheet(wb, ws, 'Inventory Value');
-  const rangeSuffix = icRangeMode==='all' ? 'all-time'
-    : icRangeMode==='yesterday' ? 'yesterday'
-    : icRangeMode==='custom' ? 'custom-range'
-    : 'last-'+icRangeMode+'-days';
-  const today = new Date().toISOString().slice(0,10);
-  XLSX.writeFile(wb, 'whitsett-inventory-value_'+rangeSuffix+'_'+today+'.xlsx');
-}
-document.getElementById('icValueExportBtn').addEventListener('click', icExportValueSummary);
-
-document.querySelectorAll('#icSubpageToggle .seg-btn').forEach(btn=>{
-  btn.addEventListener('click', ()=>{
-    icSubpage = btn.dataset.icsubpage;
-    document.querySelectorAll('#icSubpageToggle .seg-btn').forEach(b=>b.classList.toggle('active', b===btn));
-    document.getElementById('icSubpageCounts').style.display = icSubpage==='counts' ? '' : 'none';
-    document.getElementById('icSubpageValue').style.display = icSubpage==='value' ? '' : 'none';
-    if(icSubpage==='value') icRenderValueSummary(icCachedRangeGroups);
-  });
-});
-
 function icRenderKPIs(groups, openGroups, rangeRecords){
   const grid = document.getElementById('icKpiGrid');
 
@@ -5086,7 +5179,9 @@ function icRenderKPIs(groups, openGroups, rangeRecords){
   // Oldest Open Count card and Open Count Aging chart, which are also
   // openGroups-based.
   const openRecordCount = openGroups.length;
-  const completedRecordCount = rangeRecords.filter(r=>r.status==='COUN').length;
+  const completedRecords = rangeRecords.filter(r=>r.status==='COUN');
+  const completedRecordCount = completedRecords.length;
+  const completedBreakdown = icCompletedCountsBreakdown(completedRecords, icAllRecords);
   const recountRecordCount = rangeRecords.filter(r=>r.status==='RECO').length;
 
   // Locations counted per day — same COUN documents "Completed Counts"
@@ -5138,7 +5233,10 @@ function icRenderKPIs(groups, openGroups, rangeRecords){
       modalTitle:'Open Counts \u2014 '+openRecordCount.toLocaleString()+' location'+(openRecordCount===1?'':'s')+' waiting (oldest first)',
       modalBody: icModalTableHtml(oldestOpenFirst),
       exportRows: icModalExportRows(oldestOpenFirst), exportFilename: 'open-counts-oldest-first'},
-    {label:'Completed Counts', value: completedRecordCount.toLocaleString(), sub:'COUN documents in range', accent:'var(--accent)'},
+    {label:'Completed Counts', value: completedRecordCount.toLocaleString(), sub:'COUN documents in range', accent:'var(--accent)',
+      modalTitle:'Completed Counts \u2014 '+completedRecordCount.toLocaleString()+' documents vs. '+binsResolved.length.toLocaleString()+' resolved bins',
+      modalBody: icReconModalHtml(completedBreakdown),
+      exportRows: icReconExportRows(completedBreakdown), exportFilename: 'completed-counts-reconciliation'},
     {label:'Locations Counted / '+icGranularityLabel(), value: avgLocationsCountedPerPeriod!==null ? avgLocationsCountedPerPeriod : '&mdash;', sub:'average over range', accent:'var(--accent)'},
     {label:'Recounts Initiated', value: recountRecordCount.toLocaleString(), sub:'RECO documents in range', accent: recountRecordCount>0 ? 'var(--hv-color)' : 'var(--good)'},
     {label:'Recount Rate', value: recountRate!==null ? recountRate+'%' : '\u2014', sub: recountedResolved.length+' of '+resolved.length+' resolved locations needed one', accent:'var(--info)'},

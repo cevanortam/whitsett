@@ -258,6 +258,8 @@
 
   .empty-state{padding:50px 20px;text-align:center;color:var(--text-faint);}
   .empty-state .big{font-size:15px;color:var(--text-dim);margin-bottom:6px;}
+  .miss-select, .miss-notes-input{width:100%;min-width:150px;padding:6px 8px;font-size:12.5px;}
+  .miss-notes-input{min-width:220px;}
 
   footer.note{
     margin-top:22px;font-size:11.5px;color:var(--text-faint);line-height:1.6;
@@ -613,6 +615,17 @@
         <h3 id="xsTitleInventoryAccuracy">Inventory Accuracy by Day</h3>
         <div class="chart-holder"><canvas id="xsChartInventoryAccuracy"></canvas></div>
       </div>
+    </section>
+
+    <section class="table-section" id="xsMissLogSection" style="margin-top:20px;">
+      <div class="table-section-head">
+        <div>
+          <h2>SLA Miss Log</h2>
+          <div class="meta">Every day above where a metric fell short of its target. Categorize each one below &mdash; entries are saved automatically and stay archived even if you change the date range.</div>
+        </div>
+        <button type="button" class="btn secondary" id="xsGenerateParetoBtn">Generate Pareto Chart</button>
+      </div>
+      <div id="xsMissLogBody"></div>
     </section>
   </section>
 
@@ -2906,6 +2919,208 @@ function xsInventoryPeriodKey(d){
 // percentage points below target reads as "close to missing" (yellow);
 // more than 2 points below reads as "outside SLA" (red).
 const XS_SLA_TARGETS = { fillRate: 99.7, dockToStock: 99.0, onTimeAuto: 97.0, onTimeManual: 99.0, inventoryAccuracy: 98.0 };
+
+/* ---------------------------------------------------------------------
+   SLA Miss Log (Executive Summary only)
+   Auto-detects, per day, every metric above that fell short of its
+   target, and lets someone tag each miss with a category + notes for
+   later trend analysis (see the Pareto chart below). Entries persist in
+   Firebase under xs_sla_miss_log, keyed by metric+date — independent of
+   whatever date range or granularity happens to be selected right now.
+   That's the "archive": switching filters never loses a categorized miss.
+--------------------------------------------------------------------- */
+const xsMissLogRef = db.ref('xs_sla_miss_log');
+let xsMissLog = {}; // sanitized "metric_date" key -> {metric, metricLabel, period, periodLabel, actual, target, category, notes, updatedAt}
+let xsLastMissCandidates = null;
+xsMissLogRef.on('value', snap=>{
+  xsMissLog = snap.val() || {};
+  // Re-paint with whatever's currently on screen — cheap, and keeps two
+  // people editing this at once from stepping on each other's changes.
+  if(xsLastMissCandidates) xsRenderMissLogTable(xsLastMissCandidates);
+});
+
+const XS_MISS_CATEGORIES = [
+  'Uncategorized','Staffing / Labor','Carrier / Transportation','System / WMS Issue',
+  'Inventory / Stock Discrepancy','Equipment / Facility','Process / SOP Gap',
+  'Vendor / Supplier','Volume Spike','Other'
+];
+
+const XS_MISS_METRICS = [
+  { key:'fillRate',          label:'Fill Rate' },
+  { key:'dockToStock',       label:'Dock to Stock SLA' },
+  { key:'onTimeAuto',        label:'On-Time Delivery \u2014 Auto' },
+  { key:'onTimeManual',      label:'On-Time Delivery \u2014 Manual' },
+  { key:'inventoryUnit',     label:'Inventory Accuracy \u2014 Unit' },
+  { key:'inventoryLocation', label:'Inventory Accuracy \u2014 Location' }
+];
+
+function xsMissKey(metricKey, periodKey){ return sanitizeKey(metricKey+'_'+periodKey); }
+
+// Builds the list of misses for the currently-rendered periods — one entry
+// per metric per period where the actual value came in under target.
+// Doesn't touch Firebase; xsRenderMissLogTable merges this against
+// whatever category/notes are already archived there.
+function xsDetectMisses(series){
+  const misses = [];
+  series.forEach(s=>{
+    s.labels.forEach((periodKey, i)=>{
+      const actual = s.data[i];
+      if(actual===null || actual===undefined) return;
+      if(actual >= s.target) return;
+      misses.push({ metric:s.key, metricLabel:s.label, period:periodKey, periodLabel: xsFormatPeriodLabel(periodKey), actual, target:s.target });
+    });
+  });
+  misses.sort((a,b)=> b.period.localeCompare(a.period) || a.metricLabel.localeCompare(b.metricLabel));
+  return misses;
+}
+
+function xsMissLogRowHtml(miss){
+  const key = xsMissKey(miss.metric, miss.period);
+  const saved = xsMissLog[key];
+  const category = saved?.category || 'Uncategorized';
+  const notes = saved?.notes || '';
+  const dataAttrs = `data-key="${key}" data-metric="${escapeAttr(miss.metric)}" data-metriclabel="${escapeAttr(miss.metricLabel)}" data-period="${escapeAttr(miss.period)}" data-periodlabel="${escapeAttr(miss.periodLabel)}" data-actual="${miss.actual}" data-target="${miss.target}"`;
+  const options = XS_MISS_CATEGORIES.map(c=>`<option value="${escapeAttr(c)}" ${c===category?'selected':''}>${c}</option>`).join('');
+  return `
+    <tr>
+      <td>${miss.periodLabel}</td>
+      <td>${miss.metricLabel}</td>
+      <td>${miss.actual}%</td>
+      <td>${miss.target}%</td>
+      <td><select class="miss-select" ${dataAttrs}>${options}</select></td>
+      <td><input type="text" class="miss-notes-input" ${dataAttrs} value="${escapeAttr(notes)}" placeholder="Add a note&hellip;"></td>
+    </tr>`;
+}
+
+function xsRenderMissLogTable(missCandidates){
+  xsLastMissCandidates = missCandidates;
+  const body = document.getElementById('xsMissLogBody');
+  if(!body) return;
+
+  if(xsGranularity !== 'day'){
+    body.innerHTML = `<div class="empty-state"><div class="big">Switch to Day view to log SLA misses</div><div>Misses are tracked per day so each one can be categorized individually.</div></div>`;
+    return;
+  }
+  if(!missCandidates.length){
+    body.innerHTML = `<div class="empty-state"><div class="big">No SLA misses in this view</div><div>Every metric above met its target for the selected range.</div></div>`;
+    return;
+  }
+  body.innerHTML = `<div style="overflow-x:auto;"><table><thead><tr>
+      <th>Date</th><th>Metric</th><th>Actual</th><th>Target</th><th>Category</th><th>Notes</th>
+    </tr></thead><tbody>${missCandidates.map(xsMissLogRowHtml).join('')}</tbody></table></div>`;
+
+  body.querySelectorAll('.miss-select').forEach(sel=>{
+    sel.addEventListener('change', ()=> xsSaveMissEntry(sel, {category: sel.value}));
+  });
+  body.querySelectorAll('.miss-notes-input').forEach(inp=>{
+    inp.addEventListener('change', ()=> xsSaveMissEntry(inp, {notes: inp.value.trim()}));
+  });
+}
+
+async function xsSaveMissEntry(el, patch){
+  const key = el.dataset.key;
+  try{
+    const existing = xsMissLog[key] || {
+      metric: el.dataset.metric, metricLabel: el.dataset.metriclabel,
+      period: el.dataset.period, periodLabel: el.dataset.periodlabel,
+      actual: Number(el.dataset.actual), target: Number(el.dataset.target),
+      category: 'Uncategorized', notes: ''
+    };
+    const entry = Object.assign({}, existing, patch, { updatedAt: new Date().toISOString() });
+    await xsMissLogRef.child(key).set(entry);
+    xsMissLog[key] = entry;
+    setSyncStatus('ok', 'SLA miss log updated');
+  }catch(err){
+    console.error(err);
+    setSyncStatus('err', 'Failed to save miss log entry: '+err.message);
+  }
+}
+
+// Pareto chart — counts every archived miss log entry (across all history,
+// not just the current date range) by category, optionally filtered to one
+// metric, sorted descending, with a cumulative-% line overlaid.
+let xsParetoChart = null;
+(function initXsParetoModal(){
+  const overlay = document.createElement('div');
+  overlay.className = 'chart-modal-overlay';
+  overlay.innerHTML = `
+    <div class="chart-modal">
+      <div class="chart-modal-head">
+        <h3>SLA Miss Pareto</h3>
+        <div class="chart-modal-actions">
+          <select id="xsParetoMetricFilter">
+            <option value="all">All metrics</option>
+            ${XS_MISS_METRICS.map(m=>`<option value="${m.key}">${m.label}</option>`).join('')}
+          </select>
+          <button type="button" class="chart-modal-close" id="xsParetoCloseBtn" aria-label="Close">&times;</button>
+        </div>
+      </div>
+      <div class="chart-modal-body" style="height:440px;"><canvas id="xsParetoCanvas"></canvas></div>
+      <div class="chart-modal-status" id="xsParetoStatus"></div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const filterSel = overlay.querySelector('#xsParetoMetricFilter');
+  const statusEl = overlay.querySelector('#xsParetoStatus');
+  const canvas = overlay.querySelector('#xsParetoCanvas');
+  const closeBtn = overlay.querySelector('#xsParetoCloseBtn');
+
+  function closeParetoModal(){ overlay.classList.remove('open'); }
+
+  function renderParetoChart(){
+    const filter = filterSel.value;
+    const counts = {};
+    Object.values(xsMissLog).forEach(entry=>{
+      if(!entry) return;
+      if(filter!=='all' && entry.metric!==filter) return;
+      const cat = entry.category || 'Uncategorized';
+      counts[cat] = (counts[cat]||0) + 1;
+    });
+    const rows = Object.entries(counts).sort((a,b)=> b[1]-a[1]);
+    if(xsParetoChart){ xsParetoChart.destroy(); xsParetoChart = null; }
+    if(!rows.length){
+      statusEl.textContent = 'No categorized SLA misses yet for this filter.';
+      return;
+    }
+    statusEl.textContent = '';
+    const labels = rows.map(r=>r[0]);
+    const counts_ = rows.map(r=>r[1]);
+    const total = counts_.reduce((a,b)=>a+b, 0);
+    let running = 0;
+    const cumPct = counts_.map(c=>{ running += c; return Math.round((running/total)*1000)/10; });
+
+    xsParetoChart = new Chart(canvas.getContext('2d'), {
+      type:'bar',
+      data:{ labels, datasets:[
+        { type:'bar', label:'Misses', data:counts_, backgroundColor:'#3d9fe8', borderRadius:4, order:2, yAxisID:'y',
+          datalabels:{display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600,size:11}, formatter:v=>v} },
+        { type:'line', label:'Cumulative %', data:cumPct, borderColor:'#e8a33d', backgroundColor:'#e8a33d',
+          order:1, yAxisID:'y1', tension:0.25, pointRadius:3, pointBackgroundColor:'#e8a33d',
+          datalabels:{display:true, anchor:'end', align:'top', color:'#e8a33d', font:{weight:600,size:10}, formatter:v=>v+'%'} }
+      ]},
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        interaction:{mode:'index', intersect:false},
+        plugins:{ legend:{display:true, labels:{boxWidth:10, padding:14, color:'#93a8c4'}} },
+        scales:{
+          x:{ grid:{display:false} },
+          y:{ position:'left', beginAtZero:true, ticks:{precision:0}, grid:{color:'rgba(255,255,255,0.06)'}, title:{display:true, text:'Misses', color:'#93a8c4'} },
+          y1:{ position:'right', beginAtZero:true, max:100, ticks:{callback:v=>v+'%'}, grid:{display:false}, title:{display:true, text:'Cumulative %', color:'#93a8c4'} }
+        }
+      }
+    });
+  }
+
+  document.getElementById('xsGenerateParetoBtn')?.addEventListener('click', ()=>{
+    overlay.classList.add('open');
+    renderParetoChart();
+  });
+  filterSel.addEventListener('change', renderParetoChart);
+  closeBtn.addEventListener('click', closeParetoModal);
+  overlay.addEventListener('click', (e)=>{ if(e.target===overlay) closeParetoModal(); });
+  document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && overlay.classList.contains('open')) closeParetoModal(); });
+})();
+
 function xsSlaAccent(value, target, warnMargin){
   if(warnMargin===undefined) warnMargin = 2;
   if(value===null || value===undefined) return 'var(--text-faint)';
@@ -3425,6 +3640,15 @@ function xsRenderCharts(outboundGroups, outboundItems, inboundGroups, inventoryG
     ]},
     options: invOpts
   });
+
+  xsRenderMissLogTable(xsDetectMisses([
+    { key:'fillRate',          label:'Fill Rate',                        labels:fillLabels, data:fillData,   target:XS_SLA_TARGETS.fillRate },
+    { key:'dockToStock',       label:'Dock to Stock SLA',                 labels:dtsLabels,  data:dtsData,    target:XS_SLA_TARGETS.dockToStock },
+    { key:'onTimeAuto',        label:'On-Time Delivery \u2014 Auto',      labels:otLabels,   data:otAuto,     target:XS_SLA_TARGETS.onTimeAuto },
+    { key:'onTimeManual',      label:'On-Time Delivery \u2014 Manual',    labels:otLabels,   data:otManual,   target:XS_SLA_TARGETS.onTimeManual },
+    { key:'inventoryUnit',     label:'Inventory Accuracy \u2014 Unit',    labels:invLabels,  data:invUnitData,target:XS_SLA_TARGETS.inventoryAccuracy },
+    { key:'inventoryLocation', label:'Inventory Accuracy \u2014 Location',labels:invLabels,  data:invLocData, target:XS_SLA_TARGETS.inventoryAccuracy }
+  ]));
 }
 
 /* =======================================================================

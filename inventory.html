@@ -992,6 +992,63 @@ function icGranularityLabel(){
 /* ---------------------------------------------------------------------
    Excel parsing
 --------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------
+   Active recounts. Only an ACTI (active, waiting-to-be-counted) document
+   keeps a location Open. A RECO row is an original count that triggered a
+   recount; its "Reference Physical Inventory Document" points at the
+   recount document, and the recount points back (a recount that itself
+   needs a recount is linked onward the same way). If the recount is
+   deleted, never appears in the export, was completed under another
+   SKU, or otherwise isn't an active count, nothing is waiting on it — a
+   new count would have to be created by hand — so the location is Closed,
+   not Open. This reads the WHOLE file (every status, DELE included) and,
+   per bin, follows the document links to the newest document in each
+   chain: the recount is "active" only if that newest document is in the
+   export and is ACTI.
+--------------------------------------------------------------------- */
+function icBuildActiveRecountLookup(rows, COL){
+  const clean = v => (v===null || v===undefined || String(v).trim()==='') ? null : String(v).trim();
+  const nodes = new Map();   // "doc|bin" -> {doc, bin, present, statuses:Set, refs:Set}
+  const parent = new Map();  // union-find over node keys
+  const find = k => { let r=k; while(parent.get(r)!==r) r=parent.get(r); while(parent.get(k)!==r){ const n=parent.get(k); parent.set(k,r); k=n; } return r; };
+  const union = (a,b) => { const ra=find(a), rb=find(b); if(ra!==rb) parent.set(ra, rb); };
+  const nodeFor = (doc,bin) => {
+    const k = doc+'|'+bin;
+    let n = nodes.get(k);
+    if(!n){ n = {doc, bin, present:false, statuses:new Set(), refs:new Set()}; nodes.set(k,n); parent.set(k,k); }
+    return n;
+  };
+  for(let i=1;i<rows.length;i++){
+    const row = rows[i];
+    if(!row || row.length===0) continue;
+    const doc = clean(row[COL.picDoc]);
+    const bin = COL.bin!==undefined ? clean(row[COL.bin]) : null;
+    if(!doc || !bin) continue;
+    const n = nodeFor(doc,bin);
+    n.present = true;
+    n.statuses.add(row[COL.status] ? String(row[COL.status]).trim().toUpperCase() : '');
+    const ref = COL.refPicDoc!==undefined ? clean(row[COL.refPicDoc]) : null;
+    if(ref) n.refs.add(ref);
+  }
+  for(const n of Array.from(nodes.values())){
+    n.refs.forEach(ref => union(n.doc+'|'+n.bin, nodeFor(ref, n.bin).doc+'|'+n.bin));
+  }
+  const newestOfChain = new Map(); // component root -> newest node (highest document number, present or not)
+  for(const [k,n] of nodes.entries()){
+    const root = find(k);
+    const cur = newestOfChain.get(root);
+    if(!cur || Number(n.doc) > Number(cur.doc)) newestOfChain.set(root, n);
+  }
+  return function isActiveRecount(doc, bin){
+    const d = clean(doc), b = clean(bin);
+    if(!d || !b) return false;
+    const k = d+'|'+b;
+    if(!nodes.has(k)) return false;
+    const newest = newestOfChain.get(find(k));
+    return !!newest && newest.present && newest.statuses.has('ACTI');
+  };
+}
+
 async function icParseSapExport(file){
   const buf = await readFileAsArrayBuffer(file);
   const wb = XLSX.read(buf, {type:'array', cellDates:true});
@@ -1015,6 +1072,7 @@ async function icParseSapExport(file){
 
   const updates = {};
   let totalRows=0, skippedStatus=0, skippedIncomplete=0, imported=0;
+  const isActiveRecount = icBuildActiveRecountLookup(rows, COL);
 
   for(let i=1;i<rows.length;i++){
     const row = rows[i];
@@ -1059,6 +1117,10 @@ async function icParseSapExport(file){
       warehouseTask: COL.warehouseTask!==undefined ? (row[COL.warehouseTask] ?? null) : null,
       owner: COL.owner!==undefined ? (row[COL.owner] ?? null) : null,
       countAt: countAt ? countAt.toISOString() : null,
+      // True only when this RECO's recount chain ends in an active (ACTI)
+      // document (see icBuildActiveRecountLookup). Otherwise the recount is
+      // dead and the location is Closed, not Open.
+      recountActive: status==='RECO' ? isActiveRecount(String(picDoc).trim(), String(bin).trim()) : false,
       uploadedAt: new Date().toISOString()
     };
 
@@ -1498,14 +1560,20 @@ function icGroupByLocation(records){
     // recount is still pending: this location is active/waiting, same as
     // an ACTI row, not resolved off of whatever an earlier, now-superseded
     // count happened to show.
-    const pendingRecos = recs.filter(r=>r.status==='RECO' && isValidDate(r.countAt) && (r.bookQty||0)===0 && (r.countedQty||0)===0);
+    // Only ACTI keeps a location open: either an ACTI document at this
+    // bin/SKU, or a RECO whose recount chain ends in an ACTI document. A
+    // RECO whose recount is deleted, missing from the export, or otherwise
+    // not active is dead — nothing is waiting on it.
+    const liveRecos = recs.filter(r=>r.status==='RECO' && r.recountActive);
+    const pendingRecos = liveRecos.filter(r=>isValidDate(r.countAt));
     const latestPendingReco = pendingRecos.length ? pendingRecos.reduce((a,b)=>a.countAt>b.countAt?a:b) : null;
-    const recountPending = !!latestPendingReco && (!terminal || latestPendingReco.countAt > terminal.countAt);
+    const recountPending = liveRecos.length>0 && (!terminal || (!!latestPendingReco && latestPendingReco.countAt > terminal.countAt));
 
     let status;
     if(hasActi || recountPending) status = 'Open';
     else if(terminal) status = terminal.diffQty===0 ? 'Accurate' : 'Inaccurate';
-    else status = 'Open'; // only RECO on file, no terminal yet (recount not in this export window)
+    else if(hadRecount) status = 'Closed'; // RECO only, no active recount and no later count — a new count would have to be created by hand
+    else status = 'Open';
 
     const rep = terminal || earliest; // record to display qty/counter/date from
     const originalDiff = hadRecount && earliest && terminal && earliest._key!==terminal._key ? earliest.diffQty : null;
@@ -1518,9 +1586,9 @@ function icGroupByLocation(records){
       bookQty: rep.bookQty, countedQty: rep.countedQty, diffQty: rep.diffQty,
       originalDiffQty: originalDiff,
       counter: (terminal && terminal.counter) || null,
-      countAt: status==='Open' ? (recountPending && !hasActi ? latestPendingReco.countAt : earliest.countAt) : (terminal ? terminal.countAt : earliest.countAt),
+      countAt: status==='Open' ? (recountPending && !hasActi && latestPendingReco ? latestPendingReco.countAt : earliest.countAt) : (terminal ? terminal.countAt : earliest.countAt),
       status, hadRecount,
-      recountOutcome: hadRecount && status!=='Open' ? (status==='Accurate' ? 'Corrected' : 'Confirmed') : null,
+      recountOutcome: hadRecount && (status==='Accurate' || status==='Inaccurate') ? (status==='Accurate' ? 'Corrected' : 'Confirmed') : null,
       recordCount: recs.length,
       records: recs
     });
@@ -1549,8 +1617,10 @@ function icRollupByBin(groups){
   const bins = [];
   for(const [bin, locs] of map.entries()){
     let status;
-    if(locs.some(l=>l.status==='Open')) status = 'Open';
-    else if(locs.some(l=>l.status==='Inaccurate')) status = 'Inaccurate';
+    const counted = locs.filter(l=>l.status!=='Closed'); // a location closed for lack of an active recount has no result to roll up
+    if(counted.length===0) status = 'Closed';
+    else if(counted.some(l=>l.status==='Open')) status = 'Open';
+    else if(counted.some(l=>l.status==='Inaccurate')) status = 'Inaccurate';
     else status = 'Accurate';
     bins.push({ bin, status, locationCount: locs.length });
   }
@@ -1572,6 +1642,7 @@ function icRenderAll(){
   const rangeGroups = icFilterByRange(allGroups);
   icCachedRangeGroups = rangeGroups;
   const openGroups = allGroups.filter(g=>g.status==='Open'); // always live, not range-filtered
+  const closedGroups = allGroups.filter(g=>g.status==='Closed'); // recount not active — always live, not range-filtered
 
   // Raw status tallies (Open/Completed/Recount counts) work off individual
   // count documents, not the resolved-location rollup above — same date
@@ -1582,7 +1653,7 @@ function icRenderAll(){
   const toVal = document.getElementById('icDateTo').value;
   const rangeRecords = computeRangeFilteredGroups(icScopedRecords, icRangeMode, fromVal, toVal, 'countAt', XS_STRICT_NO_BYPASS, icBusinessDate);
 
-  safeRender('inventory KPIs', ()=>icRenderKPIs(rangeGroups, openGroups, rangeRecords));
+  safeRender('inventory KPIs', ()=>icRenderKPIs(rangeGroups, openGroups, rangeRecords, closedGroups));
   safeRender('inventory charts', ()=>icRenderCharts(rangeGroups, openGroups));
   safeRender('inventory on-hand summary', ()=>icRenderOnHandKpis());
   safeRender('inventory value summary', ()=>icRenderValueSummary(rangeGroups));
@@ -1655,18 +1726,20 @@ function icCompletedCountsBreakdown(rangeCounRecords, allRecords){
   }
 
   const terminalKeyOf = new Map(); // location key -> terminal COUN record's _key
-  const statusOf = new Map();      // location key -> 'Open'|'Accurate'|'Inaccurate'
+  const statusOf = new Map();      // location key -> 'Open'|'Closed'|'Accurate'|'Inaccurate'
   for(const [key, recs] of byKey.entries()){
     const hasActi = recs.some(r=>r.status==='ACTI');
     const couns = recs.filter(r=>r.status==='COUN' && isValidDate(r.countAt));
     const sortedCouns = [...couns].sort((a,b)=>b.countAt-a.countAt);
     const terminal = sortedCouns[0] || null;
-    const pendingRecos = recs.filter(r=>r.status==='RECO' && isValidDate(r.countAt) && (r.bookQty||0)===0 && (r.countedQty||0)===0);
+    const liveRecos = recs.filter(r=>r.status==='RECO' && r.recountActive);
+    const pendingRecos = liveRecos.filter(r=>isValidDate(r.countAt));
     const latestPendingReco = pendingRecos.length ? pendingRecos.reduce((a,b)=>a.countAt>b.countAt?a:b) : null;
-    const recountPending = !!latestPendingReco && (!terminal || latestPendingReco.countAt > terminal.countAt);
+    const recountPending = liveRecos.length>0 && (!terminal || (!!latestPendingReco && latestPendingReco.countAt > terminal.countAt));
     let status;
     if(hasActi || recountPending) status = 'Open';
     else if(terminal) status = terminal.diffQty===0 ? 'Accurate' : 'Inaccurate';
+    else if(recs.some(r=>r.status==='RECO')) status = 'Closed';
     else status = 'Open';
     terminalKeyOf.set(key, terminal ? terminal._key : null);
     statusOf.set(key, status);
@@ -2450,7 +2523,8 @@ document.querySelectorAll('#icSubpageToggle .seg-btn').forEach(btn=>{
   });
 });
 
-function icRenderKPIs(groups, openGroups, rangeRecords){
+function icRenderKPIs(groups, openGroups, rangeRecords, closedGroups){
+  closedGroups = closedGroups || [];
   const grid = document.getElementById('icKpiGrid');
 
   // Open Counts value comes from openGroups (always live, not range-
@@ -2501,6 +2575,9 @@ function icRenderKPIs(groups, openGroups, rangeRecords){
   const openWithAge = openGroups.map(g=>({...g, ageMin: isValidDate(g.countAt) ? minutesBetween(g.countAt, now) : null}));
   const oldestOpenFirst = [...openWithAge].sort((a,b)=>(b.ageMin||0)-(a.ageMin||0));
   const oldestOpen = oldestOpenFirst[0] || null;
+  // Locations with a recount on file but no active (ACTI) count — not open,
+  // and nothing will happen to them unless someone creates a new count by hand.
+  const closedByVariance = [...closedGroups].sort((a,b)=>Math.abs(b.diffQty)-Math.abs(a.diffQty));
 
   const cards = [
     {label:'Overall Unit Accuracy', value: accuracyPct!==null ? accuracyPct+'%' : '\u2014',
@@ -2525,6 +2602,10 @@ function icRenderKPIs(groups, openGroups, rangeRecords){
       modalTitle:'Inaccurate Locations \u2014 largest variance first',
       modalBody: icModalTableHtml(inaccurateGroups),
       exportRows: icModalExportRows(inaccurateGroups), exportFilename: 'inaccurate-locations'},
+    {label:'Closed \u2013 No Active Recount', value: closedGroups.length.toLocaleString(), sub:'recount not active, not open<br>needs a manual count if still required', accent:'var(--info)',
+      modalTitle:'Closed \u2013 No Active Recount \u2014 '+closedGroups.length.toLocaleString()+' location'+(closedGroups.length===1?'':'s')+' (largest original variance first)',
+      modalBody: icModalTableHtml(closedByVariance),
+      exportRows: icModalExportRows(closedByVariance), exportFilename: 'closed-no-active-recount'},
     {label:'Oldest Open Count', value: oldestOpen ? formatDuration(oldestOpen.ageMin) : '\u2014', sub: oldestOpen ? (oldestOpen.product+' @ '+oldestOpen.bin) : 'nothing open', accent: oldestOpen && oldestOpen.ageMin>4320 ? 'var(--bad)' : 'var(--warn)',
       modalTitle:'Open Counts \u2014 Oldest First', modalBody: icModalTableHtml(oldestOpenFirst),
       exportRows: icModalExportRows(oldestOpenFirst), exportFilename: 'open-counts-oldest-first'}
@@ -2607,14 +2688,15 @@ function icRenderStatusSplitChart(groups){
   const open = groups.filter(g=>g.status==='Open').length;
   const accurate = groups.filter(g=>g.status==='Accurate').length;
   const inaccurate = groups.filter(g=>g.status==='Inaccurate').length;
+  const closed = groups.filter(g=>g.status==='Closed').length;
   icDestroyChart('statusSplit');
   icCharts.statusSplit = new Chart(document.getElementById('icChartStatusSplit'), {
     type:'doughnut',
-    data:{ labels:['Open','Accurate','Inaccurate'], datasets:[{ data:[open,accurate,inaccurate],
-      backgroundColor:['#e8a33d','#2fbf71','#e2231a'], borderWidth:0 }]},
+    data:{ labels:['Open','Accurate','Inaccurate','Closed (no active recount)'], datasets:[{ data:[open,accurate,inaccurate,closed],
+      backgroundColor:['#e8a33d','#2fbf71','#e2231a','#6b7a90'], borderWidth:0 }]},
     options:{ responsive:true, maintainAspectRatio:false,
       plugins:{ legend:{position:'bottom', labels:{color:LABEL_COLOR, boxWidth:12, padding:14}},
-        tooltip:{ callbacks:{ label: ctx => ctx.label+': '+ctx.parsed+' ('+Math.round(ctx.parsed/(open+accurate+inaccurate||1)*1000)/10+'%)' } },
+        tooltip:{ callbacks:{ label: ctx => ctx.label+': '+ctx.parsed+' ('+Math.round(ctx.parsed/(open+accurate+inaccurate+closed||1)*1000)/10+'%)' } },
         datalabels:{display:false} } }
   });
 }
@@ -2773,8 +2855,9 @@ function icRenderTable(rangeGroups){
   tbody.innerHTML = groups.map(g=>{
     const statusBadge = g.status==='Accurate' ? '<span class="badge accurate">Accurate</span>'
       : g.status==='Inaccurate' ? '<span class="badge inaccurate">Inaccurate</span>'
+      : g.status==='Closed' ? '<span class="badge unknown">Closed</span>'
       : '<span class="badge progress">Open</span>';
-    const recountBadge = g.hadRecount ? `<span class="badge recounted">${g.recountOutcome==='Corrected'?'Recount corrected':g.recountOutcome==='Confirmed'?'Recount confirmed':'Recount pending'}</span>` : '';
+    const recountBadge = g.hadRecount ? `<span class="badge recounted">${g.recountOutcome==='Corrected'?'Recount corrected':g.recountOutcome==='Confirmed'?'Recount confirmed':g.status==='Closed'?'Recount closed':'Recount pending'}</span>` : '';
     return `
       <tr>
         <td>${g.bin}</td>

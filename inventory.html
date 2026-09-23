@@ -1077,7 +1077,8 @@ async function icParseSapExport(file){
   }
 
   const updates = {};
-  const deletedKeys = new Set(); // doc__bin keys of DELE rows — used to clear any stale stored copy on upload
+  const deletedPairs = new Set(); // "doc|bin" of DELE rows — used to clear any stale stored copy on upload
+  const lines = new Map();        // "doc|bin|product|status" -> one location line, all HU rows folded together
   let totalRows=0, skippedStatus=0, skippedIncomplete=0, imported=0;
   const isActiveRecount = icBuildActiveRecountLookup(rows, COL);
 
@@ -1089,7 +1090,7 @@ async function icParseSapExport(file){
     const status = row[COL.status] ? String(row[COL.status]).trim().toUpperCase() : '';
     if(!IC_KEEP_STATUSES.has(status)){
       if(status==='DELE' && row[COL.picDoc] && COL.bin!==undefined && row[COL.bin]){
-        deletedKeys.add(sanitizeKey(String(row[COL.picDoc]).trim()+'__'+String(row[COL.bin]).trim()));
+        deletedPairs.add(String(row[COL.picDoc]).trim()+'|'+String(row[COL.bin]).trim());
       }
       skippedStatus++; continue;
     }
@@ -1113,43 +1114,98 @@ async function icParseSapExport(file){
     const bookQty = COL.bookQty!==undefined ? (Number(row[COL.bookQty]) || 0) : 0;
     const countedQty = COL.countedQty!==undefined ? (Number(row[COL.countedQty]) || 0) : 0;
 
-    const record = {
-      picDoc: String(picDoc).trim(),
-      status,
-      warehouseOrder: COL.warehouseOrder!==undefined ? (row[COL.warehouseOrder] ?? null) : null,
-      bin: String(bin).trim(),
-      product,
-      stockType: COL.stockType!==undefined ? (row[COL.stockType] ?? null) : null,
-      counter: COL.counter!==undefined ? (row[COL.counter] ?? null) : null,
-      productDesc: COL.productDesc!==undefined ? (row[COL.productDesc] ?? null) : null,
-      bookQty, countedQty,
-      diffQty: countedQty - bookQty, // computed independently of the export's own Difference Quantity column
-      refPicDoc: COL.refPicDoc!==undefined ? (row[COL.refPicDoc] ?? null) : null,
-      hu: COL.hu!==undefined ? (row[COL.hu] ?? null) : null,
-      warehouseTask: COL.warehouseTask!==undefined ? (row[COL.warehouseTask] ?? null) : null,
-      owner: COL.owner!==undefined ? (row[COL.owner] ?? null) : null,
-      countAt: countAt ? countAt.toISOString() : null,
-      // True only when this RECO's recount chain ends in an active (ACTI)
-      // document (see icBuildActiveRecountLookup). Otherwise the recount is
-      // dead and the location is Closed, not Open.
-      recountActive: status==='RECO' ? isActiveRecount(String(picDoc).trim(), String(bin).trim()) : false,
-      uploadedAt: new Date().toISOString()
-    };
-
-    // Physical Inventory Document is NOT a unique per-line key in this
-    // export — a single document number can cover a whole batch of bins
-    // in one zone-sweep count (seen: one document spanning 113 different
-    // bins). Storage Bin is unique within a document, so the dedupe key
-    // is the pair — Document alone would silently collapse a multi-bin
-    // batch down to its last row.
-    const key = sanitizeKey(record.picDoc+'__'+record.bin);
-    updates[key] = record;
+    const docStr = String(picDoc).trim(), binStr = String(bin).trim();
+    const rowHu = COL.hu!==undefined ? (row[COL.hu] ?? null) : null;
+    const rowCounter = COL.counter!==undefined ? (row[COL.counter] ?? null) : null;
+    const lineKey = docStr+'|'+binStr+'|'+(product||'')+'|'+status;
+    let line = lines.get(lineKey);
+    if(!line){
+      line = {
+        picDoc: docStr,
+        status,
+        warehouseOrder: COL.warehouseOrder!==undefined ? (row[COL.warehouseOrder] ?? null) : null,
+        bin: binStr,
+        product,
+        stockType: COL.stockType!==undefined ? (row[COL.stockType] ?? null) : null,
+        counters: [],
+        productDesc: COL.productDesc!==undefined ? (row[COL.productDesc] ?? null) : null,
+        bookQty: 0, countedQty: 0,
+        refPicDoc: COL.refPicDoc!==undefined ? (row[COL.refPicDoc] ?? null) : null,
+        hus: [],
+        warehouseTask: COL.warehouseTask!==undefined ? (row[COL.warehouseTask] ?? null) : null,
+        owner: COL.owner!==undefined ? (row[COL.owner] ?? null) : null,
+        countAtMs: null,
+        lineCount: 0
+      };
+      lines.set(lineKey, line);
+    }
+    // A location can hold several handling units (HUs) of its one SKU, and
+    // the export lists each HU as its own row under the same document, bin
+    // and product. The location's book and counted quantities are the SUM
+    // of those rows — keeping just one row (as this used to) understated
+    // both. Difference is recomputed from the sums, so it is the
+    // location's net difference; HU-level ups and downs offset within it.
+    line.bookQty += bookQty;
+    line.countedQty += countedQty;
+    line.lineCount++;
+    if(rowHu!==null && rowHu!=='' && !line.hus.includes(String(rowHu))) line.hus.push(String(rowHu));
+    if(rowCounter!==null && rowCounter!=='' && !line.counters.includes(String(rowCounter))) line.counters.push(String(rowCounter));
+    if(line.refPicDoc===null && COL.refPicDoc!==undefined) line.refPicDoc = row[COL.refPicDoc] ?? null;
+    if(line.warehouseTask===null && COL.warehouseTask!==undefined) line.warehouseTask = row[COL.warehouseTask] ?? null;
+    if(line.productDesc===null && COL.productDesc!==undefined) line.productDesc = row[COL.productDesc] ?? null;
+    if(countAt && !isNaN(countAt.getTime()) && (line.countAtMs===null || countAt.getTime() > line.countAtMs)) line.countAtMs = countAt.getTime(); // latest HU counted
     imported++;
   }
 
-  // A key that also came in with a kept status stays (the kept row wins).
-  Object.keys(updates).forEach(k=>deletedKeys.delete(k));
-  return {updates, deletedKeys: Array.from(deletedKeys), totalRows, skippedStatus, skippedIncomplete, imported, missingOptional: missing.filter(f=>!IC_REQUIRED_COLUMNS.includes(f))};
+  // One stored record per document + bin + SKU line. Storage keys: the
+  // first line of a document/bin (SKUs in alphabetical order, blank last)
+  // keeps the original "document__bin" key so counts already stored under
+  // it are simply overwritten rather than duplicated; any further SKU in
+  // the same document/bin gets "document__bin__SKU".
+  const byDocBin = new Map();
+  lines.forEach(line=>{
+    const k = line.picDoc+'|'+line.bin;
+    if(!byDocBin.has(k)) byDocBin.set(k, []);
+    byDocBin.get(k).push(line);
+  });
+  byDocBin.forEach(group=>{
+    group.sort((x,y)=>{
+      if(!x.product && y.product) return 1;
+      if(x.product && !y.product) return -1;
+      return String(x.product||'').localeCompare(String(y.product||''));
+    });
+    group.forEach((line,idx)=>{
+      const record = {
+        picDoc: line.picDoc,
+        status: line.status,
+        warehouseOrder: line.warehouseOrder,
+        bin: line.bin,
+        product: line.product,
+        stockType: line.stockType,
+        counter: line.counters.length ? line.counters.join(', ') : null,
+        productDesc: line.productDesc,
+        bookQty: line.bookQty, countedQty: line.countedQty,
+        diffQty: line.countedQty - line.bookQty, // computed independently of the export's own Difference Quantity column
+        refPicDoc: line.refPicDoc,
+        hu: line.hus.length ? line.hus.join(', ') : null,
+        lineCount: line.lineCount, // how many export rows (handling units) were folded into this line
+        warehouseTask: line.warehouseTask,
+        owner: line.owner,
+        countAt: line.countAtMs!==null ? new Date(line.countAtMs).toISOString() : null,
+        // True only when this RECO's recount chain ends in an active (ACTI)
+        // document (see icBuildActiveRecountLookup). Otherwise the recount is
+        // dead and the location is Closed, not Open.
+        recountActive: line.status==='RECO' ? isActiveRecount(line.picDoc, line.bin) : false,
+        uploadedAt: new Date().toISOString()
+      };
+      const key = sanitizeKey(idx===0 ? line.picDoc+'__'+line.bin : line.picDoc+'__'+line.bin+'__'+(line.product||'nosku'));
+      updates[key] = record;
+    });
+  });
+
+  // A document/bin that also came in with a kept status stays (the kept row wins).
+  Object.values(updates).forEach(r=>deletedPairs.delete(r.picDoc+'|'+r.bin));
+  return {updates, deletedPairs: Array.from(deletedPairs), totalRows, skippedStatus, skippedIncomplete, imported, missingOptional: missing.filter(f=>!IC_REQUIRED_COLUMNS.includes(f))};
 }
 
 /* ---------------------------------------------------------------------
@@ -1391,10 +1447,11 @@ document.getElementById('icFileInput').addEventListener('change', async (e)=>{
       // behind forever — and a stale ACTI record shows as an open count
       // indefinitely. Two cleanups:
       //  1. Any document this export marks DELE: clear its stored copy.
-      const deletedSet = new Set(result.deletedKeys);
-      let clearedDeleted = 0;
-      icAllRecords.forEach(r=>{ if(deletedSet.has(r._key)) clearedDeleted++; });
-      result.deletedKeys.forEach(k=>{ payload[k] = null; });
+      const deletedPairs = new Set(result.deletedPairs);
+      const deletedStored = icAllRecords.filter(r=>!(r._key in result.updates) && deletedPairs.has(String(r.picDoc).trim()+'|'+String(r.bin).trim()));
+      const deletedSet = new Set(deletedStored.map(r=>r._key));
+      const clearedDeleted = deletedStored.length;
+      deletedStored.forEach(r=>{ payload[r._key] = null; });
       //  2. Stored ACTI counts that this export no longer contains at all.
       //     Most likely completed, deleted or archived since — but if this
       //     was only a partial export they could still be live, so ask.
@@ -1414,7 +1471,7 @@ document.getElementById('icFileInput').addEventListener('change', async (e)=>{
       await icRecordsRef.update(payload);
       await icUploadsRef.push({ fileName:file.name, uploadedAt:new Date().toISOString(),
         totalRows:result.totalRows, skippedStatus:result.skippedStatus, skippedIncomplete:result.skippedIncomplete, imported:result.imported });
-      icSetSyncStatus('ok', result.imported+' count'+(result.imported===1?'':'s')+' imported'+(result.skippedStatus?', '+result.skippedStatus+' skipped (status)':'')
+      icSetSyncStatus('ok', keys.length+' count line'+(keys.length===1?'':'s')+' imported from '+result.imported+' row'+(result.imported===1?'':'s')+(result.skippedStatus?', '+result.skippedStatus+' skipped (status)':'')
         +(clearedDeleted?', '+clearedDeleted+' deleted count'+(clearedDeleted===1?'':'s')+' cleared':'')
         +(clearedStale?', '+clearedStale+' stale active count'+(clearedStale===1?'':'s')+' removed':''));
     } else {

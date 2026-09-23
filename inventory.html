@@ -512,7 +512,7 @@
         <thead>
           <tr>
             <th>Bin</th><th>SKU</th><th>Description</th>
-            <th>Qty WMS</th><th>Qty Physical</th><th>Variance Qty</th><th>Variance $</th>
+            <th>Qty WMS</th><th>Qty Physical</th><th>Variance Qty</th><th>Variance $</th><th>Count Date</th>
           </tr>
         </thead>
         <tbody id="icValueByLocationTableBody"></tbody>
@@ -539,7 +539,7 @@
         <thead>
           <tr>
             <th>SKU</th><th>Description</th><th>Locations</th>
-            <th>Qty WMS</th><th>Qty Physical</th><th>Variance Qty</th><th>Variance $</th>
+            <th>Qty WMS</th><th>Qty Physical</th><th>Variance Qty</th><th>Variance $</th><th>Last Count Date</th>
           </tr>
         </thead>
         <tbody id="icValueBySkuTableBody"></tbody>
@@ -639,6 +639,11 @@ function formatDuration(min){
 function formatDateTime(d){
   if(!isValidDate(d)) return '&mdash;';
   return d.toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+}
+// data-sort value for a date cell — the displayed text has no year, so header
+// sorting reads this exact timestamp instead of parsing the text.
+function icSortAttr(d){
+  return isValidDate(d) ? ' data-sort="'+d.getTime()+'"' : '';
 }
 
 // --- readFileAsArrayBuffer (orig line 1281) ---
@@ -784,12 +789,13 @@ document.getElementById('kpiModalExportBtn').addEventListener('click', ()=>{
     alert('Excel export library failed to load from CDN — check your network/firewall and reload.');
     return;
   }
-  const sheet = XLSX.utils.json_to_sheet(kpiModalExportRows, {cellDates:true});
-  const headerRow = Object.keys(kpiModalExportRows[0]||{});
+  const exportRows = icModalExportRowsInDisplayOrder(kpiModalExportRows);
+  const sheet = XLSX.utils.json_to_sheet(exportRows, {cellDates:true});
+  const headerRow = Object.keys(exportRows[0]||{});
   sheet['!cols'] = headerRow.map(()=>({wch:16}));
   headerRow.forEach((col,colIdx)=>{
-    if(!(kpiModalExportRows[0][col] instanceof Date)) return;
-    for(let r=0;r<kpiModalExportRows.length;r++){
+    if(!(exportRows[0][col] instanceof Date)) return;
+    for(let r=0;r<exportRows.length;r++){
       const addr = XLSX.utils.encode_cell({r:r+1, c:colIdx});
       if(sheet[addr] && sheet[addr].t==='d') sheet[addr].z = 'mm/dd/yyyy hh:mm AM/PM';
     }
@@ -1713,7 +1719,7 @@ function icModalTableHtml(groups){
         <td>${g.diffQty>0?'+':''}${g.diffQty.toLocaleString()}</td>
         <td>${g.status}</td>
         <td>${g.counter||'&mdash;'}</td>
-        <td>${formatDateTime(g.countAt)}</td>
+        <td${icSortAttr(g.countAt)}>${formatDateTime(g.countAt)}</td>
       </tr>
     `).join('')}</tbody></table></div>`;
 }
@@ -1832,7 +1838,7 @@ function icReconSectionHtml(key, records){
         <td>${(r.countedQty||0).toLocaleString()}</td>
         <td>${(r.diffQty||0)>0?'+':''}${(r.diffQty||0).toLocaleString()}</td>
         <td>${r.counter||'&mdash;'}</td>
-        <td>${formatDateTime(r.countAt)}</td>
+        <td${icSortAttr(r.countAt)}>${formatDateTime(r.countAt)}</td>
       </tr>
     `).join('')}</tbody></table></div>
   </div>`;
@@ -1895,7 +1901,7 @@ function icAccuracyActionCellHtml(key, omission){
 function xsInventoryModalTableHtml(groups){
   if(!groups.length) return '<div style="color:var(--text-faint);padding:10px 0 4px;">No matching locations.</div>';
   return `<div style="overflow-x:auto;"><table><thead><tr>
-      <th>Bin</th><th>SKU</th><th>Description</th><th>Book</th><th>Counted</th><th>Diff</th><th>Result</th><th>Counter</th><th>Count Date</th><th>Inventory Accuracy</th>
+      <th>Bin</th><th>SKU</th><th>Description</th><th>Book</th><th>Counted</th><th>Diff</th><th>Result</th><th>Counter</th><th>Count Date</th><th data-nosort>Inventory Accuracy</th>
     </tr></thead><tbody>${groups.map(g=>{
       const omission = g.key ? icAccuracyOmissions[sanitizeKey(g.key)] : null;
       return `
@@ -1908,7 +1914,7 @@ function xsInventoryModalTableHtml(groups){
         <td>${g.diffQty>0?'+':''}${g.diffQty.toLocaleString()}</td>
         <td>${g.status}</td>
         <td>${g.counter||'&mdash;'}</td>
-        <td>${formatDateTime(g.countAt)}</td>
+        <td${icSortAttr(g.countAt)}>${formatDateTime(g.countAt)}</td>
         <td>${icAccuracyActionCellHtml(g.key, omission)}</td>
       </tr>
     `;}).join('')}</tbody></table></div>`;
@@ -2351,9 +2357,10 @@ function icValueBySkuRows(details){
   const bySku = {};
   details.forEach(d=>{
     const key = skuGroupKey(d.sku||'');
-    if(!bySku[key]) bySku[key] = { sku: d.sku, productDesc: d.productDesc||'', bins: new Set(), qtyWms:0, qtyPhysical:0, varianceQty:0, varianceValue:0 };
+    if(!bySku[key]) bySku[key] = { sku: d.sku, productDesc: d.productDesc||'', bins: new Set(), qtyWms:0, qtyPhysical:0, varianceQty:0, varianceValue:0, lastCountAt:null };
     const s = bySku[key];
     s.bins.add(d.bin);
+    if(isValidDate(d.countAt) && (!s.lastCountAt || d.countAt > s.lastCountAt)) s.lastCountAt = d.countAt;
     s.qtyWms += d.qtyWms;
     s.qtyPhysical += d.qtyPhysical;
     s.varianceQty += d.varianceQty;
@@ -2361,7 +2368,7 @@ function icValueBySkuRows(details){
     if(d.productDesc && !s.productDesc) s.productDesc = d.productDesc;
   });
   return Object.values(bySku)
-    .map(s=>({ sku:s.sku, productDesc:s.productDesc, locationCount:s.bins.size, qtyWms:s.qtyWms, qtyPhysical:s.qtyPhysical, varianceQty:s.varianceQty, varianceValue:s.varianceValue }))
+    .map(s=>({ sku:s.sku, productDesc:s.productDesc, locationCount:s.bins.size, qtyWms:s.qtyWms, qtyPhysical:s.qtyPhysical, varianceQty:s.varianceQty, varianceValue:s.varianceValue, lastCountAt:s.lastCountAt }))
     .sort((a,b)=>Math.abs(b.varianceValue)-Math.abs(a.varianceValue));
 }
 function icByLocationRowHtml(d){
@@ -2373,6 +2380,7 @@ function icByLocationRowHtml(d){
     <td>${d.qtyPhysical.toLocaleString()}</td>
     <td>${d.varianceQty>0?'+':''}${d.varianceQty.toLocaleString()}</td>
     <td>${icFormatCurrency(d.varianceValue)}</td>
+    <td${icSortAttr(d.countAt)}>${formatDateTime(d.countAt)}</td>
   </tr>`;
 }
 function icBySkuRowHtml(s){
@@ -2384,32 +2392,35 @@ function icBySkuRowHtml(s){
     <td>${s.qtyPhysical.toLocaleString()}</td>
     <td>${s.varianceQty>0?'+':''}${s.varianceQty.toLocaleString()}</td>
     <td>${icFormatCurrency(s.varianceValue)}</td>
+    <td${icSortAttr(s.lastCountAt)}>${formatDateTime(s.lastCountAt)}</td>
   </tr>`;
 }
 function icByLocationModalHtml(rows){
   if(!rows.length) return '<div style="color:var(--text-faint);padding:10px 0 4px;">No priced, matched locations in the current selection.</div>';
   return `<div style="overflow-x:auto;"><table><thead><tr>
-      <th>Bin</th><th>SKU</th><th>Description</th><th>Qty WMS</th><th>Qty Physical</th><th>Variance Qty</th><th>Variance $</th>
+      <th>Bin</th><th>SKU</th><th>Description</th><th>Qty WMS</th><th>Qty Physical</th><th>Variance Qty</th><th>Variance $</th><th>Count Date</th>
     </tr></thead><tbody>${rows.map(icByLocationRowHtml).join('')}</tbody></table></div>`;
 }
 function icBySkuModalHtml(rows){
   if(!rows.length) return '<div style="color:var(--text-faint);padding:10px 0 4px;">No priced, matched locations in the current selection.</div>';
   return `<div style="overflow-x:auto;"><table><thead><tr>
-      <th>SKU</th><th>Description</th><th>Locations</th><th>Qty WMS</th><th>Qty Physical</th><th>Variance Qty</th><th>Variance $</th>
+      <th>SKU</th><th>Description</th><th>Locations</th><th>Qty WMS</th><th>Qty Physical</th><th>Variance Qty</th><th>Variance $</th><th>Last Count Date</th>
     </tr></thead><tbody>${rows.map(icBySkuRowHtml).join('')}</tbody></table></div>`;
 }
 function icByLocationExportRows(rows){
   return rows.map(d=>({
     'Bin': d.bin, 'SKU': d.sku||'', 'Description': d.productDesc||'',
     'Qty WMS': d.qtyWms, 'Qty Physical': d.qtyPhysical, 'Variance Qty': d.varianceQty,
-    'Variance $': Math.round(d.varianceValue*100)/100
+    'Variance $': Math.round(d.varianceValue*100)/100,
+    'Count Date': isValidDate(d.countAt) ? d.countAt : ''
   }));
 }
 function icBySkuExportRows(rows){
   return rows.map(s=>({
     'SKU': s.sku||'', 'Description': s.productDesc||'', 'Locations': s.locationCount,
     'Qty WMS': s.qtyWms, 'Qty Physical': s.qtyPhysical, 'Variance Qty': s.varianceQty,
-    'Variance $': Math.round(s.varianceValue*100)/100
+    'Variance $': Math.round(s.varianceValue*100)/100,
+    'Last Count Date': isValidDate(s.lastCountAt) ? s.lastCountAt : ''
   }));
 }
 let icLastByLocationRows = null, icLastBySkuRows = null; // full (not just top-N), post-filter sorted lists — for the View All & Export modal
@@ -2427,10 +2438,10 @@ function icRenderValueVarianceTables(details){
 
   byLocationBody.innerHTML = byLocation.length
     ? byLocation.slice(0, IC_VALUE_TOP_N).map(icByLocationRowHtml).join('')
-    : '<tr><td colspan="7" style="color:var(--text-faint);">No priced, matched locations in the current selection.</td></tr>';
+    : '<tr><td colspan="8" style="color:var(--text-faint);">No priced, matched locations in the current selection.</td></tr>';
   bySkuBody.innerHTML = bySku.length
     ? bySku.slice(0, IC_VALUE_TOP_N).map(icBySkuRowHtml).join('')
-    : '<tr><td colspan="7" style="color:var(--text-faint);">No priced, matched locations in the current selection.</td></tr>';
+    : '<tr><td colspan="8" style="color:var(--text-faint);">No priced, matched locations in the current selection.</td></tr>';
 }
 document.querySelectorAll('#icByLocationVarianceToggle .seg-btn').forEach(btn=>{
   btn.addEventListener('click', ()=>{
@@ -2904,7 +2915,7 @@ function icRenderTable(rangeGroups){
         <td>${g.diffQty>0?'+':''}${g.diffQty.toLocaleString()}</td>
         <td>${statusBadge}${recountBadge}</td>
         <td>${g.counter||'&mdash;'}</td>
-        <td>${formatDateTime(g.countAt)}</td>
+        <td${icSortAttr(g.countAt)}>${formatDateTime(g.countAt)}</td>
       </tr>
     `;
   }).join('');
@@ -2986,6 +2997,102 @@ async function icResetAllDataPrompt(){
   }
 }
 document.getElementById('icResetAllDataBtn').addEventListener('click', icResetAllDataPrompt);
+
+/* ---------------------------------------------------------------------
+   Header sorting for every table except the main Cycle Count Locations
+   table (that one re-renders from data and has its own sort, so its export
+   follows the sort too). Click a header to sort, click again to reverse:
+   numbers, currency, percentages and dates sort by value (date cells carry
+   an exact data-sort timestamp), everything else sorts as natural text
+   (so 02-10 falls after 02-9). Blank cells always sort last. The current
+   sort survives a table body being re-rendered (e.g. the Positive/Negative
+   toggles); tables opened in a popup start unsorted each time.
+--------------------------------------------------------------------- */
+(function(){
+  const sortState = new WeakMap();  // table -> {col, dir}
+  const observers = new WeakMap();  // tbody -> MutationObserver
+
+  function cellInfo(td){
+    if(!td) return {v:null, t:''};
+    const t = td.textContent.replace(/\s+/g,' ').trim();
+    if(td.dataset && td.dataset.sort!==undefined && td.dataset.sort!==''){
+      const n = Number(td.dataset.sort);
+      if(!isNaN(n)) return {v:n, num:true, t};
+    }
+    if(t==='' || t==='\u2014' || t==='-' || /^n\/a$/i.test(t)) return {v:null, t};
+    const stripped = t.replace(/[$,%\s]/g,'').replace(/^\+/,'');
+    if(/^-?\d+(\.\d+)?$/.test(stripped)) return {v:parseFloat(stripped), num:true, t};
+    return {v:t, num:false, t};
+  }
+  function dataRows(tbody){
+    return Array.from(tbody.rows).filter(r=>!r.classList.contains('detail-row'));
+  }
+  function columnIsNumeric(rows, col){
+    return rows.every(r=>{ const c = cellInfo(r.cells[col]); return c.v===null || c.num; });
+  }
+  function applySort(table, col, dir){
+    const tbody = table.tBodies[0];
+    if(!tbody) return;
+    const obs = observers.get(tbody);
+    if(obs) obs.disconnect();
+    const rows = dataRows(tbody);
+    rows.forEach((r,i)=>{ if(r.dataset.origIdx===undefined) r.dataset.origIdx = String(i); });
+    const numeric = columnIsNumeric(rows, col);
+    const info = rows.map(r=>cellInfo(r.cells[col]));
+    const order = rows.map((_,i)=>i).sort((a,b)=>{
+      const ea = info[a].v===null, eb = info[b].v===null;
+      if(ea || eb) return ea && eb ? a-b : (ea ? 1 : -1); // blanks last, whichever direction
+      const cmp = numeric ? info[a].v - info[b].v
+        : info[a].t.localeCompare(info[b].t, undefined, {numeric:true, sensitivity:'base'});
+      if(cmp===0) return a-b;
+      return dir==='asc' ? cmp : -cmp;
+    });
+    order.forEach(i=>tbody.appendChild(rows[i]));
+    table.querySelectorAll('thead th').forEach((th,i)=>{
+      th.classList.remove('sorted','sorted-asc');
+      if(i===col) th.classList.add(dir==='asc' ? 'sorted-asc' : 'sorted');
+    });
+    if(obs) obs.observe(tbody, {childList:true});
+  }
+  function watch(table){
+    const tbody = table.tBodies[0];
+    if(!tbody || observers.has(tbody)) return;
+    const obs = new MutationObserver(()=>{
+      const st = sortState.get(table);
+      if(st) applySort(table, st.col, st.dir); // body was re-rendered — put the chosen sort back
+    });
+    observers.set(tbody, obs);
+    obs.observe(tbody, {childList:true});
+  }
+
+  document.addEventListener('click', e=>{
+    const th = e.target.closest ? e.target.closest('thead th') : null;
+    if(!th || th.hasAttribute('data-nosort')) return;
+    const table = th.closest('table');
+    if(!table || table.id==='icCycleCountTable') return;
+    const tbody = table.tBodies[0];
+    if(!tbody || dataRows(tbody).length < 2) return;
+    const col = Array.prototype.indexOf.call(th.parentElement.children, th);
+    const prev = sortState.get(table);
+    let dir;
+    if(prev && prev.col===col) dir = prev.dir==='asc' ? 'desc' : 'asc';
+    else dir = columnIsNumeric(dataRows(tbody), col) ? 'desc' : 'asc'; // biggest first for numbers/dates, A-Z for text
+    sortState.set(table, {col, dir});
+    watch(table);
+    applySort(table, col, dir);
+  });
+
+  // Popup exports: if the popup holds a single sorted table whose rows line
+  // up 1:1 with the export rows, export them in the order shown on screen.
+  window.icModalExportRowsInDisplayOrder = function(exportRows){
+    const body = document.getElementById('kpiModalBody');
+    const tables = body ? body.querySelectorAll('table') : [];
+    if(tables.length!==1 || !tables[0].tBodies[0]) return exportRows;
+    const rows = dataRows(tables[0].tBodies[0]);
+    if(rows.length!==exportRows.length || rows.some(r=>r.dataset.origIdx===undefined)) return exportRows;
+    return rows.map(r=>exportRows[Number(r.dataset.origIdx)]);
+  };
+})();
 </script>
 </div>
 </body>

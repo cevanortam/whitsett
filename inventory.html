@@ -1,0 +1,2873 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Whitsett Inventory Reconciliation</title>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<style>
+  :root{
+    --bg: #0a1626;
+    --bg-alt: #0e1d33;
+    --card: #122A47;
+    --card-border: #1f3d61;
+    --card-border-light: #2a4a73;
+    --text: #e7eef7;
+    --text-dim: #93a8c4;
+    --text-faint: #5f7796;
+    --accent: #e2231a;
+    --good: #2fbf71;
+    --warn: #e8a33d;
+    --bad: #e2231a;
+    --info: #3d9fe8;
+    --hv-color: #a78bfa;
+    --radius: 10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background: radial-gradient(1200px 600px at 10% -10%, #123156 0%, var(--bg) 55%) fixed, var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    min-height:100vh;
+  }
+  .wrap{max-width:100%;margin:0 auto;padding:24px 40px 64px;}
+
+  header.top{
+    display:flex;justify-content:space-between;align-items:flex-start;
+    gap:20px;flex-wrap:wrap;
+    padding-bottom:20px;margin-bottom:24px;
+    border-bottom:1px solid var(--card-border);
+  }
+  .brand{display:flex;align-items:center;gap:14px;}
+  .brand-logo{height:40px;width:auto;object-fit:contain;flex-shrink:0;}
+  .date-range-inputs{display:none;align-items:center;gap:6px;}
+  .date-range-inputs.show{display:flex;}
+  .date-range-inputs span{color:var(--text-faint);font-size:12px;}
+  input[type=date]{
+    background:var(--card);border:1px solid var(--card-border-light);color:var(--text);
+    border-radius:8px;padding:8px 10px;font-size:13px;outline:none;color-scheme:dark;
+  }
+  input[type=date]:focus{border-color:var(--accent);}
+
+  .segmented{
+    display:flex;background:var(--card);border:1px solid var(--card-border-light);
+    border-radius:8px;padding:3px;gap:2px;
+  }
+  .seg-btn{
+    background:transparent;border:none;color:var(--text-dim);border-radius:6px;
+    padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s ease, color .15s ease;
+  }
+  .seg-btn:hover{color:var(--text);}
+  .seg-btn.active{background:var(--accent);color:#fff;}
+  .brand-mark{
+    width:44px;height:44px;border-radius:9px;
+    background:linear-gradient(135deg,var(--accent),#a8160f);
+    display:flex;align-items:center;justify-content:center;
+    font-weight:800;font-size:16px;letter-spacing:0.5px;
+    box-shadow:0 4px 14px rgba(226,35,26,0.35);
+    flex-shrink:0;
+  }
+  .brand h1{font-size:19px;margin:0;font-weight:700;letter-spacing:0.2px;}
+  .brand .sub{color:var(--text-dim);font-size:12.5px;margin-top:3px;}
+
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  select, input[type=text]{
+    background:var(--card);border:1px solid var(--card-border-light);color:var(--text);
+    border-radius:8px;padding:9px 12px;font-size:13px;outline:none;
+  }
+  select:focus, input[type=text]:focus{border-color:var(--accent);}
+
+  .btn{
+    background:var(--accent);color:#fff;border:none;border-radius:8px;
+    padding:10px 16px;font-size:13.5px;font-weight:600;cursor:pointer;
+    display:inline-flex;align-items:center;gap:8px;
+    transition:filter .15s ease, transform .1s ease;
+  }
+  .btn:hover{filter:brightness(1.1);}
+  .btn:active{transform:scale(0.98);}
+  .btn.secondary{background:var(--card);border:1px solid var(--card-border-light);color:var(--text);}
+  .btn.secondary:hover{border-color:var(--accent);}
+  input[type=file]{display:none;}
+
+  .status-line{font-size:12px;color:var(--text-faint);margin-top:6px;display:flex;gap:14px;flex-wrap:wrap;}
+  .status-line b{color:var(--text-dim);font-weight:600;}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--good);display:inline-block;margin-right:5px;}
+  .dot.busy{background:var(--warn);animation:pulse 1s infinite;}
+  .dot.err{background:var(--bad);}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.35;}}
+
+  .kpi-grid{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    gap:10px;margin-bottom:20px;
+  }
+  .kpi{
+    background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius);
+    padding:11px 13px;position:relative;overflow:hidden;
+  }
+  .kpi::before{
+    content:"";position:absolute;top:0;left:0;width:3px;height:100%;
+    background:var(--kpi-accent, var(--accent));
+  }
+  .kpi .label{font-size:9.5px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-faint);font-weight:600;}
+  .kpi .value{font-size:19px;font-weight:800;margin-top:5px;line-height:1;}
+  .kpi .sub{font-size:10px;color:var(--text-dim);margin-top:4px;}
+
+  .charts-grid{
+    display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:26px;
+  }
+  @media (max-width:1500px){.charts-grid{grid-template-columns:repeat(3,1fr);}}
+  @media (max-width:1100px){.charts-grid{grid-template-columns:repeat(2,1fr);}}
+  @media (max-width:700px){.charts-grid{grid-template-columns:1fr;}}
+  .chart-card{
+    background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius);
+    padding:16px 16px 8px;
+  }
+  .chart-card h3{margin:0 0 2px;font-size:12.5px;font-weight:700;}
+  .chart-card .chart-note{font-size:10.5px;color:var(--text-faint);margin-bottom:8px;}
+  .chart-card .chart-holder{position:relative;height:190px;}
+
+  .table-section{
+    background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius);
+    padding:20px;
+  }
+  .table-section-head{
+    display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px;
+  }
+  .table-section-head h2{margin:0;font-size:15.5px;}
+  .table-section-head .meta{font-size:12px;color:var(--text-faint);margin-top:3px;}
+
+  .table-filters{
+    display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;margin:-4px 0 16px;
+    padding-bottom:16px;border-bottom:1px solid var(--card-border-light);
+  }
+  .table-filters .filter-group{display:flex;flex-direction:column;gap:5px;}
+  .table-filters .filter-group label{font-size:10px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;}
+  .table-filters .filter-group .range{display:flex;align-items:center;gap:6px;}
+  .table-filters .filter-group .range span{color:var(--text-faint);font-size:12px;}
+  .table-filters .btn.secondary{padding:8px 12px;font-size:12px;}
+
+  table{width:100%;border-collapse:collapse;font-size:12.8px;}
+  thead th{
+    text-align:left;padding:9px 10px;color:var(--text-faint);font-weight:600;
+    text-transform:uppercase;font-size:10.5px;letter-spacing:0.5px;
+    border-bottom:1px solid var(--card-border-light);cursor:pointer;user-select:none;
+    white-space:nowrap;
+  }
+  thead th:hover{color:var(--text);}
+  thead th.sorted::after{content:" \25BE";color:var(--accent);}
+  thead th.sorted-asc::after{content:" \25B4";color:var(--accent);}
+  tbody tr.pull-row{border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;}
+  tbody tr.pull-row:hover{background:rgba(255,255,255,0.03);}
+  tbody td{padding:9px 10px;vertical-align:middle;white-space:nowrap;}
+  tbody tr.detail-row{display:none;background:var(--bg-alt);}
+  tbody tr.detail-row.open{display:table-row;}
+  tbody tr.detail-row td{padding:0;white-space:normal;}
+  .detail-inner{padding:14px 18px 18px 34px;}
+  .detail-inner table{margin-top:4px;}
+  .detail-inner thead th{cursor:default;font-size:10px;}
+  .detail-inner thead th::after{content:"";}
+
+  .badge{
+    display:inline-block;padding:3px 9px;border-radius:99px;font-size:10.5px;font-weight:700;
+    letter-spacing:0.3px;text-transform:uppercase;
+  }
+  .badge.complete{background:rgba(47,191,113,0.15);color:var(--good);}
+  .badge.progress{background:rgba(232,163,61,0.15);color:var(--warn);}
+  .badge.short{background:rgba(226,35,26,0.15);color:var(--accent);margin-left:5px;}
+  .badge.over{background:rgba(61,159,232,0.15);color:var(--info);margin-left:5px;}
+  .badge.nil{background:rgba(226,35,26,0.25);color:#ff6b61;margin-left:5px;}
+  .badge.unknown{background:rgba(148,168,196,0.15);color:var(--text-dim);}
+  .badge.auto{background:rgba(61,159,232,0.15);color:var(--info);}
+  .badge.manual{background:rgba(167,139,250,0.15);color:var(--hv-color);}
+  .badge.sla-met{background:rgba(47,191,113,0.15);color:var(--good);margin-left:5px;}
+  .badge.sla-breached{background:rgba(226,35,26,0.15);color:var(--accent);margin-left:5px;}
+  .badge.sla-risk{background:rgba(232,163,61,0.15);color:var(--warn);margin-left:5px;}
+  .badge.accurate{background:rgba(47,191,113,0.15);color:var(--good);}
+  .badge.inaccurate{background:rgba(226,35,26,0.15);color:var(--accent);}
+  .badge.recounted{background:rgba(167,139,250,0.15);color:var(--hv-color);margin-left:5px;}
+  .badge.omitted{background:rgba(167,139,250,0.15);color:var(--hv-color);margin-left:5px;cursor:help;}
+
+  .delete-line-btn{
+    background:transparent;border:1px solid var(--card-border-light);color:var(--text-faint);
+    border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;line-height:1;
+    transition:border-color .15s ease, color .15s ease;
+  }
+  .delete-line-btn:hover{border-color:var(--accent);color:var(--accent);}
+
+  .sla-override-btn{
+    background:transparent;border:1px solid var(--card-border-light);color:var(--text-faint);
+    border-radius:6px;padding:2px 6px;font-size:11px;cursor:pointer;line-height:1;margin-left:5px;
+    transition:border-color .15s ease, color .15s ease;
+  }
+  .sla-override-btn:hover{border-color:var(--info);color:var(--info);}
+  .sla-override-btn.clear:hover{border-color:var(--bad);color:var(--bad);}
+  .badge.sla-met, .badge.sla-breached{cursor:help;}
+
+  .pull-id-cell{font-weight:700;color:var(--text);}
+  .caret{display:inline-block;margin-right:6px;color:var(--text-faint);transition:transform .15s ease;font-size:10px;}
+  tr.pull-row.expanded .caret{transform:rotate(90deg);color:var(--accent);}
+
+  .empty-state{padding:50px 20px;text-align:center;color:var(--text-faint);}
+  .empty-state .big{font-size:15px;color:var(--text-dim);margin-bottom:6px;}
+
+  footer.note{
+    margin-top:22px;font-size:11.5px;color:var(--text-faint);line-height:1.6;
+    border-top:1px solid var(--card-border);padding-top:16px;
+  }
+  ::-webkit-scrollbar{height:8px;width:8px;}
+  ::-webkit-scrollbar-thumb{background:var(--card-border-light);border-radius:4px;}
+
+  .site-nav{display:flex;align-items:center;gap:4px;margin-bottom:18px;flex-wrap:wrap;}
+  .site-tab{
+    color:var(--text-dim);text-decoration:none;font-weight:700;font-size:12.5px;
+    letter-spacing:.4px;text-transform:uppercase;
+    padding:9px 18px;border-radius:8px;border:1px solid transparent;
+    transition:background .15s ease, color .15s ease, border-color .15s ease;
+  }
+  .site-tab:hover{color:var(--text);border-color:var(--card-border-light);}
+  .site-tab.active{background:var(--accent);color:#fff;}
+
+  .tab-page{display:none;}
+  .tab-page.active{display:block;}
+
+  .placeholder-page{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:80px 24px;background:var(--card);border:1px solid var(--card-border);
+    border-radius:var(--radius);min-height:360px;
+  }
+  .placeholder-page .ph-icon{
+    width:56px;height:56px;border-radius:14px;background:linear-gradient(135deg,var(--accent),#a8160f);
+    display:flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:18px;
+    box-shadow:0 4px 14px rgba(226,35,26,0.35);
+  }
+  .placeholder-page h2{font-size:20px;margin:0 0 8px;font-weight:700;}
+  .placeholder-page p{color:var(--text-dim);font-size:13.5px;max-width:440px;line-height:1.6;margin:0;}
+  .placeholder-page .ph-note{margin-top:18px;font-size:11.5px;color:var(--text-faint);}
+
+  .kpi.clickable{cursor:pointer;transition:transform .1s ease, border-color .15s ease;}
+  .kpi.clickable:hover{border-color:var(--accent);transform:translateY(-1px);}
+  .kpi.clickable::after{
+    content:"\2192";position:absolute;bottom:9px;right:11px;font-size:11px;color:var(--text-faint);
+  }
+  .xs-kpi.clickable{cursor:pointer;transition:transform .1s ease, border-color .15s ease;}
+  .xs-kpi.clickable:hover{border-color:var(--accent);transform:translateY(-1px);}
+  .xs-kpi.clickable::after{
+    content:"\2192";position:absolute;bottom:9px;right:11px;font-size:11px;color:var(--text-faint);
+  }
+
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(5,12,22,0.75);z-index:1000;
+    display:flex;align-items:center;justify-content:center;padding:24px;
+  }
+  .modal-box{
+    background:var(--card);border:1px solid var(--card-border-light);border-radius:var(--radius);
+    max-width:1200px;width:100%;max-height:82vh;display:flex;flex-direction:column;overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,0.5);
+  }
+  .modal-head{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:16px 20px;border-bottom:1px solid var(--card-border);flex-shrink:0;
+  }
+  .modal-head h3{margin:0;font-size:14.5px;font-weight:700;}
+  .modal-close{
+    background:transparent;border:none;color:var(--text-dim);font-size:22px;line-height:1;
+    cursor:pointer;padding:2px 8px;border-radius:6px;
+  }
+  .modal-close:hover{color:var(--text);background:rgba(255,255,255,0.06);}
+  .modal-body{padding:16px 20px 20px;overflow-y:auto;}
+  .modal-body table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  .modal-body thead th{
+    text-align:left;padding:8px 10px;color:var(--text-faint);font-weight:600;
+    text-transform:uppercase;font-size:10px;letter-spacing:0.4px;
+    border-bottom:1px solid var(--card-border-light);white-space:nowrap;
+  }
+  .modal-body tbody td{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,0.05);white-space:nowrap;}
+
+  .xs-kpi-grid{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+    gap:16px;margin-bottom:8px;
+  }
+  .xs-kpi{
+    background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius);
+    padding:22px 24px;position:relative;overflow:hidden;
+  }
+  .xs-kpi::before{
+    content:"";position:absolute;top:0;left:0;width:4px;height:100%;
+    background:var(--kpi-accent, var(--accent));
+  }
+  .xs-kpi .label{font-size:11px;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-faint);font-weight:700;}
+  .xs-kpi .value{font-size:32px;font-weight:800;margin-top:10px;line-height:1;}
+  .xs-kpi .sub{font-size:12px;color:var(--text-dim);margin-top:8px;}
+  .xs-kpi.placeholder{opacity:0.6;border-style:dashed;}
+  .xs-kpi.placeholder .value{font-size:20px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <section id="tab-inventory">
+
+  <header class="top">
+    <div>
+      <div class="brand">
+        <img class="brand-logo" src="https://www.cevalogistics.com/_ipx/w_1920&f_webp/images-spx/x_large_picture/CEVA_WhiteRed.png" alt="CEVA Logistics"
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <div class="brand-mark" style="display:none;">CEVA</div>
+        <div>
+          <h1>Whitsett Inventory Reconciliation</h1>
+          <div class="sub">Cycle count accuracy, location integrity &amp; inventory value &mdash; Whitsett, NC</div>
+        </div>
+      </div>
+      <div class="status-line">
+        <span id="icSyncStatus"><span class="dot" id="icSyncDot"></span><b id="icSyncText">Connecting&hellip;</b></span>
+        <span><b id="icRecordCount">0</b> count documents on file</span>
+        <span><b id="icLocationCount">0</b> bin/product locations tracked</span>
+        <span id="icLastUploadLine" style="display:none;">Last upload: <b id="icLastUploadTime">&mdash;</b></span>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="segmented" id="icGranularityToggle">
+        <button type="button" class="seg-btn active" data-granularity="day">Day</button>
+        <button type="button" class="seg-btn" data-granularity="week">Week</button>
+        <button type="button" class="seg-btn" data-granularity="month">Month</button>
+        <button type="button" class="seg-btn" data-granularity="year">Year</button>
+      </div>
+      <select id="icRangeFilter">
+        <option value="all">All time</option>
+        <option value="yesterday">Yesterday</option>
+        <option value="7">Last 7 days</option>
+        <option value="30" selected>Last 30 days</option>
+        <option value="custom">Custom range&hellip;</option>
+      </select>
+      <div class="date-range-inputs" id="icDateRangeInputs">
+        <input type="date" id="icDateFrom">
+        <span>&ndash;</span>
+        <input type="date" id="icDateTo">
+      </div>
+      <label class="btn" for="icFileInput">&#8593; Upload Cycle Count Results</label>
+      <input type="file" id="icFileInput" accept=".xlsx,.xls">
+      <label class="btn secondary" for="icPricingFileInput">&#8593; Upload Pricing Sheet</label>
+      <input type="file" id="icPricingFileInput" accept=".xlsx,.xls">
+      <label class="btn secondary" for="icOnHandFileInput">&#8593; Upload Inventory On Hand Report</label>
+      <input type="file" id="icOnHandFileInput" accept=".xlsx,.xls">
+    </div>
+  </header>
+
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:-6px 0 18px;">
+    <span style="font-size:10.5px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Location Scope</span>
+    <div class="segmented" id="icLocationScopeToggle">
+      <button type="button" class="seg-btn active" data-icloc="aisle">Aisles 1&ndash;53</button>
+      <button type="button" class="seg-btn active" data-icloc="grzone">GR Zone</button>
+      <button type="button" class="seg-btn active" data-icloc="cevarecon">CEVA Recon</button>
+      <button type="button" class="seg-btn active" data-icloc="hvp">High Value</button>
+    </div>
+  </div>
+
+  <div class="segmented" id="icSubpageToggle" style="margin-bottom:18px;">
+    <button type="button" class="seg-btn active" data-icsubpage="counts">Cycle Counts</button>
+    <button type="button" class="seg-btn" data-icsubpage="value">Inventory Value ($)</button>
+  </div>
+
+  <div id="icSubpageCounts">
+
+  <section class="kpi-grid" id="icKpiGrid"></section>
+  <div id="icNote" style="font-size:12px;color:var(--text-faint);margin:-12px 0 24px;"></div>
+
+  <section class="charts-grid">
+    <div class="chart-card">
+      <h3 id="icTitleAccuracy">Inventory Accuracy by Day</h3>
+      <div class="chart-note">Share of resolved product counts that matched book qty &mdash; recount outcome, when one occurred, is what counts</div>
+      <div class="chart-holder"><canvas id="icChartAccuracy"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Count Status Breakdown</h3>
+      <div class="chart-note">All bin/product locations tracked on this tab, selected range</div>
+      <div class="chart-holder"><canvas id="icChartStatusSplit"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3 id="icTitleVolume">Counts by Status per Day</h3>
+      <div class="chart-note">Count documents by status, bucketed by count date (Open counts use their assigned date)</div>
+      <div class="chart-holder"><canvas id="icChartVolume"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Variance Direction</h3>
+      <div class="chart-note">Of resolved counts that missed book qty &mdash; found more than expected vs. found less</div>
+      <div class="chart-holder"><canvas id="icChartVarianceDirection"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Accuracy by Counter</h3>
+      <div class="chart-note">Resolved counts and accuracy rate per associate, selected range</div>
+      <div class="chart-holder"><canvas id="icChartByCounter"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Open Count Aging (Live)</h3>
+      <div class="chart-note">How long counts currently sitting in Open status have been waiting &mdash; not affected by the date range above</div>
+      <div class="chart-holder"><canvas id="icChartAging"></canvas></div>
+    </div>
+  </section>
+
+  <section class="table-section">
+    <div class="table-section-head">
+      <div>
+        <h2>Cycle Count Locations</h2>
+        <div class="meta" id="icTableMeta">&nbsp;</div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <input type="text" id="icSearchBox" placeholder="Search bin, SKU, or counter&hellip;" style="min-width:260px;">
+        <button type="button" class="btn secondary" id="icExportBtn">&#8595; Export to Excel</button>
+      </div>
+    </div>
+    <div style="overflow-x:auto;">
+      <table id="icCycleCountTable">
+        <thead>
+          <tr>
+            <th data-ickey="bin">Storage Bin</th>
+            <th data-ickey="product">SKU</th>
+            <th data-ickey="productDesc">Description</th>
+            <th data-ickey="bookQty">Book Qty</th>
+            <th data-ickey="countedQty">Counted Qty</th>
+            <th data-ickey="diffQty">Difference</th>
+            <th data-ickey="status">Result</th>
+            <th data-ickey="counter">Counter</th>
+            <th data-ickey="countAt">Count Date</th>
+          </tr>
+        </thead>
+        <tbody id="icTableBody"></tbody>
+      </table>
+    </div>
+    <div class="empty-state" id="icEmptyState" style="display:none;">
+      <div class="big">No data yet</div>
+      <div>Upload a cycle count results export to get started.</div>
+    </div>
+  </section>
+
+  </div>
+
+  <div id="icSubpageValue" style="display:none;">
+
+  <div class="status-line" style="margin:-6px 0 10px;">
+    <span id="icPricingSyncStatus"><span class="dot" id="icPricingSyncDot"></span><b id="icPricingSyncText">No pricing sheet uploaded</b></span>
+    <span><b id="icPricingCount">0</b> SKUs priced</span>
+    <span id="icPricingLastUploadLine" style="display:none;">Last upload: <b id="icPricingLastUploadTime">&mdash;</b></span>
+  </div>
+  <div class="status-line" style="margin:0 0 18px;">
+    <span id="icOnHandSyncStatus"><span class="dot" id="icOnHandSyncDot"></span><b id="icOnHandSyncText">No Inventory On Hand report uploaded</b></span>
+    <span><b id="icOnHandLocationCount">0</b> bin/product locations on file</span>
+    <span id="icOnHandLastUploadLine" style="display:none;">Last upload: <b id="icOnHandLastUploadTime">&mdash;</b></span>
+  </div>
+
+  <section class="kpi-grid" id="icOnHandKpiGrid" style="margin-bottom:10px;"></section>
+  <section class="kpi-grid" id="icOnHandStatusGrid" style="margin-bottom:20px;"></section>
+
+  <div id="icValueScopeNote" style="font-size:12px;color:var(--text-faint);margin:-12px 0 10px;">
+    Reflects the bin/product locations counted in this system for the selected period, matched against the
+    uploaded Inventory On Hand report &mdash; a subset of the warehouse, not a full physical inventory.
+  </div>
+  <div id="icValueNote" style="font-size:12px;color:var(--warn);margin:0 0 20px;"></div>
+
+  <section class="table-section">
+    <div class="table-section-head">
+      <div>
+        <h2>Inventory Results</h2>
+        <div class="meta">Uses the final, recount-corrected count per location &mdash; matches "Overall Unit Accuracy" on this tab</div>
+      </div>
+      <button type="button" class="btn secondary" id="icValueExportBtn">&#8595; Export to Excel</button>
+    </div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Time Period</th><th>Qty Pieces WMS</th><th>Qty Pieces Physical</th>
+            <th>On-Hand Inventory $ &ndash; WMS</th><th>On-Hand Inventory $ &ndash; Physical</th>
+            <th>Positive Variance (By Value)</th><th>Negative Variance (By Value)</th>
+            <th>Net Variance</th><th>Gross Variance</th>
+            <th>Net Accuracy %</th><th>Gross Accuracy %</th>
+          </tr>
+        </thead>
+        <tbody id="icValueTableBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="table-section" style="margin-top:20px;">
+    <div class="table-section-head">
+      <div>
+        <h2>Largest Variance by Location</h2>
+        <div class="meta">Bin/product locations with the largest $ variance (Physical vs. WMS), either direction &mdash; top 15 shown</div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <div class="segmented" id="icByLocationVarianceToggle">
+          <button type="button" class="seg-btn active" data-icvar="positive">Positive</button>
+          <button type="button" class="seg-btn active" data-icvar="negative">Negative</button>
+        </div>
+        <button type="button" class="btn secondary" id="icValueByLocationViewAllBtn">View All &amp; Export</button>
+      </div>
+    </div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Bin</th><th>SKU</th><th>Description</th>
+            <th>Qty WMS</th><th>Qty Physical</th><th>Variance Qty</th><th>Variance $</th>
+          </tr>
+        </thead>
+        <tbody id="icValueByLocationTableBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="table-section" style="margin-top:20px;">
+    <div class="table-section-head">
+      <div>
+        <h2>Largest Variance by SKU</h2>
+        <div class="meta">SKUs with the largest $ variance summed across every location they're stocked in &mdash; top 15 shown</div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <div class="segmented" id="icBySkuVarianceToggle">
+          <button type="button" class="seg-btn active" data-icvar="positive">Positive</button>
+          <button type="button" class="seg-btn active" data-icvar="negative">Negative</button>
+        </div>
+        <button type="button" class="btn secondary" id="icValueBySkuViewAllBtn">View All &amp; Export</button>
+      </div>
+    </div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>SKU</th><th>Description</th><th>Locations</th>
+            <th>Qty WMS</th><th>Qty Physical</th><th>Variance Qty</th><th>Variance $</th>
+          </tr>
+        </thead>
+        <tbody id="icValueBySkuTableBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  </div>
+
+  <footer class="note">
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--card-border);">
+      <button type="button" class="btn secondary" id="icResetAllDataBtn" style="border-color:var(--accent);color:var(--accent);">&#9888; Reset All Data</button>
+      <span style="color:var(--text-faint);font-size:11px;margin-left:10px;">Permanently clears all cycle count and pricing data on this dashboard so you can start with a fresh upload. Password-protected, cannot be undone. This also affects the Inventory tab on the Lenovo KPI dashboard, since it shares this same data.</span>
+    </div>
+  </footer>
+
+  </section>
+
+<div class="modal-overlay" id="kpiModalOverlay" style="display:none;">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3 id="kpiModalTitle"></h3>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button type="button" class="btn secondary" id="kpiModalExportBtn" style="display:none;">&#8595; Export to Excel</button>
+        <button type="button" class="modal-close" id="kpiModalClose" aria-label="Close">&times;</button>
+      </div>
+    </div>
+    <div class="modal-body" id="kpiModalBody"></div>
+  </div>
+</div>
+
+<script>
+/* ---------------------------------------------------------------------
+   Firebase setup — shares the whitsett-cycle-counts project and the
+   exact same /inventory_counts, /inventory_count_uploads,
+   /inventory_accuracy_omissions, and /inventory_pricing nodes as the
+   Inventory tab on the Lenovo KPI dashboard, so both tools read/write
+   the same live cycle count and pricing data.
+--------------------------------------------------------------------- */
+const firebaseConfig = {
+  apiKey: "AIzaSyBAcAK0z5N9Cw9gRtdH9WA_7v_NyKPKJMs",
+  authDomain: "whitsett-cycle-counts.firebaseapp.com",
+  databaseURL: "https://whitsett-cycle-counts-default-rtdb.firebaseio.com",
+  projectId: "whitsett-cycle-counts",
+  storageBucket: "whitsett-cycle-counts.firebasestorage.app",
+  messagingSenderId: "960015809565",
+  appId: "1:960015809565:web:6bcc50b9cb411b959c1af4"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// --- normalizeHeader (orig line 1046) ---
+function normalizeHeader(h){
+  return String(h==null?'':h).trim().toLowerCase().replace(/\s+/g,' ');
+}
+
+// --- getWeekStart (orig line 1083) ---
+function getWeekStart(d){
+  // Monday-based week start, date-only (local time)
+  const nd = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const day = nd.getDay(); // 0=Sun..6=Sat
+  const diff = (day===0 ? -6 : 1-day);
+  nd.setDate(nd.getDate()+diff);
+  return nd;
+}
+
+// --- isValidDate (orig line 1131) ---
+function isValidDate(d){ return d instanceof Date && !isNaN(d.getTime()); }
+
+// --- combineDateAndTime (orig line 1192) ---
+function combineDateAndTime(dateVal, timeVal){
+  if(!isValidDate(dateVal) || !isValidDate(timeVal)) return null;
+  return new Date(dateVal.getFullYear(), dateVal.getMonth(), dateVal.getDate(),
+                   timeVal.getHours(), timeVal.getMinutes(), timeVal.getSeconds());
+}
+
+// --- minutesBetween (orig line 1215) ---
+function minutesBetween(a,b){
+  if(!isValidDate(a) || !isValidDate(b)) return null;
+  return Math.round((b.getTime()-a.getTime())/60000);
+}
+
+// --- formatDuration (orig line 1250) ---
+function formatDuration(min){
+  if(min===null || min===undefined || isNaN(min)) return '—';
+  if(min<0) min = 0;
+  const total = Math.round(min);
+  const d = Math.floor(total/1440);
+  const h = Math.floor((total%1440)/60);
+  const m = total%60;
+  if(d>0) return d+'d '+h+'h '+m+'m';
+  if(h>0) return h+'h '+m+'m';
+  return m+'m';
+}
+
+// --- formatDateTime (orig line 1262) ---
+function formatDateTime(d){
+  if(!isValidDate(d)) return '&mdash;';
+  return d.toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+}
+
+// --- readFileAsArrayBuffer (orig line 1281) ---
+function readFileAsArrayBuffer(file){
+  return new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target.result);
+    reader.onerror = reject;
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// --- sanitizeKey (orig line 1367) ---
+function sanitizeKey(k){
+  // Firebase RTDB keys also reject raw control characters (0x00-0x1F, 0x7F)
+  // in addition to the punctuation below — matters for the Inventory
+  // Accuracy location key, which joins bin+product with a \u0001 separator.
+  return String(k).replace(/[.#$\[\]\/]/g,'_').replace(/[\x00-\x1F\x7F]/g,'_');
+}
+
+// --- safeRender (adapted from orig line 1651 — reports errors through
+// this dashboard's own status line instead of the multi-tab original's) ---
+function safeRender(label, fn){
+  try{ fn(); }
+  catch(err){
+    console.error('Failed to render '+label+':', err);
+    icSetSyncStatus('err', 'Error rendering '+label+' — open the console for details');
+  }
+}
+
+// --- LABEL_COLOR (orig line 1774) ---
+const LABEL_COLOR = '#e7eef7';
+
+// --- labelSkipStep (orig line 1782) ---
+function labelSkipStep(barCount){
+  if(barCount <= 10) return 1;
+  if(barCount <= 16) return 2;
+  if(barCount <= 24) return 3;
+  return Math.ceil(barCount/8);
+}
+
+// --- baseChartOptions (orig line 2194) ---
+function baseChartOptions(scalesExtra, showLegend, horizontal){
+  return {
+    responsive:true, maintainAspectRatio:false,
+    indexAxis: horizontal ? 'y' : 'x',
+    plugins:{ legend:{ display: !!showLegend, labels:{boxWidth:10, padding:16}, ...(showLegend?{padding:{bottom:14}}:{}) } },
+    scales:{
+      x:{ grid:{display:false} },
+      y:{ grid:{color:'rgba(255,255,255,0.06)'} },
+      ...scalesExtra
+    }
+  };
+}
+
+// --- escapeAttr (orig line 2440) ---
+function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
+
+// --- DELETE_LINE_PASSWORD (orig line 2420) ---
+const DELETE_LINE_PASSWORD = 'Jen$en120313!';
+
+// --- computeRangeFilteredGroups (orig line 1509) ---
+function computeRangeFilteredGroups(groups, mode, fromVal, toVal, dateField, openStatusValue, dateTransform){
+  if(mode==='all') return groups;
+
+  const todayStart = new Date();
+  todayStart.setHours(0,0,0,0);
+
+  const effDate = dateTransform ? (d => isValidDate(d) ? dateTransform(d) : null) : (d => d);
+
+  if(mode==='custom'){
+    if(!fromVal && !toVal) return groups;
+    const from = fromVal ? new Date(fromVal+'T00:00:00') : null;
+    const to = toVal ? new Date(toVal+'T23:59:59') : null;
+    return groups.filter(g=>{
+      if(g.status===openStatusValue) return true;
+      const d = effDate(g[dateField]);
+      if(!d) return false;
+      if(from && d < from) return false;
+      if(to && d > to) return false;
+      return true;
+    });
+  }
+
+  if(mode==='yesterday'){
+    const yStart = new Date(todayStart);
+    yStart.setDate(yStart.getDate()-1);
+    return groups.filter(g=>{
+      if(g.status===openStatusValue) return true;
+      const d = effDate(g[dateField]);
+      return d && d >= yStart && d < todayStart;
+    });
+  }
+
+  // rolling windows: '7' or '30' — N days ending yesterday (today excluded)
+  const cutoff = new Date(todayStart.getTime() - Number(mode)*24*3600*1000);
+  return groups.filter(g=>{
+    if(g.status===openStatusValue) return true;
+    const d = effDate(g[dateField]);
+    return d && d >= cutoff && d < todayStart;
+  });
+}
+
+// --- XS_STRICT_NO_BYPASS (orig line 2642) ---
+const XS_STRICT_NO_BYPASS = '\u0000__strict_no_bypass__\u0000';
+
+// --- XS_SLA_TARGETS / xsSlaAccent (orig lines ~2725-2732) ---
+const XS_SLA_TARGETS = { fillRate: 99.7, dockToStock: 99.0, onTimeAuto: 97.0, onTimeManual: 99.0, inventoryAccuracy: 98.0 };
+function xsSlaAccent(value, target, warnMargin){
+  if(warnMargin===undefined) warnMargin = 2;
+  if(value===null || value===undefined) return 'var(--text-faint)';
+  if(value>=target) return 'var(--good)';
+  if(value>=target-warnMargin) return 'var(--warn)';
+  return 'var(--bad)';
+}
+/* ---------------------------------------------------------------------
+   KPI card drill-down modal — generic chrome shared by any tab. A card
+   supplies a title and a pre-built HTML body (usually a small table);
+   this just handles showing/hiding/closing it. A card can also supply
+   exportRows (an array of plain {Column: value} objects, one per row of
+   the same data the HTML table shows) plus an exportFilename — when
+   present, an "Export to Excel" button appears in the modal header so
+   whatever's currently drilled into can be pulled out for further
+   digging (e.g. leadership tracing yesterday's misses).
+--------------------------------------------------------------------- */
+let kpiModalExportRows = null;
+let kpiModalExportFilename = '';
+function openKpiModal(title, bodyHtml, exportRows, exportFilename){
+  document.getElementById('kpiModalTitle').textContent = title;
+  document.getElementById('kpiModalBody').innerHTML = bodyHtml;
+  document.getElementById('kpiModalOverlay').style.display = 'flex';
+  kpiModalExportRows = (exportRows && exportRows.length) ? exportRows : null;
+  kpiModalExportFilename = exportFilename || 'export';
+  document.getElementById('kpiModalExportBtn').style.display = kpiModalExportRows ? 'inline-block' : 'none';
+}
+function closeKpiModal(){
+  document.getElementById('kpiModalOverlay').style.display = 'none';
+}
+document.getElementById('kpiModalClose').addEventListener('click', closeKpiModal);
+document.getElementById('kpiModalExportBtn').addEventListener('click', ()=>{
+  if(!kpiModalExportRows || !kpiModalExportRows.length) return;
+  if(typeof XLSX === 'undefined'){
+    alert('Excel export library failed to load from CDN — check your network/firewall and reload.');
+    return;
+  }
+  const sheet = XLSX.utils.json_to_sheet(kpiModalExportRows, {cellDates:true});
+  const headerRow = Object.keys(kpiModalExportRows[0]||{});
+  sheet['!cols'] = headerRow.map(()=>({wch:16}));
+  headerRow.forEach((col,colIdx)=>{
+    if(!(kpiModalExportRows[0][col] instanceof Date)) return;
+    for(let r=0;r<kpiModalExportRows.length;r++){
+      const addr = XLSX.utils.encode_cell({r:r+1, c:colIdx});
+      if(sheet[addr] && sheet[addr].t==='d') sheet[addr].z = 'mm/dd/yyyy hh:mm AM/PM';
+    }
+  });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, sheet, 'Data');
+  const today = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, kpiModalExportFilename+'_'+today+'.xlsx');
+});
+document.getElementById('kpiModalOverlay').addEventListener('click', (e)=>{
+  if(e.target.id==='kpiModalOverlay') closeKpiModal();
+});
+document.addEventListener('keydown', (e)=>{
+  if(e.key==='Escape') closeKpiModal();
+});
+
+/* =======================================================================
+   INVENTORY TAB
+   Fully separate state/functions (all "ic" prefixed, for "Inventory
+   Count") so this never collides with Outbound/Inbound above. Shares the
+   same Firebase app/db but writes to its own top-level nodes:
+   /inventory_counts and /inventory_count_uploads. This is a genuinely
+   different SAP export (Physical Inventory Document results, not the
+   Warehouse Task extract Outbound/Inbound use), so it gets its own
+   upload button and is NOT part of combinedUploadFromFile below.
+======================================================================= */
+const icRecordsRef = db.ref('inventory_counts');
+const icUploadsRef = db.ref('inventory_count_uploads');
+const icAccuracyOmissionsRef = db.ref('inventory_accuracy_omissions');
+// Unit-cost lookup for the "Inventory Value ($)" sub-page, keyed by
+// sanitized SKU. A pricing upload replaces this node wholesale (.set, not
+// .update) — it's the current price list, not a log to merge into.
+const icPricingRef = db.ref('inventory_pricing');
+// Live snapshot of the SAP Inventory On Hand export, keyed by sanitized
+// Storage Bin + Product, aggregated across every Handling Unit / Stock
+// Type row for that bin/product. Feeds the "Qty Pieces WMS" / "On-Hand
+// Inventory $ - WMS" columns on the Inventory Value ($) sub-page (matched
+// against counted locations) and the System Inventory On Hand cards
+// (every row, counted or not). A new upload replaces this node wholesale
+// (.set, not .update) — it's a point-in-time snapshot, not a log.
+const icOnHandRef = db.ref('inventory_on_hand');
+
+/* ---------------------------------------------------------------------
+   Location Scope — this tab only tracks the locations Whitsett Inventory
+   is responsible for: aisle-numbered bins 1-53, plus three named groups
+   (GR Zone, CEVA Recon, High Value). A Storage Bin that doesn't match any
+   of these is out of scope entirely and is dropped from every count, KPI,
+   chart, and valuation figure on this tab, regardless of the selector
+   below — it isn't ours to reconcile.
+     - Aisle bins are matched by their leading number ("01-02-B1" ->
+       aisle 1), aisles 1-53.
+     - Aisle 93 is High Value: bins whose leading number is 93
+       ("93-01-A1") are grouped with the HVP bins under High Value.
+     - GR Zone bins are any bin that STARTS WITH "GR" ("GR-49-ZONE"), plus
+       any bin containing the exact string "GR-ZONE" ("9010-GR-ZONE").
+     - CEVA Recon bins contain RECON anywhere ("CEVAINVRECON",
+       "CEVARECON-AUG"...).
+     - HVP bins ("HVP-RCK-03", "HVP1-03-A1"...) start with HVP and are
+       also part of High Value.
+   Widen/narrow IC_ZONE_PATTERNS below if a future export introduces a bin
+   that collides with one of these patterns. (The internal group key
+   stays "hvp"; only the label the team sees changed to "High Value".)
+--------------------------------------------------------------------- */
+const IC_ZONE_PATTERNS = {
+  grzone:     [ { match:'startsWith', text:'GR' }, { match:'includes', text:'GR-ZONE' } ],
+  cevarecon:  [ { match:'includes',   text:'RECON' } ],
+  hvp:        [ { match:'includes',   text:'HVP' } ]
+};
+const IC_AISLE_MIN = 1, IC_AISLE_MAX = 53, IC_HIGH_VALUE_AISLE = 93;
+function icBinGroup(bin){
+  if(!bin) return null;
+  const b = String(bin).trim().toUpperCase();
+  for(const [group, rules] of Object.entries(IC_ZONE_PATTERNS)){
+    if(rules.some(rule => rule.match==='startsWith' ? b.startsWith(rule.text) : b.includes(rule.text))) return group;
+  }
+  const m = b.match(/^(\d{1,3})[\s-]/);
+  if(m){
+    const aisle = parseInt(m[1],10);
+    if(aisle===IC_HIGH_VALUE_AISLE) return 'hvp'; // aisle 93 is High Value
+    if(aisle>=IC_AISLE_MIN && aisle<=IC_AISLE_MAX) return 'aisle';
+  }
+  return null; // not one of ours — always excluded, independent of the selector
+}
+const IC_LOCATION_SCOPE_GROUPS = ['aisle','grzone','cevarecon','hvp'];
+let icLocationScopeSelected = new Set(IC_LOCATION_SCOPE_GROUPS); // all selected by default
+function icLocationInScope(bin){
+  const grp = icBinGroup(bin);
+  return grp!==null && icLocationScopeSelected.has(grp);
+}
+
+const IC_COLUMN_HEADERS = {
+  picDoc:      ['Physical Inventory Document'],
+  status:      ['Physical Inventory Status'],
+  warehouseOrder:['Warehouse Order'],
+  bin:         ['Storage Bin'],
+  product:     ['Product'],
+  stockType:   ['Stock Type'],
+  counter:     ['Counter'],
+  countDate:   ['Count Date'],
+  countTime:   ['Count Time'],
+  productDesc: ['Product Short Description'],
+  bookQty:     ['Book Quantity'],
+  countedQty:  ['Counted Quantity'],
+  diffQty:     ['Difference Quantity'],
+  refPicDoc:   ['Reference Physical Inventory Document'],
+  hu:          ['Handling Unit'],
+  warehouseTask:['Warehouse Task'],
+  owner:       ['Owner']
+};
+const IC_REQUIRED_COLUMNS = ['picDoc','status','bin'];
+// ACTI = Active/waiting to be counted, COUN = count complete, RECO = a
+// recount was generated from this count (the actual recount lives as its
+// own document, cross-referenced via Reference Physical Inventory Document).
+// Any other status in the export is dropped on import — this tab only
+// tracks these three.
+const IC_KEEP_STATUSES = new Set(['ACTI','COUN','RECO']);
+
+function icResolveColumns(headerRow){
+  const lookup = {};
+  (headerRow||[]).forEach((h,i)=>{
+    const norm = normalizeHeader(h);
+    if(norm && !(norm in lookup)) lookup[norm] = i;
+  });
+  const col = {};
+  const missing = [];
+  for(const field of Object.keys(IC_COLUMN_HEADERS)){
+    const found = IC_COLUMN_HEADERS[field].map(normalizeHeader).find(c => c in lookup);
+    if(found !== undefined) col[field] = lookup[found];
+    else missing.push(field);
+  }
+  return {col, missing};
+}
+
+/* ---------------------------------------------------------------------
+   State
+--------------------------------------------------------------------- */
+let icAllRecords = [];
+let icAccuracyOmissions = {}; // location key (sanitized) -> {note, setAt} — locations manually excluded from the Inventory Accuracy miss count on the Executive Summary (e.g. a variance later verified accurate through another count), with a required reason
+let icPricing = {}; // sanitized SKU -> {sku, unitCost, uploadedAt} — current price list for the Inventory Value ($) sub-page
+let icPricingIndex = {}; // letters+digits-only SKU match key -> {entry, ambiguous} — in-memory only, rebuilt whenever icPricing changes; lets '12-345-A' on one report match '12345A' on the other
+let icPricingIndexNoZero = {}; // same, but with leading zeros also dropped — lets '0000001DC058' match '1DC058'
+let icOnHand = {}; // sanitized "bin\u0001product" -> {bin, product, productDesc, qtyAvailable, qtyPickBlock, qtyQualityHold, qtyOther, qtyTotal, uploadedAt} — current Inventory On Hand snapshot
+let icSubpage = 'counts'; // 'counts' | 'value' — which Inventory tab sub-page is showing
+let icSortKey = 'countAt';
+let icSortDir = 'desc';
+let icSearchTerm = '';
+let icRangeMode = '30';
+let icGranularity = 'day';
+let icCharts = {};
+let icCachedRangeGroups = [];
+let icLastRenderedGroups = [];
+
+function icDestroyChart(id){ if(icCharts[id]){ icCharts[id].destroy(); delete icCharts[id]; } }
+
+// Inventory runs on 3rd shift, which ends at 6:00 AM — a count logged at,
+// say, 2:15 AM is still last night's work, so for every day/week/month/year
+// bucket and every date-range filter on this tab, it's attributed to the
+// PREVIOUS calendar day. A count logged at or after 6:00 AM belongs to that
+// calendar day as normal. Returns null for an invalid/missing date.
+function icBusinessDate(d){
+  if(!isValidDate(d)) return null;
+  const shifted = new Date(d.getTime() - 6*3600*1000);
+  shifted.setHours(0,0,0,0);
+  return shifted;
+}
+
+function icPeriodKey(rawD){
+  const d = icBusinessDate(rawD);
+  if(!d) return null;
+  if(icGranularity==='year') return String(d.getFullYear());
+  if(icGranularity==='month') return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  if(icGranularity==='week'){
+    const ws = getWeekStart(d);
+    return ws.getFullYear()+'-'+String(ws.getMonth()+1).padStart(2,'0')+'-'+String(ws.getDate()).padStart(2,'0');
+  }
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function icFormatPeriodLabel(k){
+  if(icGranularity==='year') return k;
+  if(icGranularity==='month'){
+    const [y,m] = k.split('-').map(Number);
+    return new Date(y,m-1,1).toLocaleDateString('en-US',{month:'short',year:'numeric'});
+  }
+  const [y,m,d] = k.split('-').map(Number);
+  if(icGranularity==='week'){
+    const start = new Date(y,m-1,d);
+    const end = new Date(y,m-1,d+6);
+    const startStr = start.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    const endStr = start.getMonth()===end.getMonth()
+      ? end.toLocaleDateString('en-US',{day:'numeric'})
+      : end.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    return startStr+'\u2013'+endStr;
+  }
+  return new Date(y,m-1,d).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+}
+function icGranularityLabel(){
+  return icGranularity==='year' ? 'Year' : icGranularity==='month' ? 'Month' : icGranularity==='week' ? 'Week' : 'Day';
+}
+
+/* ---------------------------------------------------------------------
+   Excel parsing
+--------------------------------------------------------------------- */
+async function icParseSapExport(file){
+  const buf = await readFileAsArrayBuffer(file);
+  const wb = XLSX.read(buf, {type:'array', cellDates:true});
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:null, raw:true});
+
+  if(rows.length === 0){
+    const err = new Error('The file has no rows.');
+    err.code = 'NO_ROWS';
+    throw err;
+  }
+
+  const {col: COL, missing} = icResolveColumns(rows[0]);
+  const missingRequired = missing.filter(f => IC_REQUIRED_COLUMNS.includes(f));
+  if(missingRequired.length){
+    const names = missingRequired.map(f => IC_COLUMN_HEADERS[f][0]).join(', ');
+    const err = new Error('Missing required column(s): '+names+'. Check the export still includes these columns (name can shift position, but must be present).');
+    err.code = 'MISSING_COLUMNS';
+    throw err;
+  }
+
+  const updates = {};
+  let totalRows=0, skippedStatus=0, skippedIncomplete=0, imported=0;
+
+  for(let i=1;i<rows.length;i++){
+    const row = rows[i];
+    if(!row || row.length===0) continue;
+    totalRows++;
+
+    const status = row[COL.status] ? String(row[COL.status]).trim().toUpperCase() : '';
+    if(!IC_KEEP_STATUSES.has(status)){ skippedStatus++; continue; }
+
+    const picDoc = row[COL.picDoc];
+    if(!picDoc){ skippedIncomplete++; continue; }
+
+    const bin = COL.bin!==undefined ? row[COL.bin] : null;
+    if(!bin){ skippedIncomplete++; continue; }
+    // Product is NOT required: a blind zone-sweep count is scheduled
+    // against a bin before anyone knows what's actually in it, so many
+    // ACTI rows legitimately have no Product yet. It gets filled in once
+    // the count actually happens.
+    const productRaw = COL.product!==undefined ? row[COL.product] : null;
+    const product = (productRaw!==null && productRaw!==undefined && String(productRaw).trim()!=='') ? String(productRaw).trim() : null;
+
+    const countDate = COL.countDate!==undefined ? row[COL.countDate] : null;
+    const countTime = COL.countTime!==undefined ? row[COL.countTime] : null;
+    const countAt = combineDateAndTime(countDate, countTime);
+
+    const bookQty = COL.bookQty!==undefined ? (Number(row[COL.bookQty]) || 0) : 0;
+    const countedQty = COL.countedQty!==undefined ? (Number(row[COL.countedQty]) || 0) : 0;
+
+    const record = {
+      picDoc: String(picDoc).trim(),
+      status,
+      warehouseOrder: COL.warehouseOrder!==undefined ? (row[COL.warehouseOrder] ?? null) : null,
+      bin: String(bin).trim(),
+      product,
+      stockType: COL.stockType!==undefined ? (row[COL.stockType] ?? null) : null,
+      counter: COL.counter!==undefined ? (row[COL.counter] ?? null) : null,
+      productDesc: COL.productDesc!==undefined ? (row[COL.productDesc] ?? null) : null,
+      bookQty, countedQty,
+      diffQty: countedQty - bookQty, // computed independently of the export's own Difference Quantity column
+      refPicDoc: COL.refPicDoc!==undefined ? (row[COL.refPicDoc] ?? null) : null,
+      hu: COL.hu!==undefined ? (row[COL.hu] ?? null) : null,
+      warehouseTask: COL.warehouseTask!==undefined ? (row[COL.warehouseTask] ?? null) : null,
+      owner: COL.owner!==undefined ? (row[COL.owner] ?? null) : null,
+      countAt: countAt ? countAt.toISOString() : null,
+      uploadedAt: new Date().toISOString()
+    };
+
+    // Physical Inventory Document is NOT a unique per-line key in this
+    // export — a single document number can cover a whole batch of bins
+    // in one zone-sweep count (seen: one document spanning 113 different
+    // bins). Storage Bin is unique within a document, so the dedupe key
+    // is the pair — Document alone would silently collapse a multi-bin
+    // batch down to its last row.
+    const key = sanitizeKey(record.picDoc+'__'+record.bin);
+    updates[key] = record;
+    imported++;
+  }
+
+  return {updates, totalRows, skippedStatus, skippedIncomplete, imported, missingOptional: missing.filter(f=>!IC_REQUIRED_COLUMNS.includes(f))};
+}
+
+/* ---------------------------------------------------------------------
+   Pricing sheet — a separate, simpler upload feeding the Inventory
+   Value ($) sub-page: just a SKU-to-unit-cost lookup. Column-matched by
+   header name like the SAP exports above, so column order can shift.
+--------------------------------------------------------------------- */
+const IC_PRICING_COLUMN_HEADERS = {
+  sku:      ['SKU','Product','Material','Part Number'],
+  unitCost: ['Unit Cost','Cost','Price','Unit Price','Standard Price']
+};
+const IC_PRICING_REQUIRED_COLUMNS = ['sku','unitCost'];
+
+function icResolvePricingColumns(headerRow){
+  const lookup = {};
+  (headerRow||[]).forEach((h,i)=>{
+    const norm = normalizeHeader(h);
+    if(norm && !(norm in lookup)) lookup[norm] = i;
+  });
+  const col = {};
+  const missing = [];
+  for(const field of Object.keys(IC_PRICING_COLUMN_HEADERS)){
+    const found = IC_PRICING_COLUMN_HEADERS[field].map(normalizeHeader).find(c => c in lookup);
+    if(found !== undefined) col[field] = lookup[found];
+    else missing.push(field);
+  }
+  return {col, missing};
+}
+
+async function icParsePricingSheet(file){
+  const buf = await readFileAsArrayBuffer(file);
+  const wb = XLSX.read(buf, {type:'array', cellDates:true});
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:null, raw:true});
+
+  if(rows.length === 0){
+    const err = new Error('The file has no rows.');
+    err.code = 'NO_ROWS';
+    throw err;
+  }
+
+  const {col: COL, missing} = icResolvePricingColumns(rows[0]);
+  if(missing.length){
+    const names = missing.map(f => IC_PRICING_COLUMN_HEADERS[f][0]).join(', ');
+    const err = new Error('Missing required column(s): '+names+'. Check the sheet still includes these columns (name can shift position, but must be present).');
+    err.code = 'MISSING_COLUMNS';
+    throw err;
+  }
+
+  const updates = {};
+  let totalRows=0, skippedIncomplete=0, imported=0;
+
+  for(let i=1;i<rows.length;i++){
+    const row = rows[i];
+    if(!row || row.length===0) continue;
+    totalRows++;
+
+    const skuRaw = row[COL.sku];
+    const sku = (skuRaw!==null && skuRaw!==undefined && String(skuRaw).trim()!=='') ? String(skuRaw).trim() : null;
+    const unitCost = Number(row[COL.unitCost]);
+    if(!sku || !isFinite(unitCost)){ skippedIncomplete++; continue; }
+
+    const key = sanitizeKey(sku);
+    updates[key] = { sku, unitCost, uploadedAt: new Date().toISOString() };
+    imported++;
+  }
+
+  return {updates, totalRows, skippedIncomplete, imported};
+}
+
+/* ---------------------------------------------------------------------
+   Inventory On Hand report — a separate SAP export (Storage Bin, Product,
+   Stock Type, Quantity) giving the system's current on-hand qty for every
+   bin/product in the warehouse, whether or not it's ever been cycle
+   counted. Rows are aggregated by Storage Bin + Product (a bin/product can
+   span multiple Handling Unit rows) into one on-hand qty per location.
+   Under Stock Type: A1 = available, A2 = on a picking block, A3 = on
+   quality hold — all three are physically in the bin, so they're summed
+   into the location's total, with the breakdown kept alongside it.
+--------------------------------------------------------------------- */
+const IC_ONHAND_COLUMN_HEADERS = {
+  bin:         ['Storage Bin'],
+  product:     ['Product'],
+  stockType:   ['Stock Type'],
+  qty:         ['Quantity'],
+  productDesc: ['Product Short Description']
+};
+const IC_ONHAND_REQUIRED_COLUMNS = ['bin','product','qty'];
+
+function icResolveOnHandColumns(headerRow){
+  const lookup = {};
+  (headerRow||[]).forEach((h,i)=>{
+    const norm = normalizeHeader(h);
+    if(norm && !(norm in lookup)) lookup[norm] = i;
+  });
+  const col = {};
+  const missing = [];
+  for(const field of Object.keys(IC_ONHAND_COLUMN_HEADERS)){
+    const found = IC_ONHAND_COLUMN_HEADERS[field].map(normalizeHeader).find(c => c in lookup);
+    if(found !== undefined) col[field] = lookup[found];
+    else missing.push(field);
+  }
+  return {col, missing};
+}
+
+async function icParseOnHandReport(file){
+  const buf = await readFileAsArrayBuffer(file);
+  const wb = XLSX.read(buf, {type:'array', cellDates:true});
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:null, raw:true});
+
+  if(rows.length === 0){
+    const err = new Error('The file has no rows.');
+    err.code = 'NO_ROWS';
+    throw err;
+  }
+
+  const {col: COL, missing} = icResolveOnHandColumns(rows[0]);
+  const missingRequired = missing.filter(f => IC_ONHAND_REQUIRED_COLUMNS.includes(f));
+  if(missingRequired.length){
+    const names = missingRequired.map(f => IC_ONHAND_COLUMN_HEADERS[f][0]).join(', ');
+    const err = new Error('Missing required column(s): '+names+'. Check the export still includes these columns (name can shift position, but must be present).');
+    err.code = 'MISSING_COLUMNS';
+    throw err;
+  }
+
+  const uploadedAt = new Date().toISOString();
+  const updates = {};
+  let totalRows=0, skippedIncomplete=0, imported=0;
+
+  for(let i=1;i<rows.length;i++){
+    const row = rows[i];
+    if(!row || row.length===0) continue;
+    totalRows++;
+
+    const binRaw = row[COL.bin];
+    const productRaw = row[COL.product];
+    const bin = (binRaw!==null && binRaw!==undefined && String(binRaw).trim()!=='') ? String(binRaw).trim() : null;
+    const product = (productRaw!==null && productRaw!==undefined && String(productRaw).trim()!=='') ? String(productRaw).trim() : null;
+    if(!bin || !product){ skippedIncomplete++; continue; }
+
+    const qty = Number(row[COL.qty]) || 0;
+    const stockType = (COL.stockType!==undefined && row[COL.stockType]) ? String(row[COL.stockType]).trim().toUpperCase() : null;
+    const productDesc = COL.productDesc!==undefined ? (row[COL.productDesc] ?? null) : null;
+
+    const key = sanitizeKey(bin+'\u0001'+product);
+    if(!updates[key]){
+      updates[key] = { bin, product, productDesc, qtyAvailable:0, qtyPickBlock:0, qtyQualityHold:0, qtyOther:0, qtyTotal:0, uploadedAt };
+    }
+    const entry = updates[key];
+    if(productDesc && !entry.productDesc) entry.productDesc = productDesc;
+    if(stockType==='A1') entry.qtyAvailable += qty;
+    else if(stockType==='A2') entry.qtyPickBlock += qty;
+    else if(stockType==='A3') entry.qtyQualityHold += qty;
+    else entry.qtyOther += qty;
+    entry.qtyTotal += qty;
+    imported++;
+  }
+
+  return {updates, totalRows, skippedIncomplete, imported, locationCount: Object.keys(updates).length};
+}
+
+document.getElementById('icOnHandFileInput').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  icOnHandSetSyncStatus('busy','Reading file\u2026');
+  try{
+    const result = await icParseOnHandReport(file);
+    const keys = Object.keys(result.updates);
+    if(keys.length){
+      // Full replace, not merge — this is the current on-hand snapshot, so
+      // a bin/product dropped from the new upload shouldn't keep its old
+      // (possibly stale) qty hanging around.
+      await icOnHandRef.set(result.updates);
+      icOnHandSetSyncStatus('ok', result.imported.toLocaleString()+' row'+(result.imported===1?'':'s')+' imported into '+keys.length.toLocaleString()+' location'+(keys.length===1?'':'s')+(result.skippedIncomplete?', '+result.skippedIncomplete+' skipped (missing bin/product)':''));
+    } else {
+      icOnHandSetSyncStatus('err','No matching rows found in that file.');
+    }
+  }catch(err){
+    console.error(err);
+    icOnHandSetSyncStatus('err','Upload failed: '+err.message);
+  }
+  e.target.value='';
+});
+
+function icOnHandSetSyncStatus(kind, text){
+  const dot = document.getElementById('icOnHandSyncDot');
+  const txt = document.getElementById('icOnHandSyncText');
+  if(!dot || !txt) return;
+  dot.className = 'dot' + (kind==='busy'?' busy':kind==='err'?' err':'');
+  txt.textContent = text;
+}
+
+document.getElementById('icPricingFileInput').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  icPricingSetSyncStatus('busy','Reading file\u2026');
+  try{
+    const result = await icParsePricingSheet(file);
+    const keys = Object.keys(result.updates);
+    if(keys.length){
+      // Full replace, not merge — the pricing sheet is the current price
+      // list, so a SKU dropped from the new upload shouldn't keep its old
+      // (possibly stale) price hanging around.
+      await icPricingRef.set(result.updates);
+      icPricingSetSyncStatus('ok', result.imported+' SKU'+(result.imported===1?'':'s')+' priced'+(result.skippedIncomplete?', '+result.skippedIncomplete+' skipped (missing SKU/cost)':''));
+    } else {
+      icPricingSetSyncStatus('err','No matching rows found in that file.');
+    }
+  }catch(err){
+    console.error(err);
+    icPricingSetSyncStatus('err','Upload failed: '+err.message);
+  }
+  e.target.value='';
+});
+
+function icPricingSetSyncStatus(kind, text){
+  const dot = document.getElementById('icPricingSyncDot');
+  const txt = document.getElementById('icPricingSyncText');
+  if(!dot || !txt) return;
+  dot.className = 'dot' + (kind==='busy'?' busy':kind==='err'?' err':'');
+  txt.textContent = text;
+}
+
+/* ---------------------------------------------------------------------
+   Upload flow — independent file input, this tab's own SAP export
+--------------------------------------------------------------------- */
+document.getElementById('icFileInput').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  icSetSyncStatus('busy','Reading file\u2026');
+  try{
+    const result = await icParseSapExport(file);
+    const keys = Object.keys(result.updates);
+    if(keys.length){
+      await icRecordsRef.update(result.updates);
+      await icUploadsRef.push({ fileName:file.name, uploadedAt:new Date().toISOString(),
+        totalRows:result.totalRows, skippedStatus:result.skippedStatus, skippedIncomplete:result.skippedIncomplete, imported:result.imported });
+      icSetSyncStatus('ok', result.imported+' count'+(result.imported===1?'':'s')+' imported'+(result.skippedStatus?', '+result.skippedStatus+' skipped (status)':''));
+    } else {
+      icSetSyncStatus('err','No matching rows found in that file.');
+    }
+  }catch(err){
+    console.error(err);
+    icSetSyncStatus('err','Upload failed: '+err.message);
+  }
+  e.target.value='';
+});
+
+function icSetSyncStatus(kind, text){
+  const dot = document.getElementById('icSyncDot');
+  const txt = document.getElementById('icSyncText');
+  dot.className = 'dot' + (kind==='busy'?' busy':kind==='err'?' err':'');
+  txt.textContent = text;
+}
+
+/* ---------------------------------------------------------------------
+   Firebase live listener
+--------------------------------------------------------------------- */
+icSetSyncStatus('busy','Connecting&hellip;');
+icRecordsRef.on('value', snap=>{
+  const val = snap.val() || {};
+  icAllRecords = Object.keys(val).map(k=>{
+    const r = val[k];
+    return { ...r, _key:k, countAt: r.countAt ? new Date(r.countAt) : null };
+  });
+  icSetSyncStatus('ok','Connected');
+  icRenderAll();
+}, err=>{
+  console.error(err);
+  icSetSyncStatus('err','Connection error: '+err.message);
+});
+
+icAccuracyOmissionsRef.on('value', snap=>{
+  icAccuracyOmissions = snap.val() || {};
+  safeRender('inventory KPIs', ()=>icRenderAll());
+});
+
+icPricingRef.on('value', snap=>{
+  icPricing = snap.val() || {};
+  icRebuildPricingIndex();
+  const count = Object.keys(icPricing).length;
+  document.getElementById('icPricingCount').textContent = count.toLocaleString();
+  if(count>0){
+    icPricingSetSyncStatus('ok', count.toLocaleString()+' SKUs priced');
+    const latest = Object.values(icPricing).reduce((a,b)=> (!a || (b.uploadedAt||'') > (a.uploadedAt||'')) ? b : a, null);
+    if(latest && latest.uploadedAt){
+      document.getElementById('icPricingLastUploadLine').style.display='inline';
+      document.getElementById('icPricingLastUploadTime').textContent =
+        new Date(latest.uploadedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+    }
+  } else {
+    icPricingSetSyncStatus('ok','No pricing sheet uploaded');
+  }
+  safeRender('inventory value summary', ()=>{ icRenderOnHandKpis(); icRenderValueSummary(icCachedRangeGroups); });
+});
+
+icOnHandRef.on('value', snap=>{
+  icOnHand = snap.val() || {};
+  const count = Object.keys(icOnHand).length;
+  const countEl = document.getElementById('icOnHandLocationCount');
+  if(countEl) countEl.textContent = count.toLocaleString();
+  if(count>0){
+    icOnHandSetSyncStatus('ok', count.toLocaleString()+' bin/product location'+(count===1?'':'s')+' on file');
+    const latest = Object.values(icOnHand).reduce((a,b)=> (!a || (b.uploadedAt||'') > (a.uploadedAt||'')) ? b : a, null);
+    if(latest && latest.uploadedAt){
+      const lineEl = document.getElementById('icOnHandLastUploadLine');
+      const timeEl = document.getElementById('icOnHandLastUploadTime');
+      if(lineEl) lineEl.style.display='inline';
+      if(timeEl) timeEl.textContent = new Date(latest.uploadedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+    }
+  } else {
+    icOnHandSetSyncStatus('ok','No Inventory On Hand report uploaded');
+  }
+  safeRender('inventory on-hand summary', ()=>{ icRenderOnHandKpis(); icRenderValueSummary(icCachedRangeGroups); });
+});
+
+icUploadsRef.limitToLast(1).on('value', snap=>{
+  const val = snap.val();
+  if(!val) return;
+  const entry = Object.values(val)[0];
+  document.getElementById('icLastUploadLine').style.display='inline';
+  document.getElementById('icLastUploadTime').textContent =
+    new Date(entry.uploadedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
+    + ' (' + entry.imported + ' counts)';
+});
+
+/* ---------------------------------------------------------------------
+   Filtering & controls
+--------------------------------------------------------------------- */
+document.querySelectorAll('#icGranularityToggle .seg-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    icGranularity = btn.dataset.granularity;
+    document.querySelectorAll('#icGranularityToggle .seg-btn').forEach(b=>b.classList.toggle('active', b===btn));
+    icRenderAll();
+  });
+});
+// Multi-select, not exclusive like the toggles above: each pill flips its
+// own group in/out of icLocationScopeSelected independently. Refuses to
+// let the last active group be turned off, since an empty scope has
+// nothing meaningful to show — same guard pattern as a single-select
+// dropdown that always has one value.
+document.querySelectorAll('#icLocationScopeToggle .seg-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const grp = btn.dataset.icloc;
+    const willBeActive = !icLocationScopeSelected.has(grp);
+    if(!willBeActive && icLocationScopeSelected.size<=1) return; // keep at least one group selected
+    if(willBeActive) icLocationScopeSelected.add(grp); else icLocationScopeSelected.delete(grp);
+    btn.classList.toggle('active', willBeActive);
+    icRenderAll();
+  });
+});
+document.getElementById('icRangeFilter').addEventListener('change', e=>{
+  icRangeMode = e.target.value;
+  document.getElementById('icDateRangeInputs').classList.toggle('show', icRangeMode==='custom');
+  icRenderAll();
+});
+document.getElementById('icDateFrom').addEventListener('change', icRenderAll);
+document.getElementById('icDateTo').addEventListener('change', icRenderAll);
+document.getElementById('icSearchBox').addEventListener('input', e=>{
+  icSearchTerm = e.target.value.trim().toLowerCase();
+  safeRender('inventory table', ()=>icRenderTable(icCachedRangeGroups));
+});
+
+// Uses the shared computeRangeFilteredGroups helper (defined on the
+// Outbound tab above) so date-cutoff behavior stays identical across tabs.
+// Unlike In-Progress pulls / In-GR-Zone HUs elsewhere, Open locations here
+// are NOT exempted from the range filter — selecting a date/range on this
+// tab means "only what was counted (or is still waiting, dated) in that
+// window," full stop, for both the table and every stat derived from it.
+// The Open Counts / Oldest Open Count cards stay genuinely live via the
+// separate, always-unfiltered openGroups passed alongside this.
+function icFilterByRange(groups){
+  const fromVal = document.getElementById('icDateFrom').value;
+  const toVal = document.getElementById('icDateTo').value;
+  // icBusinessDate rolls pre-6AM counts back onto the prior day first, so
+  // "today excluded from the rolling window" correctly means "the 3rd-shift
+  // day still in progress," not "the calendar date since midnight."
+  return computeRangeFilteredGroups(groups, icRangeMode, fromVal, toVal, 'countAt', XS_STRICT_NO_BYPASS, icBusinessDate);
+}
+
+/* ---------------------------------------------------------------------
+   Aggregation: resolve every Physical Inventory Document into one
+   bin/product location record, applying the recount-override rule:
+   if a recount was generated (RECO) and no ACTI is still pending against
+   that same bin/product, the outcome is whatever the most recent
+   completed (COUN) document for that bin/product shows — the original
+   miss that triggered the recount is superseded, not averaged in.
+   Unsuccessful is only registered when the terminal record is COUN with
+   a non-zero difference and no ACTI is pending against the same location.
+   A RECO record with no book/counted qty of its own — the normal case,
+   since it's just a flag pointing at a separate recount document — is
+   treated as still-pending (same as ACTI) if it's newer than the last
+   COUN on file, rather than letting that earlier, now-superseded count
+   stand in as the resolved outcome until the recount actually comes in.
+--------------------------------------------------------------------- */
+function icGroupByLocation(records){
+  const map = new Map();
+  for(const r of records){
+    const key = r.bin+'\u0001'+r.product;
+    if(!map.has(key)) map.set(key, []);
+    map.get(key).push(r);
+  }
+  const groups = [];
+  for(const [key, recs] of map.entries()){
+    const hasActi = recs.some(r=>r.status==='ACTI');
+    const couns = recs.filter(r=>r.status==='COUN');
+    const hadRecount = recs.some(r=>r.status==='RECO');
+    // "Terminal" record: the one that currently represents this location's
+    // outcome — the most recently counted COUN document, if any.
+    const sortedCouns = [...couns].filter(r=>isValidDate(r.countAt)).sort((a,b)=>b.countAt-a.countAt);
+    const terminal = sortedCouns[0] || null;
+    // Earliest record on file, for display/context (e.g. the original
+    // miss that a recount corrected).
+    const sortedAll = [...recs].filter(r=>isValidDate(r.countAt)).sort((a,b)=>a.countAt-b.countAt);
+    const earliest = sortedAll[0] || recs[0];
+
+    // A RECO row is just a "please recount this" flag, cross-referenced to
+    // its own recount document elsewhere — it carries no real book/counted
+    // quantities of its own. If one like that is the newest thing on file
+    // for this location (no COUN has come in yet to fulfill it), the
+    // recount is still pending: this location is active/waiting, same as
+    // an ACTI row, not resolved off of whatever an earlier, now-superseded
+    // count happened to show.
+    const pendingRecos = recs.filter(r=>r.status==='RECO' && isValidDate(r.countAt) && (r.bookQty||0)===0 && (r.countedQty||0)===0);
+    const latestPendingReco = pendingRecos.length ? pendingRecos.reduce((a,b)=>a.countAt>b.countAt?a:b) : null;
+    const recountPending = !!latestPendingReco && (!terminal || latestPendingReco.countAt > terminal.countAt);
+
+    let status;
+    if(hasActi || recountPending) status = 'Open';
+    else if(terminal) status = terminal.diffQty===0 ? 'Accurate' : 'Inaccurate';
+    else status = 'Open'; // only RECO on file, no terminal yet (recount not in this export window)
+
+    const rep = terminal || earliest; // record to display qty/counter/date from
+    const originalDiff = hadRecount && earliest && terminal && earliest._key!==terminal._key ? earliest.diffQty : null;
+
+    groups.push({
+      key, bin: earliest.bin, product: earliest.product,
+      productDesc: (terminal && terminal.productDesc) || earliest.productDesc,
+      stockType: (terminal && terminal.stockType) || earliest.stockType,
+      warehouseOrder: (terminal && terminal.warehouseOrder) || earliest.warehouseOrder,
+      bookQty: rep.bookQty, countedQty: rep.countedQty, diffQty: rep.diffQty,
+      originalDiffQty: originalDiff,
+      counter: (terminal && terminal.counter) || null,
+      countAt: status==='Open' ? (recountPending && !hasActi ? latestPendingReco.countAt : earliest.countAt) : (terminal ? terminal.countAt : earliest.countAt),
+      status, hadRecount,
+      recountOutcome: hadRecount && status!=='Open' ? (status==='Accurate' ? 'Corrected' : 'Confirmed') : null,
+      recordCount: recs.length,
+      records: recs
+    });
+  }
+  return groups;
+}
+
+// A location manually omitted from the Inventory Accuracy metric on the
+// Executive Summary (e.g. a variance already verified accurate through
+// another count) — see icAccuracyOmissionsRef.
+function isInventoryAccuracyOmitted(g){
+  return !!(g.key && icAccuracyOmissions[sanitizeKey(g.key)]);
+}
+
+// Bin-level rollup for "Location Accuracy" — a Storage Bin is only
+// Accurate if every product resolved at that bin was Accurate; Open if
+// anything at that bin is still pending; Inaccurate if anything resolved
+// there missed. In this export bins typically hold one product each, but
+// this rolls up correctly whether or not that's true.
+function icRollupByBin(groups){
+  const map = new Map();
+  for(const g of groups){
+    if(!map.has(g.bin)) map.set(g.bin, []);
+    map.get(g.bin).push(g);
+  }
+  const bins = [];
+  for(const [bin, locs] of map.entries()){
+    let status;
+    if(locs.some(l=>l.status==='Open')) status = 'Open';
+    else if(locs.some(l=>l.status==='Inaccurate')) status = 'Inaccurate';
+    else status = 'Accurate';
+    bins.push({ bin, status, locationCount: locs.length });
+  }
+  return bins;
+}
+
+/* ---------------------------------------------------------------------
+   Render: orchestrator
+--------------------------------------------------------------------- */
+function icRenderAll(){
+  // Scope to the locations this tab is responsible for before anything
+  // else touches the records — every count, KPI, chart, and $ figure
+  // downstream is built from icScopedRecords, never icAllRecords directly.
+  const icScopedRecords = icAllRecords.filter(r=>icLocationInScope(r.bin));
+  document.getElementById('icRecordCount').textContent = icScopedRecords.length.toLocaleString();
+  const allGroups = icGroupByLocation(icScopedRecords);
+  document.getElementById('icLocationCount').textContent = allGroups.length.toLocaleString();
+
+  const rangeGroups = icFilterByRange(allGroups);
+  icCachedRangeGroups = rangeGroups;
+  const openGroups = allGroups.filter(g=>g.status==='Open'); // always live, not range-filtered
+
+  // Raw status tallies (Open/Completed/Recount counts) work off individual
+  // count documents, not the resolved-location rollup above — same date
+  // bounds as icFilterByRange, strictly applied (no live-ACTI exemption;
+  // the Open Counts card below sources from openGroups instead, so it
+  // stays live independent of this).
+  const fromVal = document.getElementById('icDateFrom').value;
+  const toVal = document.getElementById('icDateTo').value;
+  const rangeRecords = computeRangeFilteredGroups(icScopedRecords, icRangeMode, fromVal, toVal, 'countAt', XS_STRICT_NO_BYPASS, icBusinessDate);
+
+  safeRender('inventory KPIs', ()=>icRenderKPIs(rangeGroups, openGroups, rangeRecords));
+  safeRender('inventory charts', ()=>icRenderCharts(rangeGroups, openGroups));
+  safeRender('inventory on-hand summary', ()=>icRenderOnHandKpis());
+  safeRender('inventory value summary', ()=>icRenderValueSummary(rangeGroups));
+  safeRender('inventory table', ()=>icRenderTable(rangeGroups));
+}
+
+/* ---------------------------------------------------------------------
+   KPI cards
+--------------------------------------------------------------------- */
+function icModalTableHtml(groups){
+  if(!groups.length) return '<div style="color:var(--text-faint);padding:10px 0 4px;">No matching locations.</div>';
+  return `<div style="overflow-x:auto;"><table><thead><tr>
+      <th>Bin</th><th>SKU</th><th>Description</th><th>Book</th><th>Counted</th><th>Diff</th><th>Result</th><th>Counter</th><th>Count Date</th>
+    </tr></thead><tbody>${groups.map(g=>`
+      <tr>
+        <td>${g.bin}</td>
+        <td>${g.product||'&mdash;'}</td>
+        <td style="white-space:normal;max-width:260px;">${g.productDesc||'&mdash;'}</td>
+        <td>${g.bookQty.toLocaleString()}</td>
+        <td>${g.countedQty.toLocaleString()}</td>
+        <td>${g.diffQty>0?'+':''}${g.diffQty.toLocaleString()}</td>
+        <td>${g.status}</td>
+        <td>${g.counter||'&mdash;'}</td>
+        <td>${formatDateTime(g.countAt)}</td>
+      </tr>
+    `).join('')}</tbody></table></div>`;
+}
+
+// Plain-object rows (same data as icModalTableHtml) for Excel export.
+function icModalExportRows(groups){
+  return groups.map(g=>({
+    'Bin': g.bin,
+    'SKU': g.product||'',
+    'Description': g.productDesc||'',
+    'Book Qty': g.bookQty,
+    'Counted Qty': g.countedQty,
+    'Diff': g.diffQty,
+    'Result': g.status,
+    'Counter': g.counter||'',
+    'Count Date': isValidDate(g.countAt) ? g.countAt : ''
+  }));
+}
+
+/* ---------------------------------------------------------------------
+   Completed Counts reconciliation — explains why the raw "Completed
+   Counts" tally (every COUN document in the date range) doesn't match
+   the denominator behind "Location Accuracy" (resolved bins, deduped).
+   A COUN document in range lands in exactly one bucket:
+     - stillOpen:    it was the terminal count for its location, but the
+                      location as a whole is still Open (a newer ACTI or
+                      pending recount exists) — excluded from accuracy.
+     - superseded:   a later COUN at the same bin/product replaced it —
+                      only the newest count represents that location.
+     - multiProduct: terminal and resolved, but its bin holds more than
+                      one product/location, so several resolved counts
+                      here collapse into a single bin result.
+     - counted:      terminal, resolved, and the only product at its bin —
+                      contributes exactly one bin to Location Accuracy.
+   Location status/terminal-record logic mirrors icGroupByLocation, but is
+   computed over ALL records on file (not range-filtered), so a count that
+   was later reopened or recounted outside the selected range is still
+   correctly classified.
+--------------------------------------------------------------------- */
+function icCompletedCountsBreakdown(rangeCounRecords, allRecords){
+  const byKey = new Map();
+  for(const r of allRecords){
+    const key = r.bin+'\u0001'+r.product;
+    if(!byKey.has(key)) byKey.set(key, []);
+    byKey.get(key).push(r);
+  }
+
+  const terminalKeyOf = new Map(); // location key -> terminal COUN record's _key
+  const statusOf = new Map();      // location key -> 'Open'|'Accurate'|'Inaccurate'
+  for(const [key, recs] of byKey.entries()){
+    const hasActi = recs.some(r=>r.status==='ACTI');
+    const couns = recs.filter(r=>r.status==='COUN' && isValidDate(r.countAt));
+    const sortedCouns = [...couns].sort((a,b)=>b.countAt-a.countAt);
+    const terminal = sortedCouns[0] || null;
+    const pendingRecos = recs.filter(r=>r.status==='RECO' && isValidDate(r.countAt) && (r.bookQty||0)===0 && (r.countedQty||0)===0);
+    const latestPendingReco = pendingRecos.length ? pendingRecos.reduce((a,b)=>a.countAt>b.countAt?a:b) : null;
+    const recountPending = !!latestPendingReco && (!terminal || latestPendingReco.countAt > terminal.countAt);
+    let status;
+    if(hasActi || recountPending) status = 'Open';
+    else if(terminal) status = terminal.diffQty===0 ? 'Accurate' : 'Inaccurate';
+    else status = 'Open';
+    terminalKeyOf.set(key, terminal ? terminal._key : null);
+    statusOf.set(key, status);
+  }
+
+  // Bins (across ALL locations on file) that hold more than one
+  // bin/product key — i.e. multiple products share the same storage bin.
+  const keysByBin = new Map();
+  for(const [key, recs] of byKey.entries()){
+    const bin = recs[0].bin;
+    if(!keysByBin.has(bin)) keysByBin.set(bin, new Set());
+    keysByBin.get(bin).add(key);
+  }
+
+  const buckets = { superseded: [], stillOpen: [], multiProduct: [], counted: [] };
+  for(const r of rangeCounRecords){
+    const key = r.bin+'\u0001'+r.product;
+    const isTerminal = terminalKeyOf.get(key) === r._key;
+    const status = statusOf.get(key);
+    if(!isTerminal){
+      buckets.superseded.push(r);
+    } else if(status==='Open'){
+      buckets.stillOpen.push(r);
+    } else if((keysByBin.get(r.bin)||new Set()).size > 1){
+      buckets.multiProduct.push(r);
+    } else {
+      buckets.counted.push(r);
+    }
+  }
+  return buckets;
+}
+
+const IC_RECON_REASON_INFO = {
+  stillOpen: {title:'Reopened after this count', note:'This COUN completed, but a newer ACTI (or a pending recount) reopened the location afterward \u2014 it isn\u2019t resolved, so it\u2019s excluded from Location Accuracy.'},
+  superseded: {title:'Superseded by a later recount', note:'An earlier COUN at this bin/SKU that a later COUN document replaced \u2014 only the newest count represents this location.'},
+  multiProduct: {title:'Shares a bin with another product', note:'This bin holds more than one product/location. Each is counted separately here, but Location Accuracy rolls up to one result per bin.'},
+  counted: {title:'Counted 1:1 into Location Accuracy', note:'The terminal, resolved count for a single-product bin \u2014 contributes exactly one accurate/inaccurate bin.'}
+};
+
+function icReconSectionHtml(key, records){
+  if(!records.length) return '';
+  const info = IC_RECON_REASON_INFO[key];
+  return `<div style="margin-bottom:18px;">
+    <div style="font-size:12.5px;font-weight:700;margin-bottom:2px;">${info.title} &mdash; ${records.length.toLocaleString()}</div>
+    <div style="font-size:11px;color:var(--text-faint);margin-bottom:8px;">${info.note}</div>
+    <div style="overflow-x:auto;"><table><thead><tr>
+      <th>Bin</th><th>SKU</th><th>Description</th><th>Book</th><th>Counted</th><th>Diff</th><th>Counter</th><th>Count Date</th>
+    </tr></thead><tbody>${records.map(r=>`
+      <tr>
+        <td>${r.bin}</td>
+        <td>${r.product||'&mdash;'}</td>
+        <td style="white-space:normal;max-width:260px;">${r.productDesc||'&mdash;'}</td>
+        <td>${(r.bookQty||0).toLocaleString()}</td>
+        <td>${(r.countedQty||0).toLocaleString()}</td>
+        <td>${(r.diffQty||0)>0?'+':''}${(r.diffQty||0).toLocaleString()}</td>
+        <td>${r.counter||'&mdash;'}</td>
+        <td>${formatDateTime(r.countAt)}</td>
+      </tr>
+    `).join('')}</tbody></table></div>
+  </div>`;
+}
+
+function icReconModalHtml(buckets){
+  const total = buckets.superseded.length + buckets.stillOpen.length + buckets.multiProduct.length + buckets.counted.length;
+  const summary = `<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:16px;">
+    ${total.toLocaleString()} COUN documents in range &mdash;
+    ${buckets.counted.length.toLocaleString()} counted 1:1 into Location Accuracy,
+    ${buckets.multiProduct.length.toLocaleString()} shared a multi-product bin,
+    ${buckets.stillOpen.length.toLocaleString()} reopened after completion,
+    ${buckets.superseded.length.toLocaleString()} superseded by a later recount.
+  </div>`;
+  return summary
+    + icReconSectionHtml('stillOpen', buckets.stillOpen)
+    + icReconSectionHtml('superseded', buckets.superseded)
+    + icReconSectionHtml('multiProduct', buckets.multiProduct)
+    + icReconSectionHtml('counted', buckets.counted);
+}
+
+function icReconExportRows(buckets){
+  const rows = [];
+  const add = (key, records)=>{
+    const label = IC_RECON_REASON_INFO[key].title;
+    records.forEach(r=>rows.push({
+      'Reason': label,
+      'Bin': r.bin,
+      'SKU': r.product||'',
+      'Description': r.productDesc||'',
+      'Book Qty': r.bookQty||0,
+      'Counted Qty': r.countedQty||0,
+      'Diff': r.diffQty||0,
+      'Counter': r.counter||'',
+      'Count Date': isValidDate(r.countAt) ? r.countAt : ''
+    }));
+  };
+  add('stillOpen', buckets.stillOpen);
+  add('superseded', buckets.superseded);
+  add('multiProduct', buckets.multiProduct);
+  add('counted', buckets.counted);
+  return rows;
+}
+
+// ---- Executive Summary-only variants of the two functions above, adding
+// an Omit/Clear control per location. Kept separate from icModalTableHtml /
+// icModalExportRows so the Inventory tab's own popups (which reuse those)
+// don't pick up the button — the Omit control is exposed on the Executive
+// Summary page only. Writes to icAccuracyOmissionsRef, a new node — unlike
+// Dock to Stock/On-Time Delivery, the Inventory tab has no existing
+// override mechanism this can piggyback on.
+function icAccuracyActionCellHtml(key, omission){
+  if(!key) return '';
+  const omittedBadge = omission ? `<span class="badge omitted" title="${escapeAttr('Omitted from Inventory Accuracy \u2014 '+omission.note)}">Omitted \u270e</span>` : '';
+  const omitBtn = omission
+    ? `<button type="button" class="sla-override-btn clear" data-icaccuracy-key="${escapeAttr(key)}" title="Clear omission">&#10005; Clear</button>`
+    : `<button type="button" class="sla-override-btn" data-icaccuracy-key="${escapeAttr(key)}" title="Omit from Inventory Accuracy">&#9998; Omit</button>`;
+  return omittedBadge+omitBtn;
+}
+function xsInventoryModalTableHtml(groups){
+  if(!groups.length) return '<div style="color:var(--text-faint);padding:10px 0 4px;">No matching locations.</div>';
+  return `<div style="overflow-x:auto;"><table><thead><tr>
+      <th>Bin</th><th>SKU</th><th>Description</th><th>Book</th><th>Counted</th><th>Diff</th><th>Result</th><th>Counter</th><th>Count Date</th><th>Inventory Accuracy</th>
+    </tr></thead><tbody>${groups.map(g=>{
+      const omission = g.key ? icAccuracyOmissions[sanitizeKey(g.key)] : null;
+      return `
+      <tr>
+        <td>${g.bin}</td>
+        <td>${g.product||'&mdash;'}</td>
+        <td style="white-space:normal;max-width:260px;">${g.productDesc||'&mdash;'}</td>
+        <td>${g.bookQty.toLocaleString()}</td>
+        <td>${g.countedQty.toLocaleString()}</td>
+        <td>${g.diffQty>0?'+':''}${g.diffQty.toLocaleString()}</td>
+        <td>${g.status}</td>
+        <td>${g.counter||'&mdash;'}</td>
+        <td>${formatDateTime(g.countAt)}</td>
+        <td>${icAccuracyActionCellHtml(g.key, omission)}</td>
+      </tr>
+    `;}).join('')}</tbody></table></div>`;
+}
+function xsInventoryModalExportRows(groups){
+  return groups.map(g=>{
+    const omission = g.key ? icAccuracyOmissions[sanitizeKey(g.key)] : null;
+    return {
+      'Bin': g.bin,
+      'SKU': g.product||'',
+      'Description': g.productDesc||'',
+      'Book Qty': g.bookQty,
+      'Counted Qty': g.countedQty,
+      'Diff': g.diffQty,
+      'Result': g.status,
+      'Counter': g.counter||'',
+      'Count Date': isValidDate(g.countAt) ? g.countAt : '',
+      'Omitted from Inventory Accuracy': omission ? 'Omitted: '+omission.note : ''
+    };
+  });
+}
+async function icAccuracyOmissionPrompt(key, cellEl){
+  const note = prompt('Omit this location from Inventory Accuracy (e.g. a variance already verified accurate through another count).\n\nEnter a reason (required):');
+  if(note === null) return; // cancelled
+  if(!note.trim()){
+    alert('A reason is required to omit a location from Inventory Accuracy.');
+    return;
+  }
+  try{
+    const omission = { note: note.trim(), setAt: new Date().toISOString() };
+    await icAccuracyOmissionsRef.child(sanitizeKey(key)).set(omission);
+    icSetSyncStatus('ok', 'Location omitted from Inventory Accuracy');
+    if(cellEl) cellEl.innerHTML = icAccuracyActionCellHtml(key, omission);
+  }catch(err){
+    console.error(err);
+    icSetSyncStatus('err', 'Failed to save omission: '+err.message);
+  }
+}
+async function clearIcAccuracyOmission(key, cellEl){
+  if(!confirm('Clear this omission? The location will count against Inventory Accuracy again if it\u2019s still off qty.')) return;
+  try{
+    await icAccuracyOmissionsRef.child(sanitizeKey(key)).remove();
+    icSetSyncStatus('ok', 'Omission cleared');
+    if(cellEl) cellEl.innerHTML = icAccuracyActionCellHtml(key, null);
+  }catch(err){
+    console.error(err);
+    icSetSyncStatus('err', 'Failed to clear omission: '+err.message);
+  }
+}
+
+/* ---------------------------------------------------------------------
+   Inventory Value ($) sub-page — prices resolved locations against the
+   uploaded pricing sheet and rolls them up into a single Inventory
+   Results row, matching a standalone SKU/Unit Cost inventory-results
+   report.
+--------------------------------------------------------------------- */
+// SKU matching for price lookups, tried in this order:
+//   1. exact stored key (the original behaviour)
+//   2. letters + digits only — dashes, spaces, dots, slashes etc. ignored
+//      ('AB-123-45' matches 'AB12345')
+//   3. letters + digits only, leading zeros dropped ('0000001DC058' matches
+//      '1DC058')
+// Letters and numbers themselves must still match exactly (case-sensitive).
+// A looser tier never overrides a tighter one: the price list can hold
+// SKUs that differ only by leading zeros or a dash with DIFFERENT prices
+// (e.g. '0000049Y7884' and '49Y7884'), so an exact match always wins. If a
+// looser key lands on more than one price-list SKU with different unit
+// costs it's ambiguous, and is left unpriced rather than guessed at. Used
+// for price lookups only — stored keys and displayed SKUs are untouched,
+// so no re-upload is needed.
+function skuMatchKey(sku){
+  return String(sku==null ? '' : sku).replace(/[^A-Za-z0-9]/g,'');
+}
+function skuMatchKeyNoZeros(sku){
+  return skuMatchKey(sku).replace(/^0+/,'');
+}
+// Grouping key for roll-ups by SKU — the loosest normalisation, so the
+// same product written two ways lands on one line.
+function skuGroupKey(sku){
+  return skuMatchKeyNoZeros(sku) || skuMatchKey(sku) || sanitizeKey(sku==null?'':sku);
+}
+function icRebuildPricingIndex(){
+  icPricingIndex = {};
+  icPricingIndexNoZero = {};
+  const add = (idx, k, p)=>{
+    if(!k) return;
+    const cur = idx[k];
+    if(!cur) idx[k] = { entry:p, ambiguous:false };
+    else if(Number(cur.entry.unitCost) !== Number(p.unitCost)) cur.ambiguous = true;
+  };
+  Object.values(icPricing).forEach(p=>{
+    if(!p || p.sku===null || p.sku===undefined) return;
+    add(icPricingIndex, skuMatchKey(p.sku), p);
+    add(icPricingIndexNoZero, skuMatchKeyNoZeros(p.sku), p);
+  });
+}
+// Price-list entry for a SKU, per the tiers above. Null when nothing hits
+// or the only hits are ambiguous.
+function icPriceEntryFor(sku){
+  if(sku===null || sku===undefined || sku==='') return null;
+  const exact = icPricing[sanitizeKey(sku)];
+  if(exact) return exact;
+  const hit1 = icPricingIndex[skuMatchKey(sku)];
+  if(hit1) return hit1.ambiguous ? null : hit1.entry;
+  const k2 = skuMatchKeyNoZeros(sku);
+  const hit2 = k2 ? icPricingIndexNoZero[k2] : null;
+  if(hit2) return hit2.ambiguous ? null : hit2.entry;
+  return null;
+}
+function icUnitCostFor(g){
+  if(!g.product) return null;
+  const entry = icPriceEntryFor(g.product);
+  return entry ? Number(entry.unitCost) : null;
+}
+// The matching Inventory On Hand report row for a counted location, by
+// Storage Bin + Product — the same key the report was aggregated by on
+// upload. Null when the location isn't in the current on-hand snapshot
+// (report not uploaded, or that bin/product isn't on it).
+function icOnHandEntryFor(g){
+  if(!g.bin || !g.product) return null;
+  return icOnHand[sanitizeKey(g.bin+'\u0001'+g.product)] || null;
+}
+// The location's counted qty as it originally stood, before any recount
+// correction — reconstructed from bookQty + the pre-recount diff, since
+// the raw earliest-count record itself isn't kept on the group. Locations
+// with no recount have no originalDiffQty, so this equals the (single,
+// final) counted qty either way.
+function icGrossCountedQty(g){
+  return g.bookQty + (g.originalDiffQty!==null && g.originalDiffQty!==undefined ? g.originalDiffQty : g.diffQty);
+}
+function icFormatCurrency(v){
+  const sign = v<0 ? '-' : '';
+  return sign+'$'+Math.abs(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function icFormatPct(v){
+  return v===null ? '\u2014' : (Math.round(v*10000)/100).toFixed(2)+'%';
+}
+// The exact business-date span of the resolved locations actually feeding
+// the tables below, shown as the "Period" column instead of the range
+// picker's own wording ("Last 30 Days") — so the tables always state
+// what they cover, not just how it was selected.
+function icActualPeriodLabel(resolvedGroups){
+  const dates = resolvedGroups.map(g=>icBusinessDate(g.countAt)).filter(Boolean);
+  if(!dates.length) return '\u2014';
+  const min = new Date(Math.min(...dates.map(d=>d.getTime())));
+  const max = new Date(Math.max(...dates.map(d=>d.getTime())));
+  const fmt = d => d.toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'2-digit'});
+  return min.getTime()===max.getTime() ? fmt(min) : fmt(min)+'\u2013'+fmt(max);
+}
+// Builds the single Inventory Results row from resolved, priced, and
+// on-hand-matched locations. Always called with basis='net' (the final,
+// recount-corrected count per location) — the 'gross' basis (original,
+// pre-recount count) is kept as an option here since the Net Variance /
+// Gross Variance columns on the row are computed either way, just in case
+// a gross-basis view is wanted again later. Shared by the render function
+// and the Excel export so the two can never drift apart. Qty Pieces WMS /
+// On-Hand Inventory $ - WMS come from the uploaded Inventory On Hand
+// report, not from the cycle count document's own book qty — a location
+// only counts here once it has a match there.
+function icBuildValueRow(rangeGroups, basis, periodLabel){
+  const resolved = rangeGroups.filter(g=>g.status==='Accurate' || g.status==='Inaccurate');
+  let priced=0, unpriced=0, unpricedQty=0, unmatched=0, unmatchedQty=0;
+  let qtyWms=0, qtyPhysical=0, onHandWms=0, onHandPhysical=0, negVariance=0, posVariance=0;
+  const details = []; // one entry per location actually feeding the row above, for the Excel export's detail sheet
+  resolved.forEach(g=>{
+    const unitCost = icUnitCostFor(g);
+    if(unitCost===null){ unpriced++; unpricedQty += g.bookQty; return; }
+    const onHandEntry = icOnHandEntryFor(g);
+    if(!onHandEntry){ unmatched++; unmatchedQty += g.bookQty; return; }
+    priced++;
+    const omitted = isInventoryAccuracyOmitted(g);
+    const diff = omitted ? 0 : (basis==='gross' ? (icGrossCountedQty(g)-g.bookQty) : g.diffQty);
+    // physicalQty is the actual counted result for the location — a fact
+    // from the cycle count itself, unaffected by the on-hand snapshot.
+    const physicalQty = g.bookQty + diff;
+    // wmsQty is the system's CURRENT on-hand qty for that bin/product,
+    // per the uploaded Inventory On Hand report — this is what "matched
+    // against the Inventory On Hand report" means, and is what the
+    // variance is measured against, not the (possibly stale) book qty
+    // captured on the original Physical Inventory Document.
+    const wmsQty = onHandEntry.qtyTotal;
+    qtyWms += wmsQty;
+    qtyPhysical += physicalQty;
+    onHandWms += wmsQty*unitCost;
+    onHandPhysical += physicalQty*unitCost;
+    const costDiff = (physicalQty-wmsQty)*unitCost;
+    if(costDiff<0) negVariance += costDiff; else posVariance += costDiff;
+    details.push({
+      bin: g.bin, sku: g.product, productDesc: g.productDesc||'',
+      qtyWms: wmsQty, qtyPhysical: physicalQty, varianceQty: physicalQty-wmsQty,
+      unitCost, onHandWms: wmsQty*unitCost, onHandPhysical: physicalQty*unitCost, varianceValue: costDiff,
+      status: g.status, counter: g.counter||'', countAt: g.countAt
+    });
+  });
+  const netVariance = negVariance+posVariance;
+  const grossVariance = Math.abs(negVariance)+posVariance;
+  const netAccuracy = onHandWms>0 ? 1-(Math.abs(netVariance)/onHandWms) : null;
+  const grossAccuracy = onHandWms>0 ? 1-(grossVariance/onHandWms) : null;
+  return { period: periodLabel, qtyWms, qtyPhysical, onHandWms, onHandPhysical,
+    negVariance, posVariance, netVariance, grossVariance, netAccuracy, grossAccuracy,
+    priced, unpriced, unpricedQty, unmatched, unmatchedQty, locationCount: resolved.length, details };
+}
+function icValueRowHtml(row){
+  return `<tr>
+    <td>${escapeAttr(row.period)}</td>
+    <td>${row.qtyWms.toLocaleString()}</td>
+    <td>${row.qtyPhysical.toLocaleString()}</td>
+    <td>${icFormatCurrency(row.onHandWms)}</td>
+    <td>${icFormatCurrency(row.onHandPhysical)}</td>
+    <td>${icFormatCurrency(row.posVariance)}</td>
+    <td>${icFormatCurrency(row.negVariance)}</td>
+    <td>${icFormatCurrency(row.netVariance)}</td>
+    <td>${icFormatCurrency(row.grossVariance)}</td>
+    <td>${icFormatPct(row.netAccuracy)}</td>
+    <td>${icFormatPct(row.grossAccuracy)}</td>
+  </tr>`;
+}
+// System Inventory On Hand cards — the one figure on this sub-page NOT
+// scoped to counted/matched locations, but it IS scoped to the Location
+// Scope selector above: every bin/product row in the current Inventory
+// On Hand snapshot that falls within our responsibility (and the groups
+// currently selected), counted or not, totaled by qty and (once a
+// pricing sheet is on file) by $ value.
+function icScopedOnHandEntries(){
+  return Object.values(icOnHand).filter(e=>icLocationInScope(e.bin));
+}
+// Every distinct SKU on the scoped Inventory On Hand rows that has no
+// match on the price list, rolled up across every bin it sits in (a price
+// is looked up per SKU, not per bin/location).
+function icUnpricedOnHandSkus(){
+  const bySku = {};
+  icScopedOnHandEntries().forEach(e=>{
+    if(!e.product) return;
+    const key = skuGroupKey(e.product);
+    if(icPriceEntryFor(e.product)) return; // priced — not what we're after
+    if(!bySku[key]) bySku[key] = { sku: e.product, productDesc: e.productDesc||null, qtyTotal:0, bins: new Set() };
+    bySku[key].qtyTotal += e.qtyTotal||0;
+    if(e.bin) bySku[key].bins.add(e.bin);
+  });
+  return Object.values(bySku)
+    .map(r=>({ sku:r.sku, productDesc:r.productDesc, qtyTotal:r.qtyTotal, binCount:r.bins.size }))
+    .sort((a,b)=>b.qtyTotal-a.qtyTotal);
+}
+function icUnpricedSkuModalHtml(rows){
+  if(!rows.length) return '<div style="color:var(--text-faint);padding:10px 0 4px;">Every SKU on the current Inventory On Hand report has a price on file.</div>';
+  return `<div style="overflow-x:auto;"><table><thead><tr>
+      <th>SKU</th><th>Description</th><th>Qty On Hand</th><th>Bins</th>
+    </tr></thead><tbody>${rows.map(r=>`
+      <tr>
+        <td>${r.sku}</td>
+        <td style="white-space:normal;max-width:280px;">${r.productDesc||'&mdash;'}</td>
+        <td>${r.qtyTotal.toLocaleString()}</td>
+        <td>${r.binCount.toLocaleString()}</td>
+      </tr>
+    `).join('')}</tbody></table></div>`;
+}
+function icUnpricedSkuExportRows(rows){
+  return rows.map(r=>({ 'SKU': r.sku, 'Description': r.productDesc||'', 'Qty On Hand': r.qtyTotal, 'Bin Count': r.binCount }));
+}
+// SAP Stock Type (column "Stock Type" on the Inventory On Hand report) ->
+// the per-location qty field the upload stores it in.
+const IC_STOCK_STATUS_DEFS = [
+  { code:'A1', field:'qtyAvailable',   name:'Pickable',      desc:'available to pick',   accent:'var(--good)' },
+  { code:'A2', field:'qtyPickBlock',   name:'Product Hold',  desc:'on product hold',     accent:'var(--warn)' },
+  { code:'A3', field:'qtyQualityHold', name:'Quality Hold',  desc:'on quality hold',     accent:'var(--bad)'  }
+];
+function icRenderOnHandKpis(){
+  const grid = document.getElementById('icOnHandKpiGrid');
+  if(!grid) return;
+  const scopedEntries = icScopedOnHandEntries();
+  let totalQty=0, totalValue=0, pricedRows=0, unpricedRows=0;
+  // Per Stock Type: A1 = pickable, A2 = product hold, A3 = quality hold.
+  // The upload already splits each bin/product's qty by stock type, so this
+  // works off the data on file — no re-upload needed.
+  const statusTotals = {};
+  IC_STOCK_STATUS_DEFS.forEach(d=>{ statusTotals[d.code] = { qty:0, value:0, unpricedQty:0, locations:0 }; });
+  scopedEntries.forEach(e=>{
+    totalQty += e.qtyTotal||0;
+    const priceEntry = e.product ? icPriceEntryFor(e.product) : null;
+    const unitCost = priceEntry ? Number(priceEntry.unitCost) : null;
+    const isPriced = unitCost!==null && isFinite(unitCost);
+    if(isPriced){ totalValue += (e.qtyTotal||0)*unitCost; pricedRows++; }
+    else unpricedRows++;
+    IC_STOCK_STATUS_DEFS.forEach(d=>{
+      const q = e[d.field]||0;
+      if(!q) return;
+      const t = statusTotals[d.code];
+      t.qty += q; t.locations++;
+      if(isPriced) t.value += q*unitCost; else t.unpricedQty += q;
+    });
+  });
+  const hasOnHand = scopedEntries.length>0;
+  const hasPricing = Object.keys(icPricing).length>0;
+  const unpricedSkuRows = hasOnHand ? icUnpricedOnHandSkus() : [];
+  const unpricedSkuQty = unpricedSkuRows.reduce((sum,r)=>sum+(r.qtyTotal||0), 0);
+
+  const cards = [
+    { label:'System Inventory On Hand (Units)',
+      value: hasOnHand ? totalQty.toLocaleString() : '\u2014',
+      sub: hasOnHand ? scopedEntries.length.toLocaleString()+' bin/product location'+(scopedEntries.length===1?'':'s')+' in scope' : (Object.keys(icOnHand).length ? 'No on-hand rows in the current Location Scope' : 'Upload the Inventory On Hand report above') },
+    { label:'System Inventory On Hand ($)',
+      value: hasOnHand ? (hasPricing ? icFormatCurrency(totalValue) : '\u2014') : '\u2014',
+      sub: !hasOnHand ? '' : (hasPricing ? (unpricedRows>0 ? unpricedRows.toLocaleString()+' location'+(unpricedRows===1?'':'s')+' unpriced, excluded' : 'All locations priced') : 'Upload a pricing sheet to value this') },
+    { label:'Unpriced SKUs',
+      value: hasOnHand ? unpricedSkuRows.length.toLocaleString() : '\u2014',
+      sub: hasOnHand
+        ? (unpricedSkuRows.length
+          ? unpricedSkuQty.toLocaleString()+' units on hand<br>no match on the price list \u2014 click to view'
+          : 'every SKU on file is priced')
+        : (Object.keys(icOnHand).length ? 'No on-hand rows in the current Location Scope' : 'Upload the Inventory On Hand report above'),
+      accent: hasOnHand ? (unpricedSkuRows.length>0 ? 'var(--warn)' : 'var(--good)') : undefined,
+      // Modal/export only wired up once there's an on-hand snapshot to
+      // draw the list from — with none uploaded there's nothing to click into.
+      modalTitle: hasOnHand ? 'Unpriced SKUs \u2014 '+unpricedSkuRows.length.toLocaleString()+' SKU'+(unpricedSkuRows.length===1?'':'s')+' on the Inventory On Hand report with no match on the price list' : null,
+      modalBody: hasOnHand ? icUnpricedSkuModalHtml(unpricedSkuRows) : null,
+      exportRows: (hasOnHand && unpricedSkuRows.length) ? icUnpricedSkuExportRows(unpricedSkuRows) : null,
+      exportFilename: 'unpriced-skus' }
+  ];
+  grid.innerHTML = cards.map((c,i)=>`
+    <div class="kpi${c.modalBody?' clickable':''}"${c.accent?` style="--kpi-accent:${c.accent}"`:''}${c.modalBody?` data-onhand-card-idx="${i}"`:''}>
+      <div class="label">${c.label}</div>
+      <div class="value">${c.value}</div>
+      <div class="sub">${c.sub}</div>
+    </div>`).join('');
+
+  grid.querySelectorAll('[data-onhand-card-idx]').forEach(el=>{
+    const c = cards[Number(el.dataset.onhandCardIdx)];
+    el.addEventListener('click', ()=> openKpiModal(c.modalTitle, c.modalBody, c.exportRows, c.exportFilename));
+  });
+
+  const statusGrid = document.getElementById('icOnHandStatusGrid');
+  if(statusGrid){
+    const noOnHandSub = Object.keys(icOnHand).length ? 'No on-hand rows in the current Location Scope' : 'Upload the Inventory On Hand report above';
+    const statusCards = [];
+    IC_STOCK_STATUS_DEFS.forEach(d=>{
+      const t = statusTotals[d.code];
+      const pctOfTotal = totalQty>0 ? (t.qty/totalQty*100).toFixed(1)+'% of on-hand units' : '';
+      statusCards.push({
+        label: d.code+' '+d.name+' (Units)',
+        value: hasOnHand ? t.qty.toLocaleString() : '\u2014',
+        sub: hasOnHand ? (t.locations.toLocaleString()+' location'+(t.locations===1?'':'s')+(pctOfTotal?' \u00b7 '+pctOfTotal:'')+'<br>'+d.desc) : noOnHandSub,
+        accent: d.accent
+      });
+      statusCards.push({
+        label: d.code+' '+d.name+' ($)',
+        value: hasOnHand ? (hasPricing ? icFormatCurrency(t.value) : '\u2014') : '\u2014',
+        sub: !hasOnHand ? '' : (hasPricing
+          ? (t.unpricedQty>0 ? t.unpricedQty.toLocaleString()+' unit'+(t.unpricedQty===1?'':'s')+' unpriced, excluded' : 'All units priced')
+          : 'Upload a pricing sheet to value this'),
+        accent: d.accent
+      });
+    });
+    statusGrid.innerHTML = statusCards.map(c=>`
+    <div class="kpi"${c.accent?` style="--kpi-accent:${c.accent}"`:''}>
+      <div class="label">${c.label}</div>
+      <div class="value">${c.value}</div>
+      <div class="sub">${c.sub}</div>
+    </div>`).join('');
+  }
+}
+let icLastValueRows = null; // the single Inventory Results row — cached from the last render, for the Export to Excel button
+function icRenderValueSummary(rangeGroups){
+  const resolved = rangeGroups.filter(g=>g.status==='Accurate' || g.status==='Inaccurate');
+  const periodLabel = icActualPeriodLabel(resolved);
+  const row = icBuildValueRow(rangeGroups, 'net', periodLabel);
+  icLastValueRows = row;
+
+  const body = document.getElementById('icValueTableBody');
+  if(!body) return; // sub-page not in the DOM yet
+
+  body.innerHTML = icValueRowHtml(row);
+
+  const scopeNote = document.getElementById('icValueScopeNote');
+  if(scopeNote){
+    scopeNote.textContent = 'Reflects '+row.locationCount.toLocaleString()+' bin/product location'+(row.locationCount===1?'':'s')
+      +' counted in this system for the selected period ('+periodLabel+'), matched against the uploaded Inventory On Hand report \u2014 a subset of the warehouse, not a full physical inventory.';
+  }
+
+  const note = document.getElementById('icValueNote');
+  if(note){
+    const parts = [];
+    let unpricedResolvedGroups = null;
+    if(Object.keys(icPricing).length===0){
+      parts.push('No pricing sheet uploaded yet \u2014 upload one above to populate these figures.');
+    }
+    if(Object.keys(icOnHand).length===0){
+      parts.push('No Inventory On Hand report uploaded yet \u2014 upload one above to match counted locations against current system quantities.');
+    }
+    if(Object.keys(icPricing).length>0 && Object.keys(icOnHand).length>0){
+      if(row.unpriced>0){
+        unpricedResolvedGroups = resolved.filter(g=>icUnitCostFor(g)===null);
+        parts.push(row.unpriced.toLocaleString()+' resolved location'+(row.unpriced===1?'':'s')+' ('+row.unpricedQty.toLocaleString()+' units on book) '+(row.unpriced===1?'has':'have')+' no SKU match on the price list and '+(row.unpriced===1?'is':'are')+' excluded from the figures above.');
+      }
+      if(row.unmatched>0){
+        parts.push(row.unmatched.toLocaleString()+' resolved location'+(row.unmatched===1?'':'s')+' ('+row.unmatchedQty.toLocaleString()+' units on book) '+(row.unmatched===1?'has':'have')+' no matching bin/product in the uploaded Inventory On Hand report and '+(row.unmatched===1?'is':'are')+' excluded from the figures above.');
+      }
+    }
+    note.textContent = parts.join(' ');
+    if(unpricedResolvedGroups && unpricedResolvedGroups.length){
+      const link = document.createElement('button');
+      link.type = 'button';
+      link.className = 'btn secondary';
+      link.style.cssText = 'margin-left:10px;padding:3px 10px;font-size:11px;vertical-align:middle;';
+      link.textContent = 'View unpriced SKUs';
+      link.addEventListener('click', ()=> openKpiModal(
+        'Unpriced Resolved Locations \u2014 '+unpricedResolvedGroups.length.toLocaleString()+' location'+(unpricedResolvedGroups.length===1?'':'s'),
+        icModalTableHtml(unpricedResolvedGroups),
+        icModalExportRows(unpricedResolvedGroups),
+        'unpriced-resolved-locations'
+      ));
+      note.appendChild(link);
+    }
+  }
+
+  safeRender('inventory value variance tables', ()=>icRenderValueVarianceTables(row.details));
+}
+// Top-N tables surfacing which individual locations/SKUs are driving the
+// Gross Variance figure above (whose whole point is NOT to let overages
+// and shortages cancel out) — sorted by |variance $|, largest first, so
+// the biggest contributors in either direction show up regardless of
+// sign. Sourced from the same row.details the Excel export's Location
+// Detail sheet uses, so all three (table, export, these two) always agree.
+const IC_VALUE_TOP_N = 15;
+// Per-table Positive/Negative toggle state — independent per table since
+// each is filtered separately. Both selected by default (no filtering).
+// At least one stays selected at all times (enforced by the click
+// handlers below), same guard pattern as the Location Scope toggle.
+let icByLocationVarianceFilter = new Set(['positive','negative']);
+let icBySkuVarianceFilter = new Set(['positive','negative']);
+function icApplyVarianceFilter(rows, filterSet){
+  if(filterSet.has('positive') && filterSet.has('negative')) return rows;
+  if(filterSet.has('positive')) return rows.filter(r=>r.varianceValue>0);
+  if(filterSet.has('negative')) return rows.filter(r=>r.varianceValue<0);
+  return rows;
+}
+function icValueByLocationRows(details){
+  return [...details].sort((a,b)=>Math.abs(b.varianceValue)-Math.abs(a.varianceValue));
+}
+function icValueBySkuRows(details){
+  const bySku = {};
+  details.forEach(d=>{
+    const key = skuGroupKey(d.sku||'');
+    if(!bySku[key]) bySku[key] = { sku: d.sku, productDesc: d.productDesc||'', bins: new Set(), qtyWms:0, qtyPhysical:0, varianceQty:0, varianceValue:0 };
+    const s = bySku[key];
+    s.bins.add(d.bin);
+    s.qtyWms += d.qtyWms;
+    s.qtyPhysical += d.qtyPhysical;
+    s.varianceQty += d.varianceQty;
+    s.varianceValue += d.varianceValue;
+    if(d.productDesc && !s.productDesc) s.productDesc = d.productDesc;
+  });
+  return Object.values(bySku)
+    .map(s=>({ sku:s.sku, productDesc:s.productDesc, locationCount:s.bins.size, qtyWms:s.qtyWms, qtyPhysical:s.qtyPhysical, varianceQty:s.varianceQty, varianceValue:s.varianceValue }))
+    .sort((a,b)=>Math.abs(b.varianceValue)-Math.abs(a.varianceValue));
+}
+function icByLocationRowHtml(d){
+  return `<tr>
+    <td>${d.bin}</td>
+    <td>${d.sku||'&mdash;'}</td>
+    <td style="white-space:normal;max-width:220px;">${d.productDesc||'&mdash;'}</td>
+    <td>${d.qtyWms.toLocaleString()}</td>
+    <td>${d.qtyPhysical.toLocaleString()}</td>
+    <td>${d.varianceQty>0?'+':''}${d.varianceQty.toLocaleString()}</td>
+    <td>${icFormatCurrency(d.varianceValue)}</td>
+  </tr>`;
+}
+function icBySkuRowHtml(s){
+  return `<tr>
+    <td>${s.sku||'&mdash;'}</td>
+    <td style="white-space:normal;max-width:220px;">${s.productDesc||'&mdash;'}</td>
+    <td>${s.locationCount.toLocaleString()}</td>
+    <td>${s.qtyWms.toLocaleString()}</td>
+    <td>${s.qtyPhysical.toLocaleString()}</td>
+    <td>${s.varianceQty>0?'+':''}${s.varianceQty.toLocaleString()}</td>
+    <td>${icFormatCurrency(s.varianceValue)}</td>
+  </tr>`;
+}
+function icByLocationModalHtml(rows){
+  if(!rows.length) return '<div style="color:var(--text-faint);padding:10px 0 4px;">No priced, matched locations in the current selection.</div>';
+  return `<div style="overflow-x:auto;"><table><thead><tr>
+      <th>Bin</th><th>SKU</th><th>Description</th><th>Qty WMS</th><th>Qty Physical</th><th>Variance Qty</th><th>Variance $</th>
+    </tr></thead><tbody>${rows.map(icByLocationRowHtml).join('')}</tbody></table></div>`;
+}
+function icBySkuModalHtml(rows){
+  if(!rows.length) return '<div style="color:var(--text-faint);padding:10px 0 4px;">No priced, matched locations in the current selection.</div>';
+  return `<div style="overflow-x:auto;"><table><thead><tr>
+      <th>SKU</th><th>Description</th><th>Locations</th><th>Qty WMS</th><th>Qty Physical</th><th>Variance Qty</th><th>Variance $</th>
+    </tr></thead><tbody>${rows.map(icBySkuRowHtml).join('')}</tbody></table></div>`;
+}
+function icByLocationExportRows(rows){
+  return rows.map(d=>({
+    'Bin': d.bin, 'SKU': d.sku||'', 'Description': d.productDesc||'',
+    'Qty WMS': d.qtyWms, 'Qty Physical': d.qtyPhysical, 'Variance Qty': d.varianceQty,
+    'Variance $': Math.round(d.varianceValue*100)/100
+  }));
+}
+function icBySkuExportRows(rows){
+  return rows.map(s=>({
+    'SKU': s.sku||'', 'Description': s.productDesc||'', 'Locations': s.locationCount,
+    'Qty WMS': s.qtyWms, 'Qty Physical': s.qtyPhysical, 'Variance Qty': s.varianceQty,
+    'Variance $': Math.round(s.varianceValue*100)/100
+  }));
+}
+let icLastByLocationRows = null, icLastBySkuRows = null; // full (not just top-N), post-filter sorted lists — for the View All & Export modal
+let icLastValueDetails = null; // unfiltered detail set from the last render — so a filter toggle can re-render without a full icRenderAll()
+function icRenderValueVarianceTables(details){
+  const byLocationBody = document.getElementById('icValueByLocationTableBody');
+  const bySkuBody = document.getElementById('icValueBySkuTableBody');
+  if(!byLocationBody || !bySkuBody) return; // sub-page not in the DOM yet
+
+  icLastValueDetails = details;
+  const byLocation = icApplyVarianceFilter(icValueByLocationRows(details), icByLocationVarianceFilter);
+  const bySku = icApplyVarianceFilter(icValueBySkuRows(details), icBySkuVarianceFilter);
+  icLastByLocationRows = byLocation;
+  icLastBySkuRows = bySku;
+
+  byLocationBody.innerHTML = byLocation.length
+    ? byLocation.slice(0, IC_VALUE_TOP_N).map(icByLocationRowHtml).join('')
+    : '<tr><td colspan="7" style="color:var(--text-faint);">No priced, matched locations in the current selection.</td></tr>';
+  bySkuBody.innerHTML = bySku.length
+    ? bySku.slice(0, IC_VALUE_TOP_N).map(icBySkuRowHtml).join('')
+    : '<tr><td colspan="7" style="color:var(--text-faint);">No priced, matched locations in the current selection.</td></tr>';
+}
+document.querySelectorAll('#icByLocationVarianceToggle .seg-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const key = btn.dataset.icvar;
+    const willBeActive = !icByLocationVarianceFilter.has(key);
+    if(!willBeActive && icByLocationVarianceFilter.size<=1) return; // keep at least one selected
+    if(willBeActive) icByLocationVarianceFilter.add(key); else icByLocationVarianceFilter.delete(key);
+    btn.classList.toggle('active', willBeActive);
+    if(icLastValueDetails) icRenderValueVarianceTables(icLastValueDetails);
+  });
+});
+document.querySelectorAll('#icBySkuVarianceToggle .seg-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const key = btn.dataset.icvar;
+    const willBeActive = !icBySkuVarianceFilter.has(key);
+    if(!willBeActive && icBySkuVarianceFilter.size<=1) return; // keep at least one selected
+    if(willBeActive) icBySkuVarianceFilter.add(key); else icBySkuVarianceFilter.delete(key);
+    btn.classList.toggle('active', willBeActive);
+    if(icLastValueDetails) icRenderValueVarianceTables(icLastValueDetails);
+  });
+});
+function icVarianceFilterLabel(filterSet){
+  if(filterSet.has('positive') && filterSet.has('negative')) return 'all variances';
+  if(filterSet.has('positive')) return 'positive variances only';
+  if(filterSet.has('negative')) return 'negative variances only';
+  return 'all variances';
+}
+document.getElementById('icValueByLocationViewAllBtn').addEventListener('click', ()=>{
+  if(!icLastByLocationRows) return;
+  openKpiModal(
+    'Largest Variance by Location \u2014 '+icLastByLocationRows.length.toLocaleString()+' location'+(icLastByLocationRows.length===1?'':'s')+', '+icVarianceFilterLabel(icByLocationVarianceFilter)+', largest first',
+    icByLocationModalHtml(icLastByLocationRows),
+    icLastByLocationRows.length ? icByLocationExportRows(icLastByLocationRows) : null,
+    'variance-by-location'
+  );
+});
+document.getElementById('icValueBySkuViewAllBtn').addEventListener('click', ()=>{
+  if(!icLastBySkuRows) return;
+  openKpiModal(
+    'Largest Variance by SKU \u2014 '+icLastBySkuRows.length.toLocaleString()+' SKU'+(icLastBySkuRows.length===1?'':'s')+', '+icVarianceFilterLabel(icBySkuVarianceFilter)+', largest first',
+    icBySkuModalHtml(icLastBySkuRows),
+    icLastBySkuRows.length ? icBySkuExportRows(icLastBySkuRows) : null,
+    'variance-by-sku'
+  );
+});
+function icExportValueSummary(){
+  if(typeof XLSX === 'undefined'){
+    icSetSyncStatus('err','Export failed: Excel library did not load.');
+    return;
+  }
+  if(!icLastValueRows){ return; }
+  const row = icLastValueRows;
+  const dataRows = [{
+    'Time Period': row.period,
+    'Qty Pieces WMS': row.qtyWms, 'Qty Pieces Physical': row.qtyPhysical,
+    'On-Hand Inventory $ - WMS': Math.round(row.onHandWms*100)/100,
+    'On-Hand Inventory $ - Physical': Math.round(row.onHandPhysical*100)/100,
+    'Positive Variance (By Value)': Math.round(row.posVariance*100)/100,
+    'Negative Variance (By Value)': Math.round(row.negVariance*100)/100,
+    'Net Variance': Math.round(row.netVariance*100)/100,
+    'Gross Variance': Math.round(row.grossVariance*100)/100,
+    'Net Accuracy %': row.netAccuracy, 'Gross Accuracy %': row.grossAccuracy
+  }];
+  // Plus a scope note in row 1 — these figures only cover the locations
+  // counted in this system and matched against the uploaded Inventory On
+  // Hand report, not a full physical inventory of the warehouse.
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([[
+    'Reflects '+row.locationCount.toLocaleString()+' bin/product location'+(row.locationCount===1?'':'s')
+    +' counted in this system for the selected period ('+row.period+'), matched against the uploaded Inventory On Hand report \u2014 a subset of the warehouse, not a full physical inventory.'
+  ]]);
+  XLSX.utils.sheet_add_json(ws, dataRows, {origin:'A3'});
+  ws['!merges'] = [{s:{r:0,c:0}, e:{r:0,c:10}}];
+  ws['!cols'] = [
+    {wch:18},{wch:14},{wch:16},{wch:18},{wch:18},{wch:20},{wch:20},{wch:14},{wch:14},{wch:12},{wch:12}
+  ];
+  XLSX.utils.book_append_sheet(wb, ws, 'Inventory Value');
+
+  // Second sheet: the per-location counts, variances, and $ value that
+  // roll up into the single row above — one line per resolved, priced,
+  // on-hand-matched bin/product location, so the summary figures can be
+  // traced back to what actually fed them.
+  const detailRows = row.details.map(d=>({
+    'Bin': d.bin, 'SKU': d.sku, 'Description': d.productDesc,
+    'Qty WMS': d.qtyWms, 'Qty Physical': d.qtyPhysical, 'Variance Qty': d.varianceQty,
+    'Unit Cost': Math.round(d.unitCost*10000)/10000,
+    'On-Hand $ - WMS': Math.round(d.onHandWms*100)/100,
+    'On-Hand $ - Physical': Math.round(d.onHandPhysical*100)/100,
+    'Variance $': Math.round(d.varianceValue*100)/100,
+    'Result': d.status, 'Counter': d.counter, 'Count Date': isValidDate(d.countAt) ? d.countAt : ''
+  }));
+  const detailWs = detailRows.length
+    ? XLSX.utils.json_to_sheet(detailRows, {cellDates:true})
+    : XLSX.utils.aoa_to_sheet([['No locations fed the Inventory Results row for this selection.']]);
+  if(detailRows.length){
+    detailWs['!cols'] = [
+      {wch:14},{wch:14},{wch:32},{wch:10},{wch:12},{wch:12},{wch:11},{wch:16},{wch:18},{wch:12},{wch:11},{wch:14},{wch:18}
+    ];
+    const headerRow = Object.keys(detailRows[0]);
+    const colIdx = headerRow.indexOf('Count Date');
+    if(colIdx!==-1){
+      for(let r=0;r<detailRows.length;r++){
+        const addr = XLSX.utils.encode_cell({r:r+1, c:colIdx});
+        if(detailWs[addr] && detailWs[addr].t==='d') detailWs[addr].z = 'mm/dd/yyyy hh:mm AM/PM';
+      }
+    }
+  }
+  XLSX.utils.book_append_sheet(wb, detailWs, 'Location Detail');
+
+  const rangeSuffix = icRangeMode==='all' ? 'all-time'
+    : icRangeMode==='yesterday' ? 'yesterday'
+    : icRangeMode==='custom' ? 'custom-range'
+    : 'last-'+icRangeMode+'-days';
+  const today = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, 'whitsett-inventory-value_'+rangeSuffix+'_'+today+'.xlsx');
+}
+document.getElementById('icValueExportBtn').addEventListener('click', icExportValueSummary);
+
+document.querySelectorAll('#icSubpageToggle .seg-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    icSubpage = btn.dataset.icsubpage;
+    document.querySelectorAll('#icSubpageToggle .seg-btn').forEach(b=>b.classList.toggle('active', b===btn));
+    document.getElementById('icSubpageCounts').style.display = icSubpage==='counts' ? '' : 'none';
+    document.getElementById('icSubpageValue').style.display = icSubpage==='value' ? '' : 'none';
+    if(icSubpage==='value'){ icRenderOnHandKpis(); icRenderValueSummary(icCachedRangeGroups); }
+  });
+});
+
+function icRenderKPIs(groups, openGroups, rangeRecords){
+  const grid = document.getElementById('icKpiGrid');
+
+  // Open Counts value comes from openGroups (always live, not range-
+  // filtered) rather than rangeRecords, so it stays a true live count of
+  // locations waiting — consistent with its "live" sub-label and with the
+  // Oldest Open Count card and Open Count Aging chart, which are also
+  // openGroups-based.
+  const openRecordCount = openGroups.length;
+  const completedRecords = rangeRecords.filter(r=>r.status==='COUN');
+  const completedRecordCount = completedRecords.length;
+  const completedBreakdown = icCompletedCountsBreakdown(completedRecords, icAllRecords);
+  const recountRecordCount = rangeRecords.filter(r=>r.status==='RECO').length;
+
+  // Locations counted per day — same COUN documents "Completed Counts"
+  // above tallies, just bucketed by business date so it can be averaged
+  // for the KPI card below.
+  const countedByPeriod = {};
+  rangeRecords.forEach(r=>{ if(r.status==='COUN' && r.countAt){ const k=icPeriodKey(r.countAt); countedByPeriod[k]=(countedByPeriod[k]||0)+1; } });
+  const countedPeriodVals = Object.values(countedByPeriod);
+  const avgLocationsCountedPerPeriod = countedPeriodVals.length ? Math.round((countedPeriodVals.reduce((a,b)=>a+b,0)/countedPeriodVals.length)*10)/10 : null;
+
+  const resolved = groups.filter(g=>g.status==='Accurate' || g.status==='Inaccurate');
+  // Unit-weighted, matching the Analysis workbook's "Unit Accuracy %":
+  // (total book qty - total absolute variance) / total book qty across
+  // resolved locations — reflects how many of the actual units on the
+  // shelf were accounted for, not just how many locations landed at zero.
+  // Location Accuracy below stays a location headcount, unchanged.
+  const resolvedBookQty = resolved.reduce((sum,g)=>sum+g.bookQty, 0);
+  const resolvedAbsDiff = resolved.reduce((sum,g)=>sum+Math.abs(g.diffQty), 0);
+  const accuracyPct = resolvedBookQty>0 ? Math.round(((resolvedBookQty-resolvedAbsDiff)/resolvedBookQty)*1000)/10 : null;
+
+  const bins = icRollupByBin(groups);
+  const binsResolved = bins.filter(b=>b.status==='Accurate' || b.status==='Inaccurate');
+  const binsAccurate = binsResolved.filter(b=>b.status==='Accurate').length;
+  const locationAccuracyPct = binsResolved.length ? Math.round((binsAccurate/binsResolved.length)*1000)/10 : null;
+
+  const recountedGroups = groups.filter(g=>g.hadRecount);
+  const recountedResolved = recountedGroups.filter(g=>g.status==='Accurate' || g.status==='Inaccurate');
+  const recountRate = resolved.length ? Math.round((recountedResolved.length/(resolved.length))*1000)/10 : null;
+  const recountCorrected = recountedResolved.filter(g=>g.recountOutcome==='Corrected').length;
+  const recountSuccessPct = recountedResolved.length ? Math.round((recountCorrected/recountedResolved.length)*1000)/10 : null;
+
+  const inaccurateGroups = resolved.filter(g=>g.status==='Inaccurate').sort((a,b)=>Math.abs(b.diffQty)-Math.abs(a.diffQty));
+  const overages = inaccurateGroups.filter(g=>g.diffQty>0).length;
+  const shortages = inaccurateGroups.filter(g=>g.diffQty<0).length;
+
+  const now = new Date();
+  const openWithAge = openGroups.map(g=>({...g, ageMin: isValidDate(g.countAt) ? minutesBetween(g.countAt, now) : null}));
+  const oldestOpenFirst = [...openWithAge].sort((a,b)=>(b.ageMin||0)-(a.ageMin||0));
+  const oldestOpen = oldestOpenFirst[0] || null;
+
+  const cards = [
+    {label:'Overall Unit Accuracy', value: accuracyPct!==null ? accuracyPct+'%' : '\u2014',
+      sub: accuracyPct!==null ? (resolvedBookQty-resolvedAbsDiff).toLocaleString()+'/'+resolvedBookQty.toLocaleString()+' units on qty' : 'no resolved locations',
+      accent: xsSlaAccent(accuracyPct, XS_SLA_TARGETS.inventoryAccuracy)},
+    {label:'Location Accuracy', value: locationAccuracyPct!==null ? locationAccuracyPct+'%' : '\u2014',
+      sub: locationAccuracyPct!==null ? binsAccurate+'/'+binsResolved.length+' bins fully accurate' : 'no resolved bins',
+      accent: xsSlaAccent(locationAccuracyPct, XS_SLA_TARGETS.inventoryAccuracy)},
+    {label:'Open Counts', value: openRecordCount.toLocaleString(), sub:'waiting to be counted, live', accent: openRecordCount>0 ? 'var(--warn)' : 'var(--good)',
+      modalTitle:'Open Counts \u2014 '+openRecordCount.toLocaleString()+' location'+(openRecordCount===1?'':'s')+' waiting (oldest first)',
+      modalBody: icModalTableHtml(oldestOpenFirst),
+      exportRows: icModalExportRows(oldestOpenFirst), exportFilename: 'open-counts-oldest-first'},
+    {label:'Completed Counts', value: completedRecordCount.toLocaleString(), sub:'COUN documents in range', accent:'var(--accent)',
+      modalTitle:'Completed Counts \u2014 '+completedRecordCount.toLocaleString()+' documents vs. '+binsResolved.length.toLocaleString()+' resolved bins',
+      modalBody: icReconModalHtml(completedBreakdown),
+      exportRows: icReconExportRows(completedBreakdown), exportFilename: 'completed-counts-reconciliation'},
+    {label:'Locations Counted / '+icGranularityLabel(), value: avgLocationsCountedPerPeriod!==null ? avgLocationsCountedPerPeriod : '&mdash;', sub:'average over range', accent:'var(--accent)'},
+    {label:'Recounts Initiated', value: recountRecordCount.toLocaleString(), sub:'RECO documents in range', accent: recountRecordCount>0 ? 'var(--hv-color)' : 'var(--good)'},
+    {label:'Recount Rate', value: recountRate!==null ? recountRate+'%' : '\u2014', sub: recountedResolved.length+' of '+resolved.length+' resolved locations needed one', accent:'var(--info)'},
+    {label:'Recount Success Rate', value: recountSuccessPct!==null ? recountSuccessPct+'%' : '\u2014', sub: recountSuccessPct!==null ? recountCorrected+'/'+recountedResolved.length+' recounts matched book qty' : 'no completed recounts', accent: recountSuccessPct!==null && recountSuccessPct<80 ? 'var(--warn)' : 'var(--good)'},
+    {label:'Inaccurate Locations', value: inaccurateGroups.length.toLocaleString(), sub: overages+' over, '+shortages+' short', accent: inaccurateGroups.length>0 ? 'var(--bad)' : 'var(--good)',
+      modalTitle:'Inaccurate Locations \u2014 largest variance first',
+      modalBody: icModalTableHtml(inaccurateGroups),
+      exportRows: icModalExportRows(inaccurateGroups), exportFilename: 'inaccurate-locations'},
+    {label:'Oldest Open Count', value: oldestOpen ? formatDuration(oldestOpen.ageMin) : '\u2014', sub: oldestOpen ? (oldestOpen.product+' @ '+oldestOpen.bin) : 'nothing open', accent: oldestOpen && oldestOpen.ageMin>4320 ? 'var(--bad)' : 'var(--warn)',
+      modalTitle:'Open Counts \u2014 Oldest First', modalBody: icModalTableHtml(oldestOpenFirst),
+      exportRows: icModalExportRows(oldestOpenFirst), exportFilename: 'open-counts-oldest-first'}
+  ];
+
+  grid.innerHTML = cards.map((c,i)=>`
+    <div class="kpi${c.modalBody?' clickable':''}" style="--kpi-accent:${c.accent}"${c.modalBody?` data-card-idx="${i}"`:''}>
+      <div class="label">${c.label}</div>
+      <div class="value">${c.value}</div>
+      <div class="sub">${c.sub}</div>
+    </div>
+  `).join('');
+
+  grid.querySelectorAll('[data-card-idx]').forEach(el=>{
+    const c = cards[Number(el.dataset.cardIdx)];
+    el.addEventListener('click', ()=> openKpiModal(c.modalTitle, c.modalBody, c.exportRows, c.exportFilename));
+  });
+
+  document.getElementById('icNote').textContent = '';
+}
+
+/* ---------------------------------------------------------------------
+   Charts
+--------------------------------------------------------------------- */
+function icRenderCharts(groups, openGroups){
+  icUpdateChartTitles();
+  if(typeof Chart === 'undefined'){
+    document.querySelectorAll('#tab-inventory .chart-holder').forEach(el=>{
+      el.innerHTML = '<div style="padding:20px;color:var(--text-faint);font-size:12px;">Chart library failed to load from CDN — check your network/firewall and reload.</div>';
+    });
+    throw new Error('Chart.js did not load (global "Chart" is undefined)');
+  }
+  icRenderAccuracyChart(groups);
+  icRenderStatusSplitChart(groups);
+  icRenderVolumeChart(groups);
+  icRenderVarianceDirectionChart(groups);
+  icRenderByCounterChart(groups);
+  icRenderAgingChart(openGroups);
+}
+
+function icUpdateChartTitles(){
+  const g = icGranularityLabel();
+  document.getElementById('icTitleAccuracy').textContent = 'Inventory Accuracy by '+g;
+  document.getElementById('icTitleVolume').textContent = 'Counts by Status per '+g;
+}
+
+function icRenderAccuracyChart(groups){
+  const byPeriod = {};
+  groups.forEach(g=>{
+    if(g.status!=='Accurate' && g.status!=='Inaccurate') return;
+    if(!g.countAt) return;
+    const k = icPeriodKey(g.countAt);
+    if(!byPeriod[k]) byPeriod[k] = {accurate:0, total:0};
+    byPeriod[k].total++;
+    if(g.status==='Accurate') byPeriod[k].accurate++;
+  });
+  delete byPeriod[icPeriodKey(new Date())];
+  const labels = Object.keys(byPeriod).sort();
+  const data = labels.map(k=>{
+    const d = byPeriod[k];
+    return d.total ? Math.round((d.accurate/d.total)*1000)/10 : null;
+  });
+  icDestroyChart('accuracy');
+  const step = labelSkipStep(labels.length);
+  const opts = baseChartOptions({y:{beginAtZero:true, suggestedMax:112, max:112, ticks:{callback:v=>v<=100?v+'%':'', stepSize:20}}});
+  opts.layout = {padding:{top:20}};
+  opts.plugins.tooltip = { callbacks:{ label: ctx => {
+    const k = labels[ctx.dataIndex]; const d = byPeriod[k];
+    return ctx.parsed.y===null ? 'no resolved locations' : 'Accuracy: '+ctx.parsed.y+'% ('+d.accurate+'/'+d.total+')';
+  }}};
+  opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:(v,ctx)=> (v===null || ctx.dataIndex % step !== 0) ? '' : v+'%'};
+  icCharts.accuracy = new Chart(document.getElementById('icChartAccuracy'), {
+    type:'bar',
+    data:{ labels: labels.map(l=>icFormatPeriodLabel(l)), datasets:[{ data, backgroundColor:'#2fbf71', borderRadius:4, maxBarThickness:36 }]},
+    options: opts
+  });
+}
+
+function icRenderStatusSplitChart(groups){
+  const open = groups.filter(g=>g.status==='Open').length;
+  const accurate = groups.filter(g=>g.status==='Accurate').length;
+  const inaccurate = groups.filter(g=>g.status==='Inaccurate').length;
+  icDestroyChart('statusSplit');
+  icCharts.statusSplit = new Chart(document.getElementById('icChartStatusSplit'), {
+    type:'doughnut',
+    data:{ labels:['Open','Accurate','Inaccurate'], datasets:[{ data:[open,accurate,inaccurate],
+      backgroundColor:['#e8a33d','#2fbf71','#e2231a'], borderWidth:0 }]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{position:'bottom', labels:{color:LABEL_COLOR, boxWidth:12, padding:14}},
+        tooltip:{ callbacks:{ label: ctx => ctx.label+': '+ctx.parsed+' ('+Math.round(ctx.parsed/(open+accurate+inaccurate||1)*1000)/10+'%)' } },
+        datalabels:{display:false} } }
+  });
+}
+
+function icRenderVolumeChart(groups){
+  const byPeriod = {};
+  groups.forEach(g=>{
+    g.records.forEach(r=>{
+      if(!IC_KEEP_STATUSES.has(r.status)) return;
+      const dateForBucket = r.status==='ACTI' ? r.countAt : r.countAt;
+      if(!isValidDate(dateForBucket)) return;
+      const k = icPeriodKey(dateForBucket);
+      if(!byPeriod[k]) byPeriod[k] = {ACTI:0, COUN:0, RECO:0};
+      byPeriod[k][r.status]++;
+    });
+  });
+  const labels = Object.keys(byPeriod).sort();
+  icDestroyChart('volume');
+  const opts = baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}}, true);
+  opts.scales.x.stacked = true;
+  opts.scales.y.stacked = true;
+  icCharts.volume = new Chart(document.getElementById('icChartVolume'), {
+    type:'bar',
+    data:{ labels: labels.map(l=>icFormatPeriodLabel(l)), datasets:[
+      {label:'Open', data:labels.map(k=>byPeriod[k].ACTI), backgroundColor:'#e8a33d', borderRadius:2, maxBarThickness:28},
+      {label:'Completed', data:labels.map(k=>byPeriod[k].COUN), backgroundColor:'#2fbf71', borderRadius:2, maxBarThickness:28},
+      {label:'Recount', data:labels.map(k=>byPeriod[k].RECO), backgroundColor:'#a78bfa', borderRadius:2, maxBarThickness:28}
+    ]},
+    options: opts
+  });
+}
+
+function icRenderVarianceDirectionChart(groups){
+  const byPeriod = {};
+  groups.forEach(g=>{
+    if(g.status!=='Inaccurate' || !g.countAt) return;
+    const k = icPeriodKey(g.countAt);
+    if(!byPeriod[k]) byPeriod[k] = {over:0, short:0};
+    if(g.diffQty>0) byPeriod[k].over++; else byPeriod[k].short++;
+  });
+  delete byPeriod[icPeriodKey(new Date())];
+  const labels = Object.keys(byPeriod).sort();
+  icDestroyChart('varianceDirection');
+  const opts = baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}}, true);
+  icCharts.varianceDirection = new Chart(document.getElementById('icChartVarianceDirection'), {
+    type:'bar',
+    data:{ labels: labels.map(l=>icFormatPeriodLabel(l)), datasets:[
+      {label:'Overage (found more)', data:labels.map(k=>byPeriod[k].over), backgroundColor:'#3d9fe8', borderRadius:4, maxBarThickness:26},
+      {label:'Shortage (found less)', data:labels.map(k=>byPeriod[k].short), backgroundColor:'#e2231a', borderRadius:4, maxBarThickness:26}
+    ]},
+    options: opts
+  });
+}
+
+function icRenderByCounterChart(groups){
+  const resolved = groups.filter(g=>(g.status==='Accurate'||g.status==='Inaccurate') && g.counter);
+  const byCounter = {};
+  resolved.forEach(g=>{
+    if(!byCounter[g.counter]) byCounter[g.counter] = {accurate:0, total:0};
+    byCounter[g.counter].total++;
+    if(g.status==='Accurate') byCounter[g.counter].accurate++;
+  });
+  const counters = Object.keys(byCounter).sort((a,b)=>byCounter[b].total-byCounter[a].total);
+  const data = counters.map(c=>Math.round((byCounter[c].accurate/byCounter[c].total)*1000)/10);
+  icDestroyChart('byCounter');
+  const opts = baseChartOptions({y:{beginAtZero:true, suggestedMax:112, max:112, ticks:{callback:v=>v<=100?v+'%':'', stepSize:20}}});
+  opts.plugins.tooltip = { callbacks:{ label: ctx => {
+    const c = counters[ctx.dataIndex]; const d = byCounter[c];
+    return d.accurate+'/'+d.total+' accurate ('+ctx.parsed.y+'%)';
+  }}};
+  opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:v=>v+'%'};
+  icCharts.byCounter = new Chart(document.getElementById('icChartByCounter'), {
+    type:'bar',
+    data:{ labels: counters, datasets:[{ data, backgroundColor:'#3d9fe8', borderRadius:4, maxBarThickness:48 }]},
+    options: opts
+  });
+}
+
+function icRenderAgingChart(openGroups){
+  const now = new Date();
+  const buckets = ['0\u20131d','1\u20132d','2\u20133d','3\u20135d','5\u20137d','7d+'];
+  const counts = new Array(6).fill(0);
+  openGroups.forEach(g=>{
+    if(!isValidDate(g.countAt)) return;
+    const days = minutesBetween(g.countAt, now)/1440;
+    let idx = days<1?0 : days<2?1 : days<3?2 : days<5?3 : days<7?4 : 5;
+    counts[idx]++;
+  });
+  icDestroyChart('aging');
+  const opts = baseChartOptions({y:{beginAtZero:true, ticks:{precision:0}}});
+  opts.plugins.datalabels = {display:true, anchor:'end', align:'top', color:LABEL_COLOR, font:{weight:600, size:11}, formatter:v=>v>0?v:''};
+  const colors = ['#2fbf71','#2fbf71','#e8a33d','#e8a33d','#e2231a','#e2231a'];
+  icCharts.aging = new Chart(document.getElementById('icChartAging'), {
+    type:'bar',
+    data:{ labels: buckets, datasets:[{ data: counts, backgroundColor: colors, borderRadius:4, maxBarThickness:48 }]},
+    options: opts
+  });
+}
+
+/* ---------------------------------------------------------------------
+   Table
+--------------------------------------------------------------------- */
+document.querySelectorAll('#icCycleCountTable thead th').forEach(th=>{
+  th.addEventListener('click', ()=>{
+    const key = th.dataset.ickey;
+    if(icSortKey===key){ icSortDir = icSortDir==='asc'?'desc':'asc'; }
+    else { icSortKey = key; icSortDir = 'desc'; }
+    safeRender('inventory table', ()=>icRenderTable(icCachedRangeGroups));
+  });
+});
+
+function icRenderTable(rangeGroups){
+  let groups = rangeGroups;
+
+  if(icSearchTerm){
+    groups = groups.filter(g=>{
+      const hay = [g.bin, g.product, g.productDesc, g.counter].join(' ').toLowerCase();
+      return hay.includes(icSearchTerm);
+    });
+  }
+
+  groups = [...groups].sort((a,b)=>{
+    let av = a[icSortKey], bv = b[icSortKey];
+    if(av instanceof Date) av = av.getTime()||0;
+    if(bv instanceof Date) bv = bv.getTime()||0;
+    if(av===null||av===undefined) av = icSortDir==='asc' ? Infinity : -Infinity;
+    if(bv===null||bv===undefined) bv = icSortDir==='asc' ? Infinity : -Infinity;
+    if(typeof av==='string') av = av.toLowerCase();
+    if(typeof bv==='string') bv = bv.toLowerCase();
+    if(av<bv) return icSortDir==='asc'?-1:1;
+    if(av>bv) return icSortDir==='asc'?1:-1;
+    return 0;
+  });
+
+  document.querySelectorAll('#icCycleCountTable thead th').forEach(th=>{
+    th.classList.remove('sorted','sorted-asc');
+    if(th.dataset.ickey===icSortKey) th.classList.add(icSortDir==='asc'?'sorted-asc':'sorted');
+  });
+
+  icLastRenderedGroups = groups;
+
+  document.getElementById('icTableMeta').textContent =
+    groups.length.toLocaleString() + ' location' + (groups.length===1?'':'s') +
+    (icRangeMode!=='all' ? ' in selected range' : '');
+
+  const tbody = document.getElementById('icTableBody');
+  const emptyState = document.getElementById('icEmptyState');
+
+  if(groups.length===0){
+    tbody.innerHTML = '';
+    emptyState.style.display = 'block';
+    return;
+  }
+  emptyState.style.display = 'none';
+
+  tbody.innerHTML = groups.map(g=>{
+    const statusBadge = g.status==='Accurate' ? '<span class="badge accurate">Accurate</span>'
+      : g.status==='Inaccurate' ? '<span class="badge inaccurate">Inaccurate</span>'
+      : '<span class="badge progress">Open</span>';
+    const recountBadge = g.hadRecount ? `<span class="badge recounted">${g.recountOutcome==='Corrected'?'Recount corrected':g.recountOutcome==='Confirmed'?'Recount confirmed':'Recount pending'}</span>` : '';
+    return `
+      <tr>
+        <td>${g.bin}</td>
+        <td>${g.product||'&mdash;'}</td>
+        <td style="white-space:normal;max-width:260px;">${g.productDesc||'&mdash;'}</td>
+        <td>${g.bookQty.toLocaleString()}</td>
+        <td>${g.countedQty.toLocaleString()}</td>
+        <td>${g.diffQty>0?'+':''}${g.diffQty.toLocaleString()}</td>
+        <td>${statusBadge}${recountBadge}</td>
+        <td>${g.counter||'&mdash;'}</td>
+        <td>${formatDateTime(g.countAt)}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+/* ---------------------------------------------------------------------
+   Export to Excel
+--------------------------------------------------------------------- */
+document.getElementById('icExportBtn').addEventListener('click', icExportTableToExcel);
+
+function icExportTableToExcel(){
+  if(typeof XLSX === 'undefined'){
+    icSetSyncStatus('err', 'Excel export library failed to load from CDN — check your network/firewall and reload.');
+    return;
+  }
+  if(icLastRenderedGroups.length===0){
+    icSetSyncStatus('err', 'Nothing to export — no locations match the current filters.');
+    return;
+  }
+
+  const rows = icLastRenderedGroups.map(g=>({
+    'Storage Bin': g.bin,
+    'SKU': g.product,
+    'Description': g.productDesc,
+    'Book Qty': g.bookQty,
+    'Counted Qty': g.countedQty,
+    'Difference': g.diffQty,
+    'Original Difference (pre-recount)': g.originalDiffQty ?? '',
+    'Result': g.status,
+    'Recounted': g.hadRecount ? 'Yes' : 'No',
+    'Counter': g.counter,
+    'Count Date': isValidDate(g.countAt) ? g.countAt : ''
+  }));
+
+  const sheet = XLSX.utils.json_to_sheet(rows, {cellDates:true});
+  sheet['!cols'] = [
+    {wch:14},{wch:12},{wch:32},{wch:10},{wch:12},{wch:12},{wch:22},{wch:12},{wch:10},{wch:14},{wch:18}
+  ];
+  const headerRow = Object.keys(rows[0]||{});
+  const colIdx = headerRow.indexOf('Count Date');
+  if(colIdx!==-1){
+    for(let r=0;r<rows.length;r++){
+      const addr = XLSX.utils.encode_cell({r:r+1, c:colIdx});
+      if(sheet[addr] && sheet[addr].t==='d') sheet[addr].z = 'mm/dd/yyyy hh:mm AM/PM';
+    }
+  }
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, sheet, 'Cycle Count Locations');
+
+  const rangeSuffix = icRangeMode==='all' ? 'all-time'
+    : icRangeMode==='yesterday' ? 'yesterday'
+    : icRangeMode==='custom' ? 'custom-range'
+    : 'last-'+icRangeMode+'-days';
+  const today = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, 'whitsett-inventory_'+rangeSuffix+'_'+today+'.xlsx');
+}
+
+/* ---------------------------------------------------------------------
+   Reset All Data — scoped only to this tab's own Firebase nodes
+--------------------------------------------------------------------- */
+async function icResetAllDataPrompt(){
+  const pw = prompt('This permanently deletes ALL Inventory tab data (Outbound/Inbound data is untouched). Enter the password to continue:');
+  if(pw === null) return;
+  if(pw !== DELETE_LINE_PASSWORD){
+    alert('Incorrect password. No data was deleted.');
+    return;
+  }
+  if(!confirm('Are you absolutely sure? This deletes every cycle count document on file, plus upload history, on the Inventory tab. This cannot be undone.')) return;
+
+  icSetSyncStatus('busy','Deleting all data\u2026');
+  try{
+    await Promise.all([ icRecordsRef.remove(), icUploadsRef.remove() ]);
+    icSetSyncStatus('ok','All data cleared \u2014 ready for a fresh upload');
+    document.getElementById('icLastUploadLine').style.display='none';
+  }catch(err){
+    console.error(err);
+    icSetSyncStatus('err','Failed to clear data: '+err.message);
+  }
+}
+document.getElementById('icResetAllDataBtn').addEventListener('click', icResetAllDataPrompt);
+</script>
+</div>
+</body>
+</html>

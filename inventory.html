@@ -367,6 +367,14 @@
     </div>
   </div>
 
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:-6px 0 18px;">
+    <span style="font-size:10.5px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Deleted Counts</span>
+    <div class="segmented" id="icDeletedToggle">
+      <button type="button" class="seg-btn" id="icCountDeletedBtn" title="Treat every deleted (DELE) count document as a completed count">Count DELE as Completed</button>
+    </div>
+    <span id="icDeletedNote" style="font-size:12px;color:var(--text-faint);"></span>
+  </div>
+
   <div class="segmented" id="icSubpageToggle" style="margin-bottom:18px;">
     <button type="button" class="seg-btn active" data-icsubpage="counts">Cycle Counts</button>
     <button type="button" class="seg-btn" data-icsubpage="value">Inventory Value ($)</button>
@@ -911,7 +919,9 @@ const IC_REQUIRED_COLUMNS = ['picDoc','status','bin'];
 // own document, cross-referenced via Reference Physical Inventory Document).
 // Any other status in the export is dropped on import — this tab only
 // tracks these three.
-const IC_KEEP_STATUSES = new Set(['ACTI','COUN','RECO']);
+// DELE (deleted) documents are stored too. They only take part in the numbers
+// when the "Count DELE as Completed" button is on (see icEffectiveRecords).
+const IC_KEEP_STATUSES = new Set(['ACTI','COUN','RECO','DELE']);
 
 function icResolveColumns(headerRow){
   const lookup = {};
@@ -1055,6 +1065,24 @@ function icBuildActiveRecountLookup(rows, COL){
   };
 }
 
+// Book and counted quantity for one document/bin/SKU line made of several
+// export rows (handling units): book is always summed. Counted is summed too,
+// EXCEPT when every row carries the same counted figure while the rows' book
+// quantities differ — SAP then repeats the location's single counted total on
+// each row (e.g. book 120 and 840 both showing counted 622 means 622 in the
+// bin, not 1,244), so it is taken once. Rows with identical book AND identical
+// counted quantities are separate HUs and are summed as usual.
+function icLineQuantities(rowBooks, rowCounted){
+  const book = rowBooks.reduce((a,b)=>a+b,0);
+  let counted = rowCounted.reduce((a,b)=>a+b,0);
+  if(rowCounted.length>1){
+    const sameCounted = rowCounted.every(v=>v===rowCounted[0]);
+    const sameBook = rowBooks.every(v=>v===rowBooks[0]);
+    if(sameCounted && !sameBook) counted = rowCounted[0];
+  }
+  return {book, counted};
+}
+
 async function icParseSapExport(file){
   const buf = await readFileAsArrayBuffer(file);
   const wb = XLSX.read(buf, {type:'array', cellDates:true});
@@ -1077,7 +1105,6 @@ async function icParseSapExport(file){
   }
 
   const updates = {};
-  const deletedPairs = new Set(); // "doc|bin" of DELE rows — used to clear any stale stored copy on upload
   const lines = new Map();        // "doc|bin|product|status" -> one location line, all HU rows folded together
   let totalRows=0, skippedStatus=0, skippedIncomplete=0, imported=0;
   const isActiveRecount = icBuildActiveRecountLookup(rows, COL);
@@ -1088,12 +1115,7 @@ async function icParseSapExport(file){
     totalRows++;
 
     const status = row[COL.status] ? String(row[COL.status]).trim().toUpperCase() : '';
-    if(!IC_KEEP_STATUSES.has(status)){
-      if(status==='DELE' && row[COL.picDoc] && COL.bin!==undefined && row[COL.bin]){
-        deletedPairs.add(String(row[COL.picDoc]).trim()+'|'+String(row[COL.bin]).trim());
-      }
-      skippedStatus++; continue;
-    }
+    if(!IC_KEEP_STATUSES.has(status)){ skippedStatus++; continue; }
 
     const picDoc = row[COL.picDoc];
     if(!picDoc){ skippedIncomplete++; continue; }
@@ -1129,7 +1151,7 @@ async function icParseSapExport(file){
         stockType: COL.stockType!==undefined ? (row[COL.stockType] ?? null) : null,
         counters: [],
         productDesc: COL.productDesc!==undefined ? (row[COL.productDesc] ?? null) : null,
-        bookQty: 0, countedQty: 0,
+        rowBooks: [], rowCounted: [],
         refPicDoc: COL.refPicDoc!==undefined ? (row[COL.refPicDoc] ?? null) : null,
         hus: [],
         warehouseTask: COL.warehouseTask!==undefined ? (row[COL.warehouseTask] ?? null) : null,
@@ -1145,8 +1167,10 @@ async function icParseSapExport(file){
     // of those rows — keeping just one row (as this used to) understated
     // both. Difference is recomputed from the sums, so it is the
     // location's net difference; HU-level ups and downs offset within it.
-    line.bookQty += bookQty;
-    line.countedQty += countedQty;
+    // One exception (see icLineQuantities): some rows repeat ONE counted
+    // total on every row instead of a per-HU figure.
+    line.rowBooks.push(bookQty);
+    line.rowCounted.push(countedQty);
     line.lineCount++;
     if(rowHu!==null && rowHu!=='' && !line.hus.includes(String(rowHu))) line.hus.push(String(rowHu));
     if(rowCounter!==null && rowCounter!=='' && !line.counters.includes(String(rowCounter))) line.counters.push(String(rowCounter));
@@ -1175,6 +1199,7 @@ async function icParseSapExport(file){
       return String(x.product||'').localeCompare(String(y.product||''));
     });
     group.forEach((line,idx)=>{
+      const q = icLineQuantities(line.rowBooks, line.rowCounted);
       const record = {
         picDoc: line.picDoc,
         status: line.status,
@@ -1184,8 +1209,8 @@ async function icParseSapExport(file){
         stockType: line.stockType,
         counter: line.counters.length ? line.counters.join(', ') : null,
         productDesc: line.productDesc,
-        bookQty: line.bookQty, countedQty: line.countedQty,
-        diffQty: line.countedQty - line.bookQty, // computed independently of the export's own Difference Quantity column
+        bookQty: q.book, countedQty: q.counted,
+        diffQty: q.counted - q.book, // computed independently of the export's own Difference Quantity column
         refPicDoc: line.refPicDoc,
         hu: line.hus.length ? line.hus.join(', ') : null,
         lineCount: line.lineCount, // how many export rows (handling units) were folded into this line
@@ -1203,9 +1228,7 @@ async function icParseSapExport(file){
     });
   });
 
-  // A document/bin that also came in with a kept status stays (the kept row wins).
-  Object.values(updates).forEach(r=>deletedPairs.delete(r.picDoc+'|'+r.bin));
-  return {updates, deletedPairs: Array.from(deletedPairs), totalRows, skippedStatus, skippedIncomplete, imported, missingOptional: missing.filter(f=>!IC_REQUIRED_COLUMNS.includes(f))};
+  return {updates, totalRows, skippedStatus, skippedIncomplete, imported, missingOptional: missing.filter(f=>!IC_REQUIRED_COLUMNS.includes(f))};
 }
 
 /* ---------------------------------------------------------------------
@@ -1442,22 +1465,16 @@ document.getElementById('icFileInput').addEventListener('change', async (e)=>{
     const keys = Object.keys(result.updates);
     if(keys.length){
       const payload = Object.assign({}, result.updates);
-      // Uploads MERGE into what's already stored, so a count that has since
-      // been deleted (or otherwise dropped out of the export) would stay
-      // behind forever — and a stale ACTI record shows as an open count
-      // indefinitely. Two cleanups:
-      //  1. Any document this export marks DELE: clear its stored copy.
-      const deletedPairs = new Set(result.deletedPairs);
-      const deletedStored = icAllRecords.filter(r=>!(r._key in result.updates) && deletedPairs.has(String(r.picDoc).trim()+'|'+String(r.bin).trim()));
-      const deletedSet = new Set(deletedStored.map(r=>r._key));
-      const clearedDeleted = deletedStored.length;
-      deletedStored.forEach(r=>{ payload[r._key] = null; });
-      //  2. Stored ACTI counts that this export no longer contains at all.
-      //     Most likely completed, deleted or archived since — but if this
-      //     was only a partial export they could still be live, so ask.
+      // Uploads MERGE into what's already stored, so an ACTI count that has
+      // since dropped out of the export entirely would stay behind forever
+      // and show as an open count indefinitely. (A document that changed
+      // status — completed, recounted or deleted — is simply overwritten.)
+      // Stored ACTI counts this export no longer contains: most likely
+      // completed, deleted or archived since — but if this was only a
+      // partial export they could still be live, so ask.
       const freshKeys = new Set(keys);
       const stale = icAllRecords
-        .filter(r=>r.status==='ACTI' && !freshKeys.has(r._key) && !deletedSet.has(r._key))
+        .filter(r=>r.status==='ACTI' && !freshKeys.has(r._key))
         .sort((a,b)=>(a.countAt||0)-(b.countAt||0));
       let clearedStale = 0;
       if(stale.length){
@@ -1472,7 +1489,6 @@ document.getElementById('icFileInput').addEventListener('change', async (e)=>{
       await icUploadsRef.push({ fileName:file.name, uploadedAt:new Date().toISOString(),
         totalRows:result.totalRows, skippedStatus:result.skippedStatus, skippedIncomplete:result.skippedIncomplete, imported:result.imported });
       icSetSyncStatus('ok', keys.length+' count line'+(keys.length===1?'':'s')+' imported from '+result.imported+' row'+(result.imported===1?'':'s')+(result.skippedStatus?', '+result.skippedStatus+' skipped (status)':'')
-        +(clearedDeleted?', '+clearedDeleted+' deleted count'+(clearedDeleted===1?'':'s')+' cleared':'')
         +(clearedStale?', '+clearedStale+' stale active count'+(clearedStale===1?'':'s')+' removed':''));
     } else {
       icSetSyncStatus('err','No matching rows found in that file.');
@@ -1587,6 +1603,11 @@ document.querySelectorAll('#icLocationScopeToggle .seg-btn').forEach(btn=>{
     icRenderAll();
   });
 });
+document.getElementById('icCountDeletedBtn').addEventListener('click', e=>{
+  icCountDeleted = !icCountDeleted;
+  e.currentTarget.classList.toggle('active', icCountDeleted);
+  icRenderAll();
+});
 document.getElementById('icRangeFilter').addEventListener('change', e=>{
   icRangeMode = e.target.value;
   document.getElementById('icDateRangeInputs').classList.toggle('show', icRangeMode==='custom');
@@ -1687,6 +1708,7 @@ function icGroupByLocation(records){
       counter: (terminal && terminal.counter) || null,
       countAt: status==='Open' ? (recountPending && !hasActi && latestPendingReco ? latestPendingReco.countAt : earliest.countAt) : (terminal ? terminal.countAt : earliest.countAt),
       status, hadRecount,
+      fromDeleted: !!(terminal && terminal.wasDeleted), // the result comes from a document that was later deleted
       recountOutcome: hadRecount && (status==='Accurate' || status==='Inaccurate') ? (status==='Accurate' ? 'Corrected' : 'Confirmed') : null,
       recordCount: recs.length,
       records: recs
@@ -1729,11 +1751,35 @@ function icRollupByBin(groups){
 /* ---------------------------------------------------------------------
    Render: orchestrator
 --------------------------------------------------------------------- */
+// "Count DELE as Completed" button. Off (default): deleted (DELE) documents
+// are ignored entirely. On: each one is treated as a completed (COUN) count
+// — its own book/counted quantities, count date and counter — so every
+// KPI, chart, table, export and $ figure picks it up.
+let icCountDeleted = false;
+function icEffectiveRecords(){
+  const out = [];
+  icAllRecords.forEach(r=>{
+    if(r.status==='DELE'){
+      if(icCountDeleted) out.push(Object.assign({}, r, {status:'COUN', wasDeleted:true}));
+    } else out.push(r);
+  });
+  return out;
+}
+
 function icRenderAll(){
   // Scope to the locations this tab is responsible for before anything
   // else touches the records — every count, KPI, chart, and $ figure
   // downstream is built from icScopedRecords, never icAllRecords directly.
-  const icScopedRecords = icAllRecords.filter(r=>icLocationInScope(r.bin));
+  const icEffective = icEffectiveRecords();
+  const icScopedRecords = icEffective.filter(r=>icLocationInScope(r.bin));
+  const deletedNote = document.getElementById('icDeletedNote');
+  if(deletedNote){
+    const storedDeleted = icAllRecords.filter(r=>r.status==='DELE').length;
+    const includedDeleted = icScopedRecords.filter(r=>r.wasDeleted).length;
+    deletedNote.textContent = !icCountDeleted ? ''
+      : storedDeleted===0 ? 'No deleted documents are stored yet \u2014 re-upload the cycle count file to load them.'
+      : includedDeleted.toLocaleString()+' deleted-document count line'+(includedDeleted===1?'':'s')+' included as completed.';
+  }
   document.getElementById('icRecordCount').textContent = icScopedRecords.length.toLocaleString();
   const allGroups = icGroupByLocation(icScopedRecords);
   document.getElementById('icLocationCount').textContent = allGroups.length.toLocaleString();
@@ -1792,7 +1838,8 @@ function icModalExportRows(groups){
     'Diff': g.diffQty,
     'Result': g.status,
     'Counter': g.counter||'',
-    'Count Date': isValidDate(g.countAt) ? g.countAt : ''
+    'Count Date': isValidDate(g.countAt) ? g.countAt : '',
+    ...(icCountDeleted ? {'Deleted Doc': g.fromDeleted ? 'Yes' : ''} : {})
   }));
 }
 
@@ -1904,7 +1951,7 @@ function icReconSectionHtml(key, records){
 function icReconModalHtml(buckets){
   const total = buckets.superseded.length + buckets.stillOpen.length + buckets.multiProduct.length + buckets.counted.length;
   const summary = `<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:16px;">
-    ${total.toLocaleString()} COUN documents in range &mdash;
+    ${total.toLocaleString()} ${icCountDeleted?'completed (COUN + deleted)':'COUN'} documents in range &mdash;
     ${buckets.counted.length.toLocaleString()} counted 1:1 into Location Accuracy,
     ${buckets.multiProduct.length.toLocaleString()} shared a multi-product bin,
     ${buckets.stillOpen.length.toLocaleString()} reopened after completion,
@@ -2639,7 +2686,7 @@ function icRenderKPIs(groups, openGroups, rangeRecords, closedGroups){
   const openRecordCount = openGroups.length;
   const completedRecords = rangeRecords.filter(r=>r.status==='COUN');
   const completedRecordCount = completedRecords.length;
-  const completedBreakdown = icCompletedCountsBreakdown(completedRecords, icAllRecords);
+  const completedBreakdown = icCompletedCountsBreakdown(completedRecords, icEffectiveRecords());
   const recountRecordCount = rangeRecords.filter(r=>r.status==='RECO').length;
 
   // Locations counted per day — same COUN documents "Completed Counts"
@@ -2694,7 +2741,7 @@ function icRenderKPIs(groups, openGroups, rangeRecords, closedGroups){
       modalTitle:'Open Counts \u2014 '+openRecordCount.toLocaleString()+' location'+(openRecordCount===1?'':'s')+' waiting (oldest first)',
       modalBody: icModalTableHtml(oldestOpenFirst),
       exportRows: icModalExportRows(oldestOpenFirst), exportFilename: 'open-counts-oldest-first'},
-    {label:'Completed Counts', value: completedRecordCount.toLocaleString(), sub:'COUN documents in range', accent:'var(--accent)',
+    {label:'Completed Counts', value: completedRecordCount.toLocaleString(), sub: icCountDeleted ? 'COUN + deleted documents in range<br>('+completedRecords.filter(r=>r.wasDeleted).length.toLocaleString()+' from deleted documents)' : 'COUN documents in range', accent:'var(--accent)',
       modalTitle:'Completed Counts \u2014 '+completedRecordCount.toLocaleString()+' documents vs. '+binsResolved.length.toLocaleString()+' resolved bins',
       modalBody: icReconModalHtml(completedBreakdown),
       exportRows: icReconExportRows(completedBreakdown), exportFilename: 'completed-counts-reconciliation'},
@@ -2970,7 +3017,7 @@ function icRenderTable(rangeGroups){
         <td>${g.bookQty.toLocaleString()}</td>
         <td>${g.countedQty.toLocaleString()}</td>
         <td>${g.diffQty>0?'+':''}${g.diffQty.toLocaleString()}</td>
-        <td>${statusBadge}${recountBadge}</td>
+        <td>${statusBadge}${recountBadge}${g.fromDeleted?'<span class="badge unknown" title="Counted on a document that was later deleted">Deleted doc</span>':''}</td>
         <td>${g.counter||'&mdash;'}</td>
         <td${icSortAttr(g.countAt)}>${formatDateTime(g.countAt)}</td>
       </tr>
@@ -3004,7 +3051,8 @@ function icExportTableToExcel(){
     'Result': g.status,
     'Recounted': g.hadRecount ? 'Yes' : 'No',
     'Counter': g.counter,
-    'Count Date': isValidDate(g.countAt) ? g.countAt : ''
+    'Count Date': isValidDate(g.countAt) ? g.countAt : '',
+    ...(icCountDeleted ? {'Deleted Doc': g.fromDeleted ? 'Yes' : ''} : {})
   }));
 
   const sheet = XLSX.utils.json_to_sheet(rows, {cellDates:true});

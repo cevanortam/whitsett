@@ -35,6 +35,10 @@
     --seal-bg: #ECFDF5;
     --incorrectpart: #0D9488;
     --incorrectpart-bg: #F0FDFA;
+    --notscanned: #6366F1;
+    --notscanned-bg: #EEF2FF;
+    --wronglocation: #9D174D;
+    --wronglocation-bg: #FFF1F5;
     --shadow-sm: 0 1px 3px rgba(0,0,20,0.08), 0 1px 2px rgba(0,0,20,0.04);
     --shadow-md: 0 4px 12px rgba(0,0,20,0.10), 0 2px 4px rgba(0,0,20,0.06);
     --shadow-lg: 0 12px 32px rgba(0,0,20,0.14);
@@ -430,6 +434,8 @@
   .cat-badge.packaging { background: var(--packaging-bg); color: var(--packaging); }
   .cat-badge.seal { background: var(--seal-bg); color: var(--seal); }
   .cat-badge.incorrectpart { background: var(--incorrectpart-bg); color: var(--incorrectpart); }
+  .cat-badge.notscanned { background: var(--notscanned-bg); color: var(--notscanned); }
+  .cat-badge.wronglocation { background: var(--wronglocation-bg); color: var(--wronglocation); }
   .cat-badge.unknown { background: var(--gray-100); color: var(--gray-600); }
 
   .type-badge {
@@ -447,6 +453,7 @@
   .type-badge.existing { background: #F0FFF4; color: #1B6B3A; }
   .type-badge.picking { background: #FFF8EB; color: #B45309; }
   .type-badge.audit { background: #F5F3FF; color: #5B21B6; }
+  .type-badge.putaway { background: #FFF1F5; color: #9D174D; }
 
   .empty-state {
     text-align: center;
@@ -770,6 +777,7 @@
       <option value="This issue is with existing inventory.">Existing Inventory</option>
       <option value="This issue was found during picking.">Found During Picking</option>
       <option value="This issue was found during an audit.">Found During Audit</option>
+      <option value="This issue was found after putaway.">Found After Putaway</option>
     </select>
     <button class="page-filter-clear" id="pageFilterClear" onclick="clearPageFilter()" style="display:none">
       Clear filter
@@ -851,6 +859,7 @@
       <option value="This issue is with existing inventory.">Existing Inventory</option>
       <option value="This issue was found during picking.">Found During Picking</option>
       <option value="This issue was found during an audit.">Found During Audit</option>
+      <option value="This issue was found after putaway.">Found After Putaway</option>
     </select>
     <select class="filter-select" id="filterCat" onchange="applyFilters()">
       <option value="">All Categories</option>
@@ -860,6 +869,8 @@
       <option value="Damaged Inventory">Damaged Inventory</option>
       <option value="Broken Seal (Open Carton)">Broken Seal</option>
       <option value="Incorrect Part">Incorrect Part</option>
+      <option value="Not scanned to the location">Not scanned to the location</option>
+      <option value="Putaway in wrong location">Putaway in wrong location</option>
     </select>
     <div class="record-count" id="recordCount"></div>
     <button class="btn-export" onclick="exportToExcel()" title="Export the currently filtered table rows to an Excel file">
@@ -927,6 +938,7 @@
                 <option value="This issue is with existing inventory.">This issue is with existing inventory</option>
                 <option value="This issue was found during picking.">This issue was found during picking</option>
                 <option value="This issue was found during an audit.">This issue was found during an audit</option>
+                <option value="This issue was found after putaway.">Found after putaway</option>
               </select>
               <span class="form-error" id="err_issueType"></span>
             </div>
@@ -979,6 +991,32 @@
           </div>
         </div>
 
+        <div class="form-section" id="section_putaway" style="display:none">
+          <div class="form-section-title">Putaway Details</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Who completed the putaway? <span class="required">*</span></label>
+              <input class="form-input" id="f_putawayPerson" type="text" placeholder="Associate's name" autocomplete="off">
+              <span class="form-error" id="err_putawayPerson"></span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Putaway Date <span class="required">*</span></label>
+              <input class="form-input" id="f_putawayDate" type="date">
+              <span class="form-error" id="err_putawayDate"></span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Putaway Location <span class="required">*</span></label>
+              <input class="form-input" id="f_putawayLocation" type="text" placeholder="e.g. 50-01-A1">
+              <span class="form-error" id="err_putawayLocation"></span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Handling Unit (HU) <span class="required">*</span></label>
+              <input class="form-input" id="f_handlingUnit" type="text" placeholder="e.g. 123456789" autocomplete="off">
+              <span class="form-error" id="err_handlingUnit"></span>
+            </div>
+          </div>
+        </div>
+
         <div class="form-section">
           <div class="form-section-title">Inventory Details</div>
           <div class="form-grid">
@@ -1010,6 +1048,8 @@
                 <option value="Improper Packaging">Improper Packaging</option>
                 <option value="Broken Seal (Open Carton)">Broken Seal (Open Carton)</option>
                 <option value="Incorrect Part">Incorrect Part</option>
+                <option value="Not scanned to the location">Not scanned to the location</option>
+                <option value="Putaway in wrong location">Putaway in wrong location</option>
               </select>
               <span class="form-error" id="err_category"></span>
             </div>
@@ -1079,9 +1119,11 @@ const CATEGORY_COLORS = {
   'Damaged Inventory': '#D97706',
   'Broken Seal (Open Carton)': '#065F46',
   'Incorrect Part': '#0D9488',
+  'Not scanned to the location': '#6366F1',
+  'Putaway in wrong location': '#9D174D',
   'Uncategorized': '#9AA5B4',
 };
-const CATEGORY_ORDER = ['Inventory Shortage','Inventory Overage','Improper Packaging','Damaged Inventory','Broken Seal (Open Carton)','Incorrect Part','Uncategorized'];
+const CATEGORY_ORDER = ['Inventory Shortage','Inventory Overage','Improper Packaging','Damaged Inventory','Broken Seal (Open Carton)','Incorrect Part','Not scanned to the location','Putaway in wrong location','Uncategorized'];
 
 // ───────────── INIT ─────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -1376,12 +1418,14 @@ function renderTypeChart() {
     'This issue is with existing inventory.': '#1B6B3A',
     'This issue was found during picking.': '#B45309',
     'This issue was found during an audit.': '#5B21B6',
+    'This issue was found after putaway.': '#9D174D',
   };
   const labels = {
     'This is a receiving issue.': 'Receiving Issue',
     'This issue is with existing inventory.': 'Existing Inventory',
     'This issue was found during picking.': 'Found During Picking',
     'This issue was found during an audit.': 'Found During Audit',
+    'This issue was found after putaway.': 'Found After Putaway',
   };
   const container = document.getElementById('typeChart');
   if (sorted.length === 0) {
@@ -1587,6 +1631,10 @@ function exportToExcel() {
     'Picker': r.picker || '',
     'Pull ID': r.pullId || '',
     'Date Pulled': r.datePulled ? formatDate(r.datePulled) : '',
+    'Putaway Person': r.putawayPerson || '',
+    'Putaway Date': r.putawayDate ? formatDate(r.putawayDate) : '',
+    'Putaway Location': r.putawayLocation || '',
+    'Handling Unit (HU)': r.handlingUnit || '',
     'Location': r.location || '',
     'Warehouse Task #': r.warehouseTask || '',
     'SKU': r.sku || '',
@@ -1598,7 +1646,8 @@ function exportToExcel() {
   const ws = XLSX.utils.json_to_sheet(data);
   ws['!cols'] = [
     {wch:6},{wch:18},{wch:12},{wch:22},{wch:14},{wch:16},
-    {wch:16},{wch:10},{wch:12},{wch:16},{wch:16},{wch:16},{wch:10},{wch:20},{wch:40}
+    {wch:16},{wch:10},{wch:12},{wch:18},{wch:14},{wch:18},{wch:16},
+    {wch:16},{wch:16},{wch:16},{wch:10},{wch:20},{wch:40}
   ];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Inventory Discrepancies');
@@ -1614,6 +1663,7 @@ function typeToLabel(type) {
     'This issue is with existing inventory.': 'Existing Inventory',
     'This issue was found during picking.': 'Found During Picking',
     'This issue was found during an audit.': 'Found During Audit',
+    'This issue was found after putaway.': 'Found After Putaway',
   };
   return map[type] || (type || '');
 }
@@ -1684,6 +1734,20 @@ function openDetail(id) {
     </div>`;
   }
 
+  const isPutawayRecord = r.issueType === 'This issue was found after putaway.';
+  if (isPutawayRecord) {
+    html += `
+    <div class="detail-section">
+      <div class="detail-section-label">Putaway Details</div>
+      <div class="detail-grid">
+        <div class="detail-field"><div class="detail-field-label">Putaway Associate</div>${val(r.putawayPerson)}</div>
+        <div class="detail-field"><div class="detail-field-label">Putaway Date</div>${val(formatDate(r.putawayDate))}</div>
+        <div class="detail-field"><div class="detail-field-label">Putaway Location</div>${val(r.putawayLocation)}</div>
+        <div class="detail-field"><div class="detail-field-label">Handling Unit (HU)</div>${val(r.handlingUnit)}</div>
+      </div>
+    </div>`;
+  }
+
   html += `
     <div class="detail-section">
       <div class="detail-section-label">Notes</div>
@@ -1700,9 +1764,11 @@ function handleTypeChange() {
   const showReceiving = val === 'This is a receiving issue.' || val === 'This issue was found during an audit.';
   const showPicking = val === 'This issue was found during picking.';
   const showAudit = val === 'This issue was found during an audit.';
+  const showPutaway = val === 'This issue was found after putaway.';
   document.getElementById('section_receiving').style.display = showReceiving ? 'block' : 'none';
   document.getElementById('section_picking').style.display = showPicking ? 'block' : 'none';
   document.getElementById('section_audit').style.display = showAudit ? 'block' : 'none';
+  document.getElementById('section_putaway').style.display = showPutaway ? 'block' : 'none';
 }
 
 function openNewEntry() {
@@ -1711,13 +1777,14 @@ function openNewEntry() {
   document.getElementById('section_receiving').style.display = 'none';
   document.getElementById('section_picking').style.display = 'none';
   document.getElementById('section_audit').style.display = 'none';
+  document.getElementById('section_putaway').style.display = 'none';
   clearErrors();
   document.getElementById('formModalTitle').textContent = 'New Inventory Discrepancy';
   openModal('formModal');
 }
 
 function clearErrors() {
-  ['reporter','date','issueType','sku','quantity','category'].forEach(f => {
+  ['reporter','date','issueType','sku','quantity','category','putawayPerson','putawayDate','putawayLocation','handlingUnit'].forEach(f => {
     const el = document.getElementById('err_' + f);
     if (el) el.textContent = '';
     const inp = document.getElementById('f_' + f);
@@ -1744,6 +1811,25 @@ function validateForm() {
       valid = false;
     }
   });
+
+  // Conditional validation for putaway fields
+  if (document.getElementById('f_issueType').value === 'This issue was found after putaway.') {
+    const putawayRequired = [
+      ['f_putawayPerson', 'err_putawayPerson', 'Putaway associate name is required.'],
+      ['f_putawayDate', 'err_putawayDate', 'Putaway date is required.'],
+      ['f_putawayLocation', 'err_putawayLocation', 'Putaway location is required.'],
+      ['f_handlingUnit', 'err_handlingUnit', 'Handling Unit (HU) is required.'],
+    ];
+    putawayRequired.forEach(([fid, eid, msg]) => {
+      const el = document.getElementById(fid);
+      if (!el.value.trim()) {
+        document.getElementById(eid).textContent = msg;
+        el.classList.add('error');
+        valid = false;
+      }
+    });
+  }
+
   return valid;
 }
 
@@ -1755,7 +1841,9 @@ async function submitForm(e) {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Submitting…';
 
-  const isAudit = document.getElementById('f_issueType').value === 'This issue was found during an audit.';
+  const issueTypeVal = document.getElementById('f_issueType').value;
+  const isAudit = issueTypeVal === 'This issue was found during an audit.';
+  const isPutaway = issueTypeVal === 'This issue was found after putaway.';
   const auditPullId = document.getElementById('f_auditPullId').value.trim();
   const auditPicker = document.getElementById('f_auditPicker').value.trim();
 
@@ -1763,18 +1851,22 @@ async function submitForm(e) {
     id: getNextId(),
     reporter: document.getElementById('f_reporter').value.trim(),
     date: document.getElementById('f_date').value,
-    issueType: document.getElementById('f_issueType').value,
+    issueType: issueTypeVal,
     poNumber: document.getElementById('f_poNumber').value.trim(),
     inboundDelivery: document.getElementById('f_inboundDelivery').value.trim(),
     picker: isAudit ? auditPicker : document.getElementById('f_picker').value.trim(),
     pullId: isAudit ? auditPullId : document.getElementById('f_pullId').value.trim(),
     datePulled: document.getElementById('f_datePulled').value,
-    location: document.getElementById('f_location').value.trim(),
+    location: isPutaway ? document.getElementById('f_putawayLocation').value.trim() : document.getElementById('f_location').value.trim(),
     warehouseTask: document.getElementById('f_warehouseTask').value.trim(),
     sku: document.getElementById('f_sku').value.trim(),
     quantity: document.getElementById('f_quantity').value.trim(),
     category: document.getElementById('f_category').value,
     notes: document.getElementById('f_notes').value.trim(),
+    putawayPerson: isPutaway ? document.getElementById('f_putawayPerson').value.trim() : '',
+    putawayDate: isPutaway ? document.getElementById('f_putawayDate').value : '',
+    putawayLocation: isPutaway ? document.getElementById('f_putawayLocation').value.trim() : '',
+    handlingUnit: isPutaway ? document.getElementById('f_handlingUnit').value.trim() : '',
   };
 
   // Save locally first
@@ -1896,6 +1988,8 @@ function catChip(cat) {
     'Improper Packaging': ['packaging','Packaging'],
     'Broken Seal (Open Carton)': ['seal','Broken Seal'],
     'Incorrect Part': ['incorrectpart','Incorrect Part'],
+    'Not scanned to the location': ['notscanned','Not Scanned'],
+    'Putaway in wrong location': ['wronglocation','Wrong Location'],
   };
   const [cls, label] = map[cat] || ['unknown', cat || 'Uncategorized'];
   return `<span class="cat-badge ${cls}">${label}</span>`;
@@ -1907,6 +2001,7 @@ function typeChip(type) {
     'This issue is with existing inventory.': ['existing','Existing Inv.'],
     'This issue was found during picking.': ['picking','Picking'],
     'This issue was found during an audit.': ['audit','Audit'],
+    'This issue was found after putaway.': ['putaway','After Putaway'],
   };
   const [cls, label] = map[type] || ['','Unknown'];
   return `<span class="type-badge ${cls}">${label}</span>`;

@@ -4890,10 +4890,12 @@ async function icParseSapExport(file){
     // Physical Inventory Document is NOT a unique per-line key in this
     // export — a single document number can cover a whole batch of bins
     // in one zone-sweep count (seen: one document spanning 113 different
-    // bins). Storage Bin is unique within a document, so the dedupe key
-    // is the pair — Document alone would silently collapse a multi-bin
-    // batch down to its last row.
-    const key = sanitizeKey(record.picDoc+'__'+record.bin);
+    // bins). Storage Bin is unique within a document in most cases, BUT
+    // when a bin holds multiple Handling Units SAP emits one row per HU,
+    // all sharing the same Document + Bin. Without the HU in the key those
+    // extra rows silently overwrite each other on upload and only the last
+    // one is stored. Including product + HU makes the key unique per row.
+    const key = sanitizeKey(record.picDoc+'__'+record.bin+'__'+(record.product||'')+'__'+(record.hu||''));
     updates[key] = record;
     imported++;
   }
@@ -5791,7 +5793,7 @@ function icExportTableToExcel(){
 /* ---------------------------------------------------------------------
    Reset All Data — scoped only to this tab's own Firebase nodes
 --------------------------------------------------------------------- */
-async function icResetAllDataPrompt(){
+async async function icResetAllDataPrompt(){
   const pw = prompt('This permanently deletes ALL Inventory tab data (Outbound/Inbound data is untouched). Enter the password to continue:');
   if(pw === null) return;
   if(pw !== DELETE_LINE_PASSWORD){
@@ -5889,7 +5891,7 @@ async function combinedUploadFromFile(file){
    touches this dashboard's own Firebase nodes — cycle count data lives
    in a separate node in the same project and is never touched.
 --------------------------------------------------------------------- */
-async function resetAllDataPrompt(){
+async async function resetAllDataPrompt(){
   const pw = prompt('This permanently deletes ALL Outbound and Inbound data on this dashboard (cycle count data is untouched). Enter the password to continue:');
   if(pw === null) return; // cancelled
   if(pw !== DELETE_LINE_PASSWORD){

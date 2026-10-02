@@ -4776,9 +4776,10 @@ function icDestroyChart(id){ if(icCharts[id]){ icCharts[id].destroy(); delete ic
 // calendar day as normal. Returns null for an invalid/missing date.
 function icBusinessDate(d){
   if(!isValidDate(d)) return null;
-  const shifted = new Date(d.getTime() - 6*3600*1000);
-  shifted.setHours(0,0,0,0);
-  return shifted;
+  // No shift — counts register on the calendar day they were performed.
+  const day = new Date(d);
+  day.setHours(0,0,0,0);
+  return day;
 }
 
 function icPeriodKey(rawD){
@@ -5793,7 +5794,7 @@ function icExportTableToExcel(){
 /* ---------------------------------------------------------------------
    Reset All Data — scoped only to this tab's own Firebase nodes
 --------------------------------------------------------------------- */
-async async function icResetAllDataPrompt(){
+async function icResetAllDataPrompt(){
   const pw = prompt('This permanently deletes ALL Inventory tab data (Outbound/Inbound data is untouched). Enter the password to continue:');
   if(pw === null) return;
   if(pw !== DELETE_LINE_PASSWORD){
@@ -5891,7 +5892,7 @@ async function combinedUploadFromFile(file){
    touches this dashboard's own Firebase nodes — cycle count data lives
    in a separate node in the same project and is never touched.
 --------------------------------------------------------------------- */
-async async function resetAllDataPrompt(){
+async function resetAllDataPrompt(){
   const pw = prompt('This permanently deletes ALL Outbound and Inbound data on this dashboard (cycle count data is untouched). Enter the password to continue:');
   if(pw === null) return; // cancelled
   if(pw !== DELETE_LINE_PASSWORD){

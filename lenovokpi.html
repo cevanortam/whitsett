@@ -4734,8 +4734,8 @@ const IC_REQUIRED_COLUMNS = ['picDoc','status','bin'];
 // recount was generated from this count (the actual recount lives as its
 // own document, cross-referenced via Reference Physical Inventory Document).
 // Any other status in the export is dropped on import — this tab only
-// tracks these three.
-const IC_KEEP_STATUSES = new Set(['ACTI','COUN','RECO']);
+// tracks these four. DELE (deleted by SAP) is treated as a completed count.
+const IC_KEEP_STATUSES = new Set(['ACTI','COUN','RECO','DELE']);
 
 function icResolveColumns(headerRow){
   const lookup = {};
@@ -5033,10 +5033,11 @@ function icGroupByLocation(records){
   const groups = [];
   for(const [key, recs] of map.entries()){
     const hasActi = recs.some(r=>r.status==='ACTI');
-    const couns = recs.filter(r=>r.status==='COUN');
+    const couns = recs.filter(r=>r.status==='COUN'||r.status==='DELE');
     const hadRecount = recs.some(r=>r.status==='RECO');
     // "Terminal" record: the one that currently represents this location's
-    // outcome — the most recently counted COUN document, if any.
+    // outcome — the most recently counted COUN or DELE document, if any.
+    // DELE (deleted by SAP) is treated as a completed count.
     const sortedCouns = [...couns].filter(r=>isValidDate(r.countAt)).sort((a,b)=>b.countAt-a.countAt);
     const terminal = sortedCouns[0] || null;
     // Earliest record on file, for display/context (e.g. the original
@@ -5205,7 +5206,7 @@ function icCompletedCountsBreakdown(rangeCounRecords, allRecords){
   const statusOf = new Map();      // location key -> 'Open'|'Accurate'|'Inaccurate'
   for(const [key, recs] of byKey.entries()){
     const hasActi = recs.some(r=>r.status==='ACTI');
-    const couns = recs.filter(r=>r.status==='COUN' && isValidDate(r.countAt));
+    const couns = recs.filter(r=>(r.status==='COUN'||r.status==='DELE') && isValidDate(r.countAt));
     const sortedCouns = [...couns].sort((a,b)=>b.countAt-a.countAt);
     const terminal = sortedCouns[0] || null;
     const pendingRecos = recs.filter(r=>r.status==='RECO' && isValidDate(r.countAt) && (r.bookQty||0)===0 && (r.countedQty||0)===0);
@@ -5406,16 +5407,16 @@ function icRenderKPIs(groups, openGroups, rangeRecords){
   // Oldest Open Count card and Open Count Aging chart, which are also
   // openGroups-based.
   const openRecordCount = openGroups.length;
-  const completedRecords = rangeRecords.filter(r=>r.status==='COUN');
+  const completedRecords = rangeRecords.filter(r=>r.status==='COUN'||r.status==='DELE');
   const completedRecordCount = completedRecords.length;
   const completedBreakdown = icCompletedCountsBreakdown(completedRecords, icAllRecords);
   const recountRecordCount = rangeRecords.filter(r=>r.status==='RECO').length;
 
-  // Locations counted per day — same COUN documents "Completed Counts"
+  // Locations counted per day — same COUN/DELE documents "Completed Counts"
   // above tallies, just bucketed by business date so it can be averaged
   // for the KPI card below.
   const countedByPeriod = {};
-  rangeRecords.forEach(r=>{ if(r.status==='COUN' && r.countAt){ const k=icPeriodKey(r.countAt); countedByPeriod[k]=(countedByPeriod[k]||0)+1; } });
+  rangeRecords.forEach(r=>{ if((r.status==='COUN'||r.status==='DELE') && r.countAt){ const k=icPeriodKey(r.countAt); countedByPeriod[k]=(countedByPeriod[k]||0)+1; } });
   const countedPeriodVals = Object.values(countedByPeriod);
   const avgLocationsCountedPerPeriod = countedPeriodVals.length ? Math.round((countedPeriodVals.reduce((a,b)=>a+b,0)/countedPeriodVals.length)*10)/10 : null;
 

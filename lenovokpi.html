@@ -367,7 +367,7 @@
   .inv-subnav-btn.active{background:var(--accent);color:#fff;}
 
   /* Upload popup */
-  .ioh-upload-popup-wrap{position:relative;display:inline-block;margin-bottom:22px;}
+  .ioh-upload-popup-wrap{position:relative;display:inline-block;}
   .ioh-upload-popup{
     position:absolute;top:calc(100% + 8px);left:0;z-index:200;
     background:var(--card);border:1px solid var(--card-border);
@@ -561,6 +561,30 @@
       </div>
       <label class="btn" for="fileInput">&#8593; Upload SAP Export</label>
       <input type="file" id="fileInput" accept=".xlsx,.xls">
+      <div class="ioh-upload-popup-wrap" id="iohUploadWrap" style="margin-bottom:0;position:relative;">
+        <button type="button" class="btn" id="iohUploadBtn">&#8593; Upload IOH Data</button>
+        <div class="ioh-upload-popup" id="iohUploadPanel" style="display:none;right:0;left:auto;">
+          <div class="ioh-upload-group">
+            <div class="label">&#128230; Inventory On-Hand (IOH)</div>
+            <div class="row">
+              <label class="btn" for="iohFileInput">&#8593; Upload IOH</label>
+              <input type="file" id="iohFileInput" accept=".xlsx,.xls">
+            </div>
+            <span id="iohUploadStatus" style="font-size:12px;color:var(--text-faint);"></span>
+            <div id="iohLastUpload" style="font-size:11px;color:var(--text-faint);"></div>
+          </div>
+          <div class="ioh-upload-divider"></div>
+          <div class="ioh-upload-group">
+            <div class="label">&#128176; Pricing File</div>
+            <div class="row">
+              <label class="btn secondary" for="iohPricingFileInput">&#8593; Update Pricing</label>
+              <input type="file" id="iohPricingFileInput" accept=".xlsx,.xls">
+            </div>
+            <span id="iohPricingStatus" style="font-size:12px;color:var(--text-faint);"></span>
+            <div id="iohPricingLastUpdate" style="font-size:11px;color:var(--text-faint);"></div>
+          </div>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -1137,32 +1161,6 @@
   ============================================================ -->
   <div id="invSubStockStatus" style="display:none;">
 
-    <!-- Upload Data popup button -->
-    <div class="ioh-upload-popup-wrap" id="iohUploadWrap">
-      <button type="button" class="btn" id="iohUploadBtn">&#8593; Upload Data</button>
-      <div class="ioh-upload-popup" id="iohUploadPanel" style="display:none;">
-        <div class="ioh-upload-group">
-          <div class="label">&#128230; Inventory On-Hand (IOH)</div>
-          <div class="row">
-            <label class="btn" for="iohFileInput">&#8593; Upload IOH</label>
-            <input type="file" id="iohFileInput" accept=".xlsx,.xls">
-          </div>
-          <span id="iohUploadStatus" style="font-size:12px;color:var(--text-faint);"></span>
-          <div id="iohLastUpload" style="font-size:11px;color:var(--text-faint);"></div>
-        </div>
-        <div class="ioh-upload-divider"></div>
-        <div class="ioh-upload-group">
-          <div class="label">&#128176; Pricing File</div>
-          <div class="row">
-            <label class="btn secondary" for="iohPricingFileInput">&#8593; Update Pricing</label>
-            <input type="file" id="iohPricingFileInput" accept=".xlsx,.xls">
-          </div>
-          <span id="iohPricingStatus" style="font-size:12px;color:var(--text-faint);"></span>
-          <div id="iohPricingLastUpdate" style="font-size:11px;color:var(--text-faint);"></div>
-        </div>
-      </div>
-    </div>
-
     <!-- Filter bar: stock type toggles + location dropdown -->
     <div class="ioh-filter-bar" id="iohFilterBar">
       <span class="ioh-filter-label">Stock&nbsp;Type:</span>
@@ -1209,10 +1207,10 @@
           <option value="qty">Quantity (units)</option>
         </select>
       </div>
-      <div style="position:relative;height:220px;"><canvas id="iohTrendChart"></canvas></div>
+      <div style="position:relative;height:260px;"><canvas id="iohTrendChart"></canvas></div>
       <div id="iohTrendEmpty" style="display:none;text-align:center;padding:50px 20px;color:var(--text-faint);font-size:13px;">
         <div style="font-size:15px;color:var(--text-dim);margin-bottom:6px;">No trend data yet</div>
-        <div>Upload a second IOH snapshot to begin tracking trends.</div>
+        <div>Upload an IOH file to begin tracking trends.</div>
       </div>
     </div>
 
@@ -6644,47 +6642,100 @@ function iohRenderTable(items){
   }).join('');
 }
 
-/* Trend chart */
+/* Trend chart — lines per location category, filtered by active stock types */
 function iohRenderTrend(){
-  const keys  =Object.keys(iohAllSnapshots).sort();
-  const canvas=document.getElementById('iohTrendChart');
+  const keys   =Object.keys(iohAllSnapshots).sort();
+  const canvas =document.getElementById('iohTrendChart');
   const emptyEl=document.getElementById('iohTrendEmpty');
-  const mode=(document.getElementById('iohTrendFilter')||{value:'value'}).value;
-  if(keys.length<2){
+  const mode   =(document.getElementById('iohTrendFilter')||{value:'value'}).value;
+  if(keys.length<1){
     canvas.style.display='none'; emptyEl.style.display='';
     if(iohTrendChart){ iohTrendChart.destroy(); iohTrendChart=null; }
     return;
   }
   canvas.style.display=''; emptyEl.style.display='none';
-  const labels=[],a1=[],a2=[],a3=[];
+  const labels=[];
+  const seriesData=IOH_LOC_CATS.map(cat=>({cat,values:[]}));
+  // trendMeta[dateLabel][locCatKey] = {value, qty} — used by tooltip to show both metrics
+  const trendMeta={};
   for(const k of keys){
     const snap=iohAllSnapshots[k];
-    const items=iohBuildItems(snap.items);
-    labels.push(snap.date||k);
-    for(const [type,arr] of [['A1',a1],['A2',a2],['A3',a3]]){
-      const ti=items.filter(i=>i.stockType===type);
-      arr.push(mode==='value'
-        ? ti.filter(i=>i.totalValue!==null).reduce((s,i)=>s+i.totalValue,0)/1e6
-        : ti.reduce((s,i)=>s+i.qty,0));
+    const items=iohBuildItems(snap.items).filter(i=>iohActiveTypes.has(i.stockType));
+    const dateLabel=snap.date||k;
+    labels.push(dateLabel);
+    trendMeta[dateLabel]={};
+    for(const s of seriesData){
+      const ci=items.filter(i=>i.locCat===s.cat.key);
+      const qty=ci.reduce((a,i)=>a+i.qty,0);
+      const value=ci.filter(i=>i.totalValue!==null).reduce((a,i)=>a+i.totalValue,0);
+      trendMeta[dateLabel][s.cat.key]={qty,value};
+      s.values.push(mode==='value'?value:qty);
     }
   }
+  // Only draw categories with at least one non-zero value
+  const active=seriesData.filter(s=>s.values.some(v=>v>0));
   if(iohTrendChart) iohTrendChart.destroy();
   iohTrendChart=new Chart(canvas,{
     type:'line',
-    data:{labels,datasets:[
-      {label:'A1 Pickable',     data:a1,borderColor:'#2fbf71',backgroundColor:'rgba(47,191,113,0.12)',fill:true,tension:0.3,pointRadius:4,pointHoverRadius:6},
-      {label:'A2 Pick Block',   data:a2,borderColor:'#e8a33d',backgroundColor:'rgba(232,163,61,0.12)',fill:true,tension:0.3,pointRadius:4,pointHoverRadius:6},
-      {label:'A3 Quality Hold', data:a3,borderColor:'#e2231a',backgroundColor:'rgba(226,35,26,0.12)', fill:true,tension:0.3,pointRadius:4,pointHoverRadius:6}
-    ]},
+    data:{
+      labels,
+      datasets:active.map(s=>({
+        label:s.cat.label,
+        data:s.values,
+        borderColor:s.cat.hex,
+        backgroundColor:s.cat.hex+'18',
+        fill:false,
+        tension:0.3,
+        pointRadius:5,
+        pointHoverRadius:7,
+        borderWidth:2
+      }))
+    },
     options:{
       responsive:true,maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
       plugins:{
-        legend:{labels:{color:'#93a8c4',font:{size:11}}},
-        tooltip:{callbacks:{label:ctx=>' '+ctx.dataset.label+': '+(mode==='value'?('$'+ctx.parsed.y.toFixed(2)+'M'):ctx.parsed.y.toLocaleString()+' units')}}
+        legend:{
+          position:'bottom',
+          labels:{color:'#93a8c4',font:{size:11},boxWidth:12,padding:14}
+        },
+        tooltip:{
+          callbacks:{
+            title:ctx=>ctx[0]?'Date: '+ctx[0].label:'',
+            label:ctx=>{
+              const dateLabel=ctx.label;
+              const catKey=active[ctx.datasetIndex]?.cat.key;
+              const d=(trendMeta[dateLabel]||{})[catKey]||{qty:0,value:0};
+              return '  '+ctx.dataset.label+':  '+iohFmtCurrency(d.value)+'  ·  '+iohFmtQty(d.qty)+' units';
+            },
+            footer:ctx=>{
+              const dateLabel=ctx[0]?.label;
+              const snap=trendMeta[dateLabel]||{};
+              let totVal=0,totQty=0;
+              for(const s of active){
+                const d=snap[s.cat.key]||{};
+                totVal+=(d.value||0); totQty+=(d.qty||0);
+              }
+              return ['','  Total:  '+iohFmtCurrency(totVal)+'  ·  '+iohFmtQty(totQty)+' units'];
+            }
+          },
+          footerFont:{weight:'bold'},
+          footerColor:'#ffffff',
+          padding:12,
+          boxPadding:4
+        }
       },
       scales:{
         x:{ticks:{color:'#5f7796',font:{size:10},maxRotation:45},grid:{color:'rgba(255,255,255,0.04)'}},
-        y:{ticks:{color:'#5f7796',font:{size:10},callback:v=>mode==='value'?'$'+v.toFixed(1)+'M':v.toLocaleString()},grid:{color:'rgba(255,255,255,0.04)'}}
+        y:{
+          ticks:{
+            color:'#5f7796',font:{size:10},
+            callback:v=>mode==='value'
+              ?(v>=1e6?'$'+(v/1e6).toFixed(1)+'M':v>=1e3?'$'+(v/1e3).toFixed(0)+'K':'$'+v.toFixed(0))
+              :v.toLocaleString()
+          },
+          grid:{color:'rgba(255,255,255,0.04)'}
+        }
       }
     }
   });

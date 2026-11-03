@@ -561,30 +561,6 @@
       </div>
       <label class="btn" for="fileInput">&#8593; Upload SAP Export</label>
       <input type="file" id="fileInput" accept=".xlsx,.xls">
-      <div class="ioh-upload-popup-wrap" id="iohUploadWrap" style="margin-bottom:0;position:relative;">
-        <button type="button" class="btn" id="iohUploadBtn">&#8593; Upload IOH Data</button>
-        <div class="ioh-upload-popup" id="iohUploadPanel" style="display:none;right:0;left:auto;">
-          <div class="ioh-upload-group">
-            <div class="label">&#128230; Inventory On-Hand (IOH)</div>
-            <div class="row">
-              <label class="btn" for="iohFileInput">&#8593; Upload IOH</label>
-              <input type="file" id="iohFileInput" accept=".xlsx,.xls">
-            </div>
-            <span id="iohUploadStatus" style="font-size:12px;color:var(--text-faint);"></span>
-            <div id="iohLastUpload" style="font-size:11px;color:var(--text-faint);"></div>
-          </div>
-          <div class="ioh-upload-divider"></div>
-          <div class="ioh-upload-group">
-            <div class="label">&#128176; Pricing File</div>
-            <div class="row">
-              <label class="btn secondary" for="iohPricingFileInput">&#8593; Update Pricing</label>
-              <input type="file" id="iohPricingFileInput" accept=".xlsx,.xls">
-            </div>
-            <span id="iohPricingStatus" style="font-size:12px;color:var(--text-faint);"></span>
-            <div id="iohPricingLastUpdate" style="font-size:11px;color:var(--text-faint);"></div>
-          </div>
-        </div>
-      </div>
     </div>
   </header>
 
@@ -1041,6 +1017,30 @@
       </div>
       <label class="btn" for="icFileInput">&#8593; Upload Cycle Count Results</label>
       <input type="file" id="icFileInput" accept=".xlsx,.xls">
+      <div class="ioh-upload-popup-wrap" id="iohUploadWrap" style="margin-bottom:0;position:relative;">
+        <button type="button" class="btn" id="iohUploadBtn">&#8593; Upload IOH Data</button>
+        <div class="ioh-upload-popup" id="iohUploadPanel" style="display:none;right:0;left:auto;">
+          <div class="ioh-upload-group">
+            <div class="label">&#128230; Inventory On-Hand (IOH)</div>
+            <div class="row">
+              <label class="btn" for="iohFileInput">&#8593; Upload IOH</label>
+              <input type="file" id="iohFileInput" accept=".xlsx,.xls">
+            </div>
+            <span id="iohUploadStatus" style="font-size:12px;color:var(--text-faint);"></span>
+            <div id="iohLastUpload" style="font-size:11px;color:var(--text-faint);"></div>
+          </div>
+          <div class="ioh-upload-divider"></div>
+          <div class="ioh-upload-group">
+            <div class="label">&#128176; Pricing File</div>
+            <div class="row">
+              <label class="btn secondary" for="iohPricingFileInput">&#8593; Update Pricing</label>
+              <input type="file" id="iohPricingFileInput" accept=".xlsx,.xls">
+            </div>
+            <span id="iohPricingStatus" style="font-size:12px;color:var(--text-faint);"></span>
+            <div id="iohPricingLastUpdate" style="font-size:11px;color:var(--text-faint);"></div>
+          </div>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -6457,8 +6457,10 @@ document.getElementById('iohFileInput').addEventListener('change', async functio
 
     st.textContent='Saving '+itemCount.toLocaleString()+' rows for '+dateKey+'…';
     const snapKey=dateKey.replace(/-/g,'_');
+    const nowMs=Date.now();
+    const nowStr=new Date(nowMs).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',hour12:true});
     await iohSnapshotsRef.child(snapKey).set({
-      uploadedAt:Date.now(), date:dateKey, filename:f.name, items:agg
+      uploadedAt:nowMs, uploadedAtStr:nowStr, date:dateKey, filename:f.name, items:agg
     });
     st.textContent='✓ '+itemCount.toLocaleString()+' rows saved for '+dateKey;
     document.getElementById('iohUploadPanel').style.display='none';
@@ -6480,9 +6482,10 @@ iohSnapshotsRef.on('value', snap=>{
     const snapInfo=document.getElementById('iohSnapInfo');
     const snapText=document.getElementById('iohSnapText');
     snapInfo.style.display='';
-    snapText.innerHTML='Snapshot: <b>'+latest.date+'</b> &nbsp;&#183;&nbsp; <b>'+keys.length+'</b> day'+(keys.length!==1?'s':'')+' on file &nbsp;&#183;&nbsp; Filename: <b>'+(latest.filename||'—')+'</b>';
+    const uploadedLabel=latest.uploadedAtStr||(latest.uploadedAt?new Date(latest.uploadedAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',hour12:true}):'—');
+    snapText.innerHTML='Snapshot: <b>'+latest.date+'</b> &nbsp;&#183;&nbsp; Uploaded: <b>'+uploadedLabel+'</b> &nbsp;&#183;&nbsp; <b>'+keys.length+'</b> day'+(keys.length!==1?'s':'')+' on file &nbsp;&#183;&nbsp; File: <b>'+(latest.filename||'—')+'</b>';
     document.getElementById('iohLastUpload').textContent=
-      'IOH last uploaded: '+latest.date+' ('+keys.length+' snapshot'+(keys.length!==1?'s':'')+' stored)';
+      'IOH last uploaded: '+latest.date+' at '+(latest.uploadedAtStr||(latest.uploadedAt?new Date(latest.uploadedAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',hour12:true}):'—'))+' ('+keys.length+' snapshot'+(keys.length!==1?'s':'')+' stored)';
   } else {
     iohCurrentItems=[];
     document.getElementById('iohSnapInfo').style.display='none';

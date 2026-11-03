@@ -351,6 +351,170 @@
   .xs-kpi .sub{font-size:12px;color:var(--text-dim);margin-top:8px;}
   .xs-kpi.placeholder{opacity:0.6;border-style:dashed;}
   .xs-kpi.placeholder .value{font-size:20px;}
+
+  /* ----- IOH Stock Status sub-tab ----- */
+  .inv-subnav{
+    display:flex;gap:6px;margin-bottom:22px;
+    background:var(--card);border:1px solid var(--card-border);
+    border-radius:8px;padding:4px;width:fit-content;
+  }
+  .inv-subnav-btn{
+    background:transparent;border:none;color:var(--text-dim);border-radius:6px;
+    padding:8px 20px;font-size:13px;font-weight:600;cursor:pointer;
+    transition:background .15s,color .15s;
+  }
+  .inv-subnav-btn:hover{color:var(--text);}
+  .inv-subnav-btn.active{background:var(--accent);color:#fff;}
+
+  /* Upload popup */
+  .ioh-upload-popup-wrap{position:relative;display:inline-block;margin-bottom:22px;}
+  .ioh-upload-popup{
+    position:absolute;top:calc(100% + 8px);left:0;z-index:200;
+    background:var(--card);border:1px solid var(--card-border);
+    border-radius:var(--radius);padding:18px 20px;
+    box-shadow:0 8px 32px rgba(0,0,0,0.35);
+    display:flex;gap:28px;flex-wrap:wrap;min-width:480px;
+  }
+  .ioh-upload-popup::before{
+    content:'';position:absolute;top:-6px;left:14px;
+    width:10px;height:10px;background:var(--card);
+    border-left:1px solid var(--card-border);border-top:1px solid var(--card-border);
+    transform:rotate(45deg);
+  }
+  .ioh-upload-group{display:flex;flex-direction:column;gap:7px;flex:1;min-width:200px;}
+  .ioh-upload-group .label{font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.4px;}
+  .ioh-upload-group .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .ioh-upload-divider{width:1px;background:var(--card-border);align-self:stretch;}
+
+  /* Filter bar */
+  .ioh-filter-bar{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;align-items:center;}
+  .ioh-filter-label{font-size:11px;font-weight:700;color:var(--text-faint);text-transform:uppercase;
+    letter-spacing:0.5px;white-space:nowrap;}
+  .ioh-filter-btn{
+    background:var(--card);border:1px solid var(--card-border-light);
+    color:var(--text-dim);border-radius:8px;padding:9px 22px;font-size:13px;
+    font-weight:700;cursor:pointer;transition:all .15s;
+  }
+  .ioh-filter-btn:hover{border-color:var(--info);color:var(--text);}
+  .ioh-filter-btn.a1.active{background:var(--good);border-color:var(--good);color:#fff;}
+  .ioh-filter-btn.a2.active{background:var(--warn);border-color:var(--warn);color:#fff;}
+  .ioh-filter-btn.a3.active{background:var(--bad);border-color:var(--bad);color:#fff;}
+
+  /* Location multi-select dropdown */
+  .ioh-loc-dropdown-wrap{position:relative;}
+  .ioh-loc-dd-btn{
+    background:var(--card);border:1px solid var(--card-border-light);
+    color:var(--text-dim);border-radius:8px;padding:9px 18px;font-size:13px;
+    font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;
+  }
+  .ioh-loc-dd-btn:hover,.ioh-loc-dd-btn.open{border-color:var(--info);color:var(--text);}
+  .ioh-loc-dropdown{
+    position:absolute;top:calc(100% + 6px);right:0;z-index:200;
+    background:var(--card);border:1px solid var(--card-border);
+    border-radius:var(--radius);padding:10px 0;
+    box-shadow:0 8px 32px rgba(0,0,0,0.35);
+    min-width:300px;max-height:360px;overflow-y:auto;
+  }
+  .ioh-loc-dropdown .dd-ctrl{
+    display:flex;gap:8px;padding:6px 14px 10px;border-bottom:1px solid var(--card-border);
+    margin-bottom:4px;
+  }
+  .ioh-loc-dropdown .dd-ctrl button{
+    background:var(--bg-alt);border:1px solid var(--card-border-light);
+    color:var(--text-dim);border-radius:5px;padding:3px 10px;font-size:11px;
+    cursor:pointer;font-weight:600;
+  }
+  .ioh-loc-dropdown .dd-ctrl button:hover{color:var(--text);}
+  .ioh-loc-dd-item{
+    display:flex;align-items:flex-start;gap:9px;padding:7px 14px;cursor:pointer;
+    transition:background .1s;
+  }
+  .ioh-loc-dd-item:hover{background:rgba(255,255,255,0.04);}
+  .ioh-loc-dd-item input[type=checkbox]{
+    margin-top:2px;flex-shrink:0;accent-color:var(--info);width:14px;height:14px;cursor:pointer;
+  }
+  .ioh-loc-dd-item .dd-label{font-size:13px;font-weight:600;color:var(--text);}
+  .ioh-loc-dd-item .dd-hint{font-size:10.5px;color:var(--text-faint);margin-top:1px;}
+
+  /* Stock type cards */
+  .ioh-stock-grid{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px;
+  }
+  @media(max-width:900px){.ioh-stock-grid{grid-template-columns:1fr;}}
+  .ioh-stock-card{
+    background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius);
+    padding:18px 20px;position:relative;overflow:hidden;
+  }
+  .ioh-stock-card::before{
+    content:"";position:absolute;top:0;left:0;width:4px;height:100%;
+    background:var(--type-color,var(--accent));
+  }
+  .ioh-stock-card .type-badge{
+    font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.7px;
+    color:var(--type-color,var(--accent));margin-bottom:2px;
+  }
+  .ioh-stock-card .type-name{
+    font-size:11.5px;color:var(--text-dim);margin-bottom:14px;
+  }
+  .ioh-stock-card .stat-row{
+    display:flex;gap:10px;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;
+  }
+  .ioh-stock-card .stat{display:flex;flex-direction:column;}
+  .ioh-stock-card .stat-label{
+    font-size:9px;text-transform:uppercase;letter-spacing:0.5px;
+    color:var(--text-faint);font-weight:600;margin-bottom:3px;
+  }
+  .ioh-stock-card .stat-value{font-size:22px;font-weight:800;line-height:1;}
+  .ioh-stock-card .stat-value.sm{font-size:15px;}
+
+  /* Location cards — 2-row grid */
+  .ioh-loc-row{
+    display:grid;
+    grid-template-columns:repeat(7,1fr);
+    gap:10px;
+    margin-bottom:20px;
+  }
+  @media(max-width:1100px){.ioh-loc-row{grid-template-columns:repeat(4,1fr);}}
+  @media(max-width:700px){.ioh-loc-row{grid-template-columns:repeat(2,1fr);}}
+  .ioh-loc-card{
+    background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius);
+    padding:12px 14px;position:relative;overflow:hidden;
+    transition:opacity .15s;
+  }
+  .ioh-loc-card.dimmed{opacity:0.38;}
+  .ioh-loc-card::before{
+    content:"";position:absolute;top:0;left:0;width:100%;height:3px;
+    background:var(--lc,#5f7796);
+  }
+  .ioh-loc-card .lc-name{
+    font-size:10.5px;font-weight:700;color:var(--text-dim);
+    margin-bottom:8px;line-height:1.3;
+  }
+  .ioh-loc-card .lc-val{font-size:13px;font-weight:800;line-height:1.2;margin-bottom:4px;word-break:break-all;}
+  .ioh-loc-card .lc-qty{font-size:11px;color:var(--text-faint);}
+
+  /* KPI unpriced tile clickable */
+  .ioh-kpi-clickable{cursor:pointer;transition:background .15s;}
+  .ioh-kpi-clickable:hover{background:rgba(255,255,255,0.04)!important;border-radius:var(--radius);}
+
+  /* Snap badge */
+  .ioh-snap-badge{
+    display:inline-flex;align-items:center;gap:6px;background:var(--bg-alt);
+    border:1px solid var(--card-border-light);border-radius:6px;padding:4px 10px;
+    font-size:11px;color:var(--text-dim);margin-bottom:18px;
+  }
+  .ioh-snap-badge b{color:var(--text);}
+
+  .ioh-trend-section{
+    background:var(--card);border:1px solid var(--card-border);
+    border-radius:var(--radius);padding:20px;margin-bottom:20px;
+  }
+  .ioh-trend-head{
+    display:flex;justify-content:space-between;align-items:center;
+    margin-bottom:14px;flex-wrap:wrap;gap:8px;
+  }
+  .ioh-trend-head h3{margin:0;font-size:14px;font-weight:700;}
+  .ioh-trend-head .note{font-size:11px;color:var(--text-faint);margin-top:2px;}
 </style>
 </head>
 <body>
@@ -863,7 +1027,16 @@
     <a class="site-tab" data-tab="outbound" href="#outbound">Outbound</a>
   </nav>
 
-  <section class="kpi-grid" id="icKpiGrid"></section>
+  <!-- IOH sub-navigation -->
+  <div class="inv-subnav">
+    <button type="button" class="inv-subnav-btn active" data-subtab="cycle" onclick="showInvSubTab('cycle')">Cycle Counts</button>
+    <button type="button" class="inv-subnav-btn" data-subtab="stock" onclick="showInvSubTab('stock')">Stock Status</button>
+  </div>
+
+  <!-- Cycle Counts content wrapper -->
+  <div id="invSubCycleCounts">
+
+    <section class="kpi-grid" id="icKpiGrid"></section>
   <div id="icNote" style="font-size:12px;color:var(--text-faint);margin:-12px 0 24px;"></div>
 
 
@@ -956,7 +1129,131 @@
     </div>
   </footer>
 
-  </section>
+
+  </div><!-- end invSubCycleCounts -->
+
+  <!-- ============================================================
+       STOCK STATUS SUB-TAB (IOH)
+  ============================================================ -->
+  <div id="invSubStockStatus" style="display:none;">
+
+    <!-- Upload Data popup button -->
+    <div class="ioh-upload-popup-wrap" id="iohUploadWrap">
+      <button type="button" class="btn" id="iohUploadBtn">&#8593; Upload Data</button>
+      <div class="ioh-upload-popup" id="iohUploadPanel" style="display:none;">
+        <div class="ioh-upload-group">
+          <div class="label">&#128230; Inventory On-Hand (IOH)</div>
+          <div class="row">
+            <label class="btn" for="iohFileInput">&#8593; Upload IOH</label>
+            <input type="file" id="iohFileInput" accept=".xlsx,.xls">
+          </div>
+          <span id="iohUploadStatus" style="font-size:12px;color:var(--text-faint);"></span>
+          <div id="iohLastUpload" style="font-size:11px;color:var(--text-faint);"></div>
+        </div>
+        <div class="ioh-upload-divider"></div>
+        <div class="ioh-upload-group">
+          <div class="label">&#128176; Pricing File</div>
+          <div class="row">
+            <label class="btn secondary" for="iohPricingFileInput">&#8593; Update Pricing</label>
+            <input type="file" id="iohPricingFileInput" accept=".xlsx,.xls">
+          </div>
+          <span id="iohPricingStatus" style="font-size:12px;color:var(--text-faint);"></span>
+          <div id="iohPricingLastUpdate" style="font-size:11px;color:var(--text-faint);"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filter bar: stock type toggles + location dropdown -->
+    <div class="ioh-filter-bar" id="iohFilterBar">
+      <span class="ioh-filter-label">Stock&nbsp;Type:</span>
+      <button type="button" class="ioh-filter-btn a1 active" data-type="A1">A1 &mdash; Pickable</button>
+      <button type="button" class="ioh-filter-btn a2 active" data-type="A2">A2 &mdash; Pick Block</button>
+      <button type="button" class="ioh-filter-btn a3 active" data-type="A3">A3 &mdash; Quality Hold</button>
+      <div class="ioh-loc-dropdown-wrap" id="iohLocWrap">
+        <button type="button" class="ioh-loc-dd-btn" id="iohLocDropBtn">
+          &#128205;&nbsp;Location: All &#9660;
+        </button>
+        <div class="ioh-loc-dropdown" id="iohLocDropdown" style="display:none;">
+          <div class="dd-ctrl">
+            <button onclick="iohLocSelectAll(true);event.stopPropagation()">Select All</button>
+            <button onclick="iohLocSelectAll(false);event.stopPropagation()">Clear All</button>
+          </div>
+          <!-- checkboxes injected by JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Snapshot info badge -->
+    <div id="iohSnapInfo" class="ioh-snap-badge" style="display:none;">
+      <span id="iohSnapText"></span>
+    </div>
+
+    <!-- KPI summary row -->
+    <div id="iohKpiRow" class="kpi-grid" style="margin-bottom:20px;"></div>
+
+    <!-- Per-type stock cards -->
+    <div class="ioh-stock-grid" id="iohStockGrid"></div>
+
+    <!-- Location breakdown cards -->
+    <div class="ioh-loc-row" id="iohLocRow"></div>
+
+    <!-- Inventory value trend chart -->
+    <div class="ioh-trend-section">
+      <div class="ioh-trend-head">
+        <div>
+          <h3>Inventory Value Trend</h3>
+          <div class="note">Daily total value by stock type &mdash; each IOH upload is stored as a snapshot</div>
+        </div>
+        <select id="iohTrendFilter" style="background:var(--card);border:1px solid var(--card-border-light);color:var(--text);border-radius:8px;padding:7px 10px;font-size:12px;">
+          <option value="value">Value ($)</option>
+          <option value="qty">Quantity (units)</option>
+        </select>
+      </div>
+      <div style="position:relative;height:220px;"><canvas id="iohTrendChart"></canvas></div>
+      <div id="iohTrendEmpty" style="display:none;text-align:center;padding:50px 20px;color:var(--text-faint);font-size:13px;">
+        <div style="font-size:15px;color:var(--text-dim);margin-bottom:6px;">No trend data yet</div>
+        <div>Upload a second IOH snapshot to begin tracking trends.</div>
+      </div>
+    </div>
+
+    <!-- SKU detail table -->
+    <section class="table-section">
+      <div class="table-section-head">
+        <div>
+          <h2>Stock On-Hand &mdash; SKU Detail</h2>
+          <div class="meta" id="iohTableMeta">&nbsp;</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <input type="text" id="iohSearchBox" placeholder="Search SKU, description or location&hellip;" style="min-width:260px;">
+          <button type="button" class="btn secondary" id="iohExportBtn">&#8595; Export to Excel</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto;">
+        <table id="iohSkuTable">
+          <thead>
+            <tr>
+              <th data-iohkey="sku">SKU</th>
+              <th data-iohkey="desc">Description</th>
+              <th data-iohkey="stockType">Stock Type</th>
+              <th data-iohkey="locCat">Location Type</th>
+              <th data-iohkey="loc">Storage Bin</th>
+              <th data-iohkey="qty" class="sorted">Quantity</th>
+              <th data-iohkey="unitPrice">Unit Price</th>
+              <th data-iohkey="totalValue">Total Value</th>
+            </tr>
+          </thead>
+          <tbody id="iohTableBody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="iohEmptyState">
+        <div class="big">No IOH data yet</div>
+        <div>Upload an IOH file to see current stock status.</div>
+      </div>
+    </section>
+
+  </div><!-- end invSubStockStatus -->
+
+    </section>
 
 </div>
 
@@ -5973,6 +6270,615 @@ function showSiteTab(tab){
 
 window.addEventListener('hashchange', ()=> showSiteTab(currentSiteTab()));
 showSiteTab(currentSiteTab());
+
+/* =====================================================================
+   IOH STOCK STATUS MODULE
+   Firebase nodes: /ioh_snapshots  /ioh_pricing
+   All identifiers prefixed "ioh".
+===================================================================== */
+const iohSnapshotsRef = db.ref('ioh_snapshots');
+const iohPricingRef   = db.ref('ioh_pricing');
+
+/* ---- Location categories ---- */
+const IOH_LOC_CATS = [
+  { key:'pickable',    label:'Pickable Location',           hint:'Begins with 01–92',           hex:'#2fbf71' },
+  { key:'pickable_hv', label:'Pickable High Value',          hint:'Begins with HVP or 93',          hex:'#e8a33d' },
+  { key:'gr_zone',     label:'GR Zone',                      hint:'Contains GRZONE / GR-ZONE',      hex:'#3d9fe8' },
+  { key:'gi_zone',     label:'GI Zone',                      hint:'Contains GIZONE / GI-ZONE',      hex:'#9b59b6' },
+  { key:'ceva_nil',    label:'CEVA NIL',                     hint:'Not In Location — CEVA-NIL', hex:'#e2231a' },
+  { key:'w2w',         label:'Wall-To-Wall Recon',           hint:'CEVA-W2W26',                     hex:'#e67e22' },
+  { key:'iqc',         label:'Inventory Quality Control',    hint:'Begins with IQC',                hex:'#f39c12' },
+  { key:'lenovo',      label:'Lenovo Location',              hint:'ISGFOT or begins with REC',      hex:'#3498db' },
+  { key:'kcp',         label:'KCP',                          hint:'Begins with KCP',                hex:'#1abc9c' },
+  { key:'qc_hold',     label:'Quality Hold Location',        hint:'QC-HOLD',                        hex:'#c0392b' },
+  { key:'rework',      label:'Rework',                       hint:'REWORK',                         hex:'#e74c3c' },
+  { key:'returns',     label:'Return Receipts',              hint:'UT_RECIEPT',                     hex:'#95a5a6' },
+  { key:'other',       label:'Other / Unknown',              hint:'Does not match any pattern',     hex:'#5f7796' },
+];
+const IOH_LOC_MAP = Object.fromEntries(IOH_LOC_CATS.map(c=>[c.key,c]));
+
+function iohCatLoc(loc){
+  if(!loc) return 'other';
+  const u = String(loc).toUpperCase().trim();
+  if(u==='CEVA-NIL')    return 'ceva_nil';
+  if(u==='CEVA-W2W26')  return 'w2w';
+  if(u==='ISGFOT')      return 'lenovo';
+  if(u==='QC-HOLD')     return 'qc_hold';
+  if(u==='REWORK')      return 'rework';
+  if(u==='UT_RECIEPT'||u==='UT_RECEIPT') return 'returns';
+  if(u.includes('GRZONE')||u.includes('GR-ZONE')||(u.startsWith('GR')&&u.endsWith('ZONE'))) return 'gr_zone';
+  if(u.includes('GIZONE')||u.includes('GI-ZONE')||(u.startsWith('GI')&&u.endsWith('ZONE'))) return 'gi_zone';
+  if(u.startsWith('HVP')||u.startsWith('93'))     return 'pickable_hv';
+  if(u.startsWith('IQC')) return 'iqc';
+  if(u.startsWith('KCP')) return 'kcp';
+  if(u.startsWith('REC')) return 'lenovo';
+  const m = u.match(/^(\d{2})/);
+  if(m){ const n=parseInt(m[1]); if(n>=1&&n<=92) return 'pickable'; }
+  return 'other';
+}
+
+/* ---- State ---- */
+let iohAllSnapshots  = {};
+let iohPricingMap    = {};
+let iohActiveTypes   = new Set(['A1','A2','A3']);
+let iohActiveLocs    = new Set(IOH_LOC_CATS.map(c=>c.key));
+let iohCurrentItems  = [];
+let iohSortKey       = 'qty';
+let iohSortAsc       = false;
+let iohTrendChart    = null;
+
+/* ---- Utilities ---- */
+function iohNorm(s){ return String(s||'').replace(/-/g,'').trim().toUpperCase(); }
+
+function iohFmtCurrency(n){
+  if(n===null||n===undefined||isNaN(n)) return '—';
+  return '$'+Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function iohFmtCompact(n){
+  if(!n||isNaN(n)) return '$0';
+  const abs=Math.abs(n);
+  if(abs>=1e9) return '$'+(n/1e9).toFixed(2)+'B';
+  if(abs>=1e6) return '$'+(n/1e6).toFixed(2)+'M';
+  if(abs>=1e3) return '$'+(n/1e3).toFixed(0)+'K';
+  return '$'+n.toFixed(0);
+}
+function iohFmtQty(n){ return (n||0).toLocaleString('en-US'); }
+
+const IOH_TYPE = {
+  A1:{name:'Pickable',     color:'var(--good)', hex:'#2fbf71'},
+  A2:{name:'Pick Block',   color:'var(--warn)', hex:'#e8a33d'},
+  A3:{name:'Quality Hold', color:'var(--bad)',  hex:'#e2231a'}
+};
+
+/* ---- Build flat item list from snapshot + pricing ---- */
+function iohBuildItems(snapItems){
+  return Object.values(snapItems||{}).map(item=>{
+    const norm     = item.skuNorm || iohNorm(item.sku);
+    const p        = iohPricingMap[norm];
+    const unitPrice  = p ? (p.price||null) : null;
+    const totalValue = (unitPrice!==null && item.qty) ? item.qty * unitPrice : null;
+    return {
+      sku: item.sku, skuNorm: norm,
+      desc: item.desc || (p?p.desc:''),
+      stockType: item.stockType,
+      loc: item.loc || '',
+      locCat: item.loc ? iohCatLoc(item.loc) : (item.locCat || 'other'),
+      qty: item.qty||0,
+      unitPrice, totalValue
+    };
+  });
+}
+
+function iohGetVisible(){
+  return iohCurrentItems.filter(i=>
+    iohActiveTypes.has(i.stockType) && iohActiveLocs.has(i.locCat)
+  );
+}
+
+/* ---- Pricing upload ---- */
+document.getElementById('iohPricingFileInput').addEventListener('change', async function(e){
+  const f=e.target.files[0]; if(!f) return;
+  const st=document.getElementById('iohPricingStatus');
+  st.textContent='Reading…';
+  try{
+    const buf=await f.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array'});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+    const pmap={};
+    let count=0;
+    for(const row of rows){
+      const sku  =row['Item Number']||row['Material']||row['material']||row['SKU']||row['sku']||'';
+      const price=parseFloat(row['STD Price']||row['Standard price']||row['Price']||row['Unit Price']||0)||0;
+      const desc =row['Description']||row['Material description']||'';
+      const norm =iohNorm(sku);
+      if(!norm) continue;
+      pmap[norm]={price,desc:String(desc).trim()};
+      count++;
+    }
+    if(!count) throw new Error('No rows found. Verify the file has Material and Standard price columns.');
+    st.textContent='Saving '+count.toLocaleString()+' prices…';
+    await iohPricingRef.set({updatedAt:Date.now(),count,data:pmap});
+    st.textContent='✓ '+count.toLocaleString()+' prices saved';
+    document.getElementById('iohUploadPanel').style.display='none';
+    document.getElementById('iohUploadBtn').classList.remove('open');
+  }catch(err){
+    console.error('[IOH pricing]',err);
+    st.textContent='✗ '+err.message;
+  }
+  e.target.value='';
+});
+
+/* ---- IOH daily upload ---- */
+document.getElementById('iohFileInput').addEventListener('change', async function(e){
+  const f=e.target.files[0]; if(!f) return;
+  const st=document.getElementById('iohUploadStatus');
+  st.textContent='Reading…';
+  try{
+    const buf=await f.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array'});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+    if(!rows.length) throw new Error('File appears to be empty.');
+
+    const h=Object.keys(rows[0]||{});
+    const find=(...pats)=>h.find(k=>pats.some(p=>p.test(k.trim())))||pats[0].source;
+    const skuCol  = find(/^product$/i);
+    const qtyCol  = find(/^quantity$/i);
+    const typeCol = find(/^stock[\s_]*type$/i);
+    const descCol = find(/^product[\s_]*short[\s_]*desc/i);
+    const locCol  = find(/^storage[\s_]*bin$/i, /^bin$/i, /^location$/i);
+
+    const agg={};
+    for(const row of rows){
+      const rawSku   =String(row[skuCol]||'').trim();
+      const stockType=String(row[typeCol]||'').trim().toUpperCase();
+      const qty      =parseFloat(row[qtyCol])||0;
+      const desc     =String(row[descCol]||'').trim();
+      const rawLoc   =String(row[locCol]||'').trim();
+      const locCat   =iohCatLoc(rawLoc);
+      if(!rawSku||!stockType) continue;
+      const norm=iohNorm(rawSku);
+      const key=norm+'||'+stockType+'||'+locCat;
+      if(!agg[key]) agg[key]={sku:rawSku,skuNorm:norm,desc,stockType,loc:rawLoc,locCat,qty:0};
+      agg[key].qty+=qty;
+    }
+
+    const itemCount=Object.keys(agg).length;
+    if(!itemCount) throw new Error('No valid rows. Expected columns: Product, Stock Type, Quantity.');
+
+    let dateKey=new Date().toISOString().slice(0,10);
+    const dm=f.name.match(/(\d{1,2})[-_](\d{1,2})/);
+    if(dm){
+      const m=parseInt(dm[1]),d=parseInt(dm[2]);
+      if(m>=1&&m<=12&&d>=1&&d<=31){
+        const y=new Date().getFullYear();
+        dateKey=y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+      }
+    }
+
+    st.textContent='Saving '+itemCount.toLocaleString()+' rows for '+dateKey+'…';
+    const snapKey=dateKey.replace(/-/g,'_');
+    await iohSnapshotsRef.child(snapKey).set({
+      uploadedAt:Date.now(), date:dateKey, filename:f.name, items:agg
+    });
+    st.textContent='✓ '+itemCount.toLocaleString()+' rows saved for '+dateKey;
+    document.getElementById('iohUploadPanel').style.display='none';
+    document.getElementById('iohUploadBtn').classList.remove('open');
+  }catch(err){
+    console.error('[IOH upload]',err);
+    st.textContent='✗ '+err.message;
+  }
+  e.target.value='';
+});
+
+/* ---- Firebase listeners ---- */
+iohSnapshotsRef.on('value', snap=>{
+  iohAllSnapshots=snap.val()||{};
+  const keys=Object.keys(iohAllSnapshots).sort();
+  if(keys.length){
+    const latest=iohAllSnapshots[keys[keys.length-1]];
+    iohCurrentItems=iohBuildItems(latest.items);
+    const snapInfo=document.getElementById('iohSnapInfo');
+    const snapText=document.getElementById('iohSnapText');
+    snapInfo.style.display='';
+    snapText.innerHTML='Snapshot: <b>'+latest.date+'</b> &nbsp;&#183;&nbsp; <b>'+keys.length+'</b> day'+(keys.length!==1?'s':'')+' on file &nbsp;&#183;&nbsp; Filename: <b>'+(latest.filename||'—')+'</b>';
+    document.getElementById('iohLastUpload').textContent=
+      'IOH last uploaded: '+latest.date+' ('+keys.length+' snapshot'+(keys.length!==1?'s':'')+' stored)';
+  } else {
+    iohCurrentItems=[];
+    document.getElementById('iohSnapInfo').style.display='none';
+    document.getElementById('iohLastUpload').textContent='';
+  }
+  iohRenderAll();
+});
+
+iohPricingRef.on('value', snap=>{
+  const val=snap.val();
+  if(val&&val.data){
+    iohPricingMap=val.data;
+    document.getElementById('iohPricingStatus').textContent=
+      (val.count||Object.keys(val.data).length).toLocaleString()+' prices on file';
+    document.getElementById('iohPricingLastUpdate').textContent=
+      'Last updated: '+(val.updatedAt?new Date(val.updatedAt).toLocaleDateString():'—');
+    if(iohCurrentItems.length){
+      const keys=Object.keys(iohAllSnapshots).sort();
+      if(keys.length){
+        const latest=iohAllSnapshots[keys[keys.length-1]];
+        iohCurrentItems=iohBuildItems(latest.items);
+      }
+    }
+    iohRenderAll();
+  }
+});
+
+/* ---- Main render ---- */
+function iohRenderAll(){
+  const visible=iohGetVisible();
+  iohRenderKpiRow(visible);
+  iohRenderStockCards(visible);
+  iohRenderLocCards();
+  iohRenderTable(visible);
+  iohRenderTrend();
+}
+
+/* KPI row */
+function iohRenderKpiRow(items){
+  const el=document.getElementById('iohKpiRow');
+  if(!items.length){ el.innerHTML=''; return; }
+  const uniqSkus  =new Set(items.map(i=>i.skuNorm)).size;
+  const totalQty  =items.reduce((s,i)=>s+i.qty,0);
+  const pricedI   =items.filter(i=>i.totalValue!==null);
+  const totalVal  =pricedI.reduce((s,i)=>s+i.totalValue,0);
+  const pricedSkus=new Set(pricedI.map(i=>i.skuNorm)).size;
+  const unpricedCt=uniqSkus-pricedSkus;
+  const clickAttr =unpricedCt>0?' class="ioh-kpi-clickable" onclick="iohShowUnpricedModal()" title="Click to view unpriced SKUs"':'';
+  el.innerHTML=`
+    <div class="kpi" style="--kpi-accent:var(--info)">
+      <div class="label">Unique SKUs</div>
+      <div class="value">${uniqSkus.toLocaleString()}</div>
+      <div class="sub">${iohActiveTypes.size===3?'All types':([...iohActiveTypes].join(', '))+' only'}</div>
+    </div>
+    <div class="kpi" style="--kpi-accent:var(--info)">
+      <div class="label">Total Units</div>
+      <div class="value">${iohFmtQty(totalQty)}</div>
+      <div class="sub">Across selected filters</div>
+    </div>
+    <div class="kpi" style="--kpi-accent:var(--good)">
+      <div class="label">Total Value</div>
+      <div class="value" style="font-size:14px;">${iohFmtCurrency(totalVal)}</div>
+      <div class="sub">${pricedSkus.toLocaleString()} of ${uniqSkus.toLocaleString()} SKUs priced</div>
+    </div>
+    <div class="kpi"${clickAttr} style="--kpi-accent:${unpricedCt>0?'var(--warn)':'var(--good)'}">
+      <div class="label">Unpriced SKUs${unpricedCt>0?' &#9656;':''}</div>
+      <div class="value" style="color:${unpricedCt>0?'var(--warn)':'var(--good)'}">${unpricedCt.toLocaleString()}</div>
+      <div class="sub">${unpricedCt>0?'Click to view list':'All SKUs priced'}</div>
+    </div>`;
+}
+
+/* Per-type stock cards */
+function iohRenderStockCards(items){
+  const grid=document.getElementById('iohStockGrid');
+  if(!items.length){ grid.innerHTML=''; return; }
+  const types=[...iohActiveTypes].filter(t=>IOH_TYPE[t]);
+  grid.style.gridTemplateColumns=types.length===1?'1fr':types.length===2?'repeat(2,1fr)':'repeat(3,1fr)';
+  grid.innerHTML=types.map(type=>{
+    const cfg=IOH_TYPE[type]||{name:type,color:'var(--info)',hex:'#3d9fe8'};
+    const ti=items.filter(i=>i.stockType===type);
+    const skus=new Set(ti.map(i=>i.skuNorm)).size;
+    const qty=ti.reduce((s,i)=>s+i.qty,0);
+    const pi=ti.filter(i=>i.totalValue!==null);
+    const val=pi.reduce((s,i)=>s+i.totalValue,0);
+    return `<div class="ioh-stock-card" style="--type-color:${cfg.color}">
+      <div class="type-badge">${type}</div>
+      <div class="type-name">${cfg.name}</div>
+      <div class="stat-row">
+        <div class="stat"><div class="stat-label">SKUs</div><div class="stat-value">${skus.toLocaleString()}</div></div>
+        <div class="stat"><div class="stat-label">Units</div><div class="stat-value">${iohFmtQty(qty)}</div></div>
+        <div class="stat"><div class="stat-label">Value</div><div class="stat-value sm" style="font-size:13px;">${iohFmtCurrency(val)}</div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* Location breakdown cards */
+function iohRenderLocCards(){
+  const row=document.getElementById('iohLocRow');
+  if(!iohCurrentItems.length){ row.innerHTML=''; return; }
+  // Filtered by active stock types only (location cards show all locs)
+  const typeFiltered=iohCurrentItems.filter(i=>iohActiveTypes.has(i.stockType));
+  row.innerHTML=IOH_LOC_CATS.map(cat=>{
+    const items=typeFiltered.filter(i=>i.locCat===cat.key);
+    const qty  =items.reduce((s,i)=>s+i.qty,0);
+    const val  =items.filter(i=>i.totalValue!==null).reduce((s,i)=>s+i.totalValue,0);
+    const dimmed=!iohActiveLocs.has(cat.key);
+    return `<div class="ioh-loc-card${dimmed?' dimmed':''}" style="--lc:${cat.hex}">
+      <div class="lc-name">${cat.label}</div>
+      <div class="lc-val" style="color:${cat.hex}">${iohFmtCurrency(val)}</div>
+      <div class="lc-qty">${iohFmtQty(qty)} units</div>
+    </div>`;
+  }).join('');
+}
+
+/* Table */
+function iohRenderTable(items){
+  const tbody=document.getElementById('iohTableBody');
+  const empty=document.getElementById('iohEmptyState');
+  const meta =document.getElementById('iohTableMeta');
+  if(!items.length){ tbody.innerHTML=''; empty.style.display=''; meta.textContent=''; return; }
+  empty.style.display='none';
+  const search=(document.getElementById('iohSearchBox').value||'').toLowerCase().trim();
+  let rows=items;
+  if(search){
+    rows=items.filter(i=>
+      (i.sku||'').toLowerCase().includes(search)||
+      (i.desc||'').toLowerCase().includes(search)||
+      (i.stockType||'').toLowerCase().includes(search)||
+      (IOH_LOC_MAP[i.locCat]||{}).label.toLowerCase().includes(search)
+    );
+  }
+  rows=[...rows].sort((a,b)=>{
+    let va=a[iohSortKey], vb=b[iohSortKey];
+    if(va===null||va===undefined) va=iohSortAsc?Infinity:-Infinity;
+    if(vb===null||vb===undefined) vb=iohSortAsc?Infinity:-Infinity;
+    if(typeof va==='string') return iohSortAsc?va.localeCompare(vb):vb.localeCompare(va);
+    return iohSortAsc?va-vb:vb-va;
+  });
+  meta.textContent=rows.length.toLocaleString()+' row'+(rows.length!==1?'s':'')+
+    (rows.length!==items.length?' (filtered from '+items.length.toLocaleString()+')':'');
+  tbody.innerHTML=rows.map(i=>{
+    const cfg   =IOH_TYPE[i.stockType]||{color:'var(--info)',hex:'#3d9fe8',name:i.stockType};
+    const lcCat =IOH_LOC_MAP[i.locCat]||{label:i.locCat,hex:'#5f7796'};
+    const noPrice=i.unitPrice===null;
+    return `<tr class="pull-row">
+      <td style="font-weight:700;">${i.sku}${noPrice?` <span class="badge" style="background:rgba(232,163,61,0.15);color:var(--warn);">No Price</span>`:''}
+      </td>
+      <td style="max-width:260px;white-space:normal;line-height:1.4;">${i.desc||'—'}</td>
+      <td><span class="badge" style="background:${cfg.hex}22;color:${cfg.hex};">${i.stockType} — ${cfg.name}</span></td>
+      <td><span class="badge" style="background:${lcCat.hex}22;color:${lcCat.hex};font-size:11px;">${lcCat.label}</span></td>
+      <td style="font-family:monospace;font-size:12px;">${i.loc||'—'}</td>
+      <td>${iohFmtQty(i.qty)}</td>
+      <td>${noPrice?'—':iohFmtCurrency(i.unitPrice)}</td>
+      <td style="font-weight:700;">${noPrice?'—':iohFmtCurrency(i.totalValue)}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* Trend chart */
+function iohRenderTrend(){
+  const keys  =Object.keys(iohAllSnapshots).sort();
+  const canvas=document.getElementById('iohTrendChart');
+  const emptyEl=document.getElementById('iohTrendEmpty');
+  const mode=(document.getElementById('iohTrendFilter')||{value:'value'}).value;
+  if(keys.length<2){
+    canvas.style.display='none'; emptyEl.style.display='';
+    if(iohTrendChart){ iohTrendChart.destroy(); iohTrendChart=null; }
+    return;
+  }
+  canvas.style.display=''; emptyEl.style.display='none';
+  const labels=[],a1=[],a2=[],a3=[];
+  for(const k of keys){
+    const snap=iohAllSnapshots[k];
+    const items=iohBuildItems(snap.items);
+    labels.push(snap.date||k);
+    for(const [type,arr] of [['A1',a1],['A2',a2],['A3',a3]]){
+      const ti=items.filter(i=>i.stockType===type);
+      arr.push(mode==='value'
+        ? ti.filter(i=>i.totalValue!==null).reduce((s,i)=>s+i.totalValue,0)/1e6
+        : ti.reduce((s,i)=>s+i.qty,0));
+    }
+  }
+  if(iohTrendChart) iohTrendChart.destroy();
+  iohTrendChart=new Chart(canvas,{
+    type:'line',
+    data:{labels,datasets:[
+      {label:'A1 Pickable',     data:a1,borderColor:'#2fbf71',backgroundColor:'rgba(47,191,113,0.12)',fill:true,tension:0.3,pointRadius:4,pointHoverRadius:6},
+      {label:'A2 Pick Block',   data:a2,borderColor:'#e8a33d',backgroundColor:'rgba(232,163,61,0.12)',fill:true,tension:0.3,pointRadius:4,pointHoverRadius:6},
+      {label:'A3 Quality Hold', data:a3,borderColor:'#e2231a',backgroundColor:'rgba(226,35,26,0.12)', fill:true,tension:0.3,pointRadius:4,pointHoverRadius:6}
+    ]},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{labels:{color:'#93a8c4',font:{size:11}}},
+        tooltip:{callbacks:{label:ctx=>' '+ctx.dataset.label+': '+(mode==='value'?('$'+ctx.parsed.y.toFixed(2)+'M'):ctx.parsed.y.toLocaleString()+' units')}}
+      },
+      scales:{
+        x:{ticks:{color:'#5f7796',font:{size:10},maxRotation:45},grid:{color:'rgba(255,255,255,0.04)'}},
+        y:{ticks:{color:'#5f7796',font:{size:10},callback:v=>mode==='value'?'$'+v.toFixed(1)+'M':v.toLocaleString()},grid:{color:'rgba(255,255,255,0.04)'}}
+      }
+    }
+  });
+}
+
+/* ---- Upload popup ---- */
+(function(){
+  const btn=document.getElementById('iohUploadBtn');
+  const panel=document.getElementById('iohUploadPanel');
+  btn.addEventListener('click', e=>{
+    e.stopPropagation();
+    const open=panel.style.display!=='none';
+    panel.style.display=open?'none':'';
+    btn.classList.toggle('open',!open);
+  });
+  document.addEventListener('click', e=>{
+    if(!document.getElementById('iohUploadWrap').contains(e.target)){
+      panel.style.display='none';
+      btn.classList.remove('open');
+    }
+  });
+})();
+
+/* ---- Build location dropdown ---- */
+(function(){
+  const dd=document.getElementById('iohLocDropdown');
+  for(const cat of IOH_LOC_CATS){
+    const lbl=document.createElement('label');
+    lbl.className='ioh-loc-dd-item';
+    lbl.innerHTML=`<input type="checkbox" value="${cat.key}" checked>
+      <div><div class="dd-label" style="color:${cat.hex}">${cat.label}</div><div class="dd-hint">${cat.hint}</div></div>`;
+    lbl.querySelector('input').addEventListener('change', iohLocFilterChange);
+    dd.appendChild(lbl);
+  }
+  // Dropdown toggle
+  const dropBtn=document.getElementById('iohLocDropBtn');
+  dropBtn.addEventListener('click', e=>{
+    e.stopPropagation();
+    const open=dd.style.display!=='none';
+    dd.style.display=open?'none':'';
+    dropBtn.classList.toggle('open',!open);
+  });
+  document.addEventListener('click', e=>{
+    if(!document.getElementById('iohLocWrap').contains(e.target)){
+      dd.style.display='none';
+      dropBtn.classList.remove('open');
+    }
+  });
+})();
+
+function iohLocFilterChange(){
+  iohActiveLocs=new Set(
+    [...document.querySelectorAll('#iohLocDropdown input[type=checkbox]:checked')].map(c=>c.value)
+  );
+  iohUpdateLocBtn();
+  iohRenderAll();
+}
+
+function iohLocSelectAll(state){
+  document.querySelectorAll('#iohLocDropdown input[type=checkbox]').forEach(c=>c.checked=state);
+  iohLocFilterChange();
+}
+
+function iohUpdateLocBtn(){
+  const total=IOH_LOC_CATS.length;
+  const sel=iohActiveLocs.size;
+  const btn=document.getElementById('iohLocDropBtn');
+  btn.textContent='📍 Location: '+(sel===total?'All':sel===0?'None':sel+' of '+total)+' ▾';
+}
+
+/* ---- Stock type multi-select ---- */
+document.getElementById('iohFilterBar').addEventListener('click', e=>{
+  const btn=e.target.closest('.ioh-filter-btn[data-type]');
+  if(!btn) return;
+  const type=btn.dataset.type;
+  if(iohActiveTypes.has(type)){
+    if(iohActiveTypes.size===1) return; // keep at least one selected
+    iohActiveTypes.delete(type);
+    btn.classList.remove('active');
+  } else {
+    iohActiveTypes.add(type);
+    btn.classList.add('active');
+  }
+  iohRenderAll();
+});
+
+/* ---- Search ---- */
+document.getElementById('iohSearchBox').addEventListener('input',()=>iohRenderTable(iohGetVisible()));
+
+/* ---- Trend mode toggle ---- */
+document.getElementById('iohTrendFilter').addEventListener('change',iohRenderTrend);
+
+/* ---- Table header sort ---- */
+document.querySelectorAll('#iohSkuTable thead th[data-iohkey]').forEach(th=>{
+  th.style.cursor='pointer';
+  th.addEventListener('click',()=>{
+    const k=th.dataset.iohkey;
+    if(iohSortKey===k) iohSortAsc=!iohSortAsc;
+    else{ iohSortKey=k; iohSortAsc=(k==='sku'||k==='desc'||k==='stockType'||k==='locCat'); }
+    document.querySelectorAll('#iohSkuTable thead th').forEach(h=>h.classList.remove('sorted','sorted-asc'));
+    th.classList.add(iohSortAsc?'sorted-asc':'sorted');
+    iohRenderTable(iohGetVisible());
+  });
+});
+
+/* ---- Export table to Excel ---- */
+document.getElementById('iohExportBtn').addEventListener('click',()=>{
+  let rows=iohGetVisible();
+  const s=(document.getElementById('iohSearchBox').value||'').toLowerCase().trim();
+  if(s) rows=rows.filter(i=>(i.sku||'').toLowerCase().includes(s)||(i.desc||'').toLowerCase().includes(s));
+  if(!rows.length){ alert('No data to export.'); return; }
+  const data=rows.map(i=>({
+    SKU: i.sku,
+    Description: i.desc||'',
+    'Stock Type': i.stockType,
+    'Location Type': (IOH_LOC_MAP[i.locCat]||{label:i.locCat}).label,
+    Quantity: i.qty,
+    'Unit Price ($)': i.unitPrice??'',
+    'Total Value ($)': i.totalValue??''
+  }));
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data),'Stock Status');
+  XLSX.writeFile(wb,'IOH_Stock_Status_'+new Date().toISOString().slice(0,10)+'.xlsx');
+});
+
+/* ---- Unpriced SKU modal ---- */
+function iohShowUnpricedModal(){
+  const byNorm={};
+  for(const i of iohCurrentItems){
+    if(i.unitPrice!==null) continue;
+    if(!byNorm[i.skuNorm]) byNorm[i.skuNorm]={sku:i.sku,desc:i.desc,types:[],qty:0};
+    byNorm[i.skuNorm].types.push(i.stockType);
+    byNorm[i.skuNorm].qty+=i.qty;
+  }
+  const rows=Object.values(byNorm).sort((a,b)=>b.qty-a.qty);
+  if(!rows.length) return;
+  const overlay=document.getElementById('kpiModalOverlay');
+  overlay.querySelector('.modal-head h3').textContent=
+    rows.length+' Unpriced SKU'+(rows.length!==1?'s':'')+' — Current Snapshot';
+  overlay.querySelector('.modal-body').innerHTML=`
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+      <button class="btn" onclick="iohExportUnpriced()">&#8595; Export List</button>
+    </div>
+    <table>
+      <thead><tr>
+        <th>SKU</th><th>Description</th><th>Stock Types</th><th style="text-align:right;">Total Qty</th>
+      </tr></thead>
+      <tbody>${rows.map(r=>`<tr>
+        <td style="font-weight:700;">${r.sku}</td>
+        <td style="max-width:280px;white-space:normal;">${r.desc||'—'}</td>
+        <td>${[...new Set(r.types)].join(', ')}</td>
+        <td style="text-align:right;">${iohFmtQty(r.qty)}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+  overlay.style.display='flex';
+}
+
+function iohExportUnpriced(){
+  const byNorm={};
+  for(const i of iohCurrentItems){
+    if(i.unitPrice!==null) continue;
+    if(!byNorm[i.skuNorm]) byNorm[i.skuNorm]={sku:i.sku,desc:i.desc,types:[],qty:0};
+    byNorm[i.skuNorm].types.push(i.stockType);
+    byNorm[i.skuNorm].qty+=i.qty;
+  }
+  const rows=Object.values(byNorm).sort((a,b)=>b.qty-a.qty).map(r=>({
+    SKU: r.sku,
+    Description: r.desc||'',
+    'Stock Types': [...new Set(r.types)].join(', '),
+    'Total Quantity': r.qty
+  }));
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),'Unpriced SKUs');
+  XLSX.writeFile(wb,'Unpriced_SKUs_'+new Date().toISOString().slice(0,10)+'.xlsx');
+}
+
+/* ---- Inventory sub-tab switching ---- */
+function showInvSubTab(tab){
+  document.getElementById('invSubCycleCounts').style.display=tab==='cycle'?'':'none';
+  document.getElementById('invSubStockStatus').style.display=tab==='stock'?'':'none';
+  document.querySelectorAll('.inv-subnav-btn').forEach(b=>
+    b.classList.toggle('active',b.dataset.subtab===tab));
+  if(tab==='stock'){
+    requestAnimationFrame(()=>{ if(iohTrendChart) iohTrendChart.resize(); });
+  }
+}
+
+/* Resize IOH chart when Inventory site-tab is activated */
+window.addEventListener('hashchange', ()=>{
+  if((location.hash||'').replace('#','').toLowerCase()==='inventory'){
+    requestAnimationFrame(()=>{ if(iohTrendChart) try{ iohTrendChart.resize(); }catch(e){} });
+  }
+});
+
 </script>
 </body>
 </html>

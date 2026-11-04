@@ -4267,7 +4267,13 @@ window.addEventListener('online', function(){ flushPrintQueue(); });
       return new TextDecoder('utf-8').decode(bytes);
     }
     var frame = document.getElementById('qualityCheckFrame');
-    if(frame) frame.srcdoc = b64ToUtf8(QC_SRC_B64);
+        if(frame){
+      var qcSrc = b64ToUtf8(QC_SRC_B64).replace(
+        "!e.target.closest('.notfound-box')",
+        "!e.target.closest('.notfound-box') && !e.target.closest('.modal-overlay') && !e.target.closest('input, select, textarea, a')"
+      );
+      frame.srcdoc = qcSrc;
+    }
   })();
   </script>
 </div>

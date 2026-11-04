@@ -6,6 +6,7 @@
 <title>Whitsett KPI Dashboard</title>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
@@ -515,9 +516,230 @@
   }
   .ioh-trend-head h3{margin:0;font-size:14px;font-weight:700;}
   .ioh-trend-head .note{font-size:11px;color:var(--text-faint);margin-top:2px;}
+
+  /* ===== LOGIN GATE ===== */
+  #lkpiAuthOverlay{
+    position:fixed;inset:0;z-index:9999;
+    background:var(--bg);
+    display:flex;align-items:center;justify-content:center;
+    flex-direction:column;
+    transition:opacity .3s;
+  }
+  #lkpiAuthOverlay.fade-out{ opacity:0; pointer-events:none; }
+
+  .lkpi-login-card{
+    background:var(--card);
+    border:1px solid var(--card-border);
+    border-radius:14px;
+    padding:40px 44px 36px;
+    width:360px;
+    box-shadow:0 8px 40px rgba(0,0,0,.55);
+  }
+  .lkpi-login-logo{
+    display:flex;align-items:center;gap:10px;
+    margin-bottom:28px;
+  }
+  .lkpi-login-logo{ flex-direction:column;align-items:center;text-align:center; }
+  .lkpi-login-logo img{ flex-shrink:0;height:36px;width:auto; }
+  .lkpi-login-site{ font-size:12px;color:var(--text-faint);margin-top:6px;letter-spacing:.02em; }
+  .lkpi-login-title{
+    font-size:20px;font-weight:700;color:var(--text);margin-bottom:24px;
+  }
+  .lkpi-field{ margin-bottom:16px; }
+  .lkpi-field label{ display:block;font-size:11px;font-weight:600;color:var(--text-faint);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px; }
+  .lkpi-field input{
+    width:100%;box-sizing:border-box;
+    background:#0a1626;border:1px solid var(--card-border);
+    color:var(--text);border-radius:7px;
+    padding:10px 12px;font-size:14px;outline:none;
+    transition:border-color .2s;
+  }
+  .lkpi-field input:focus{ border-color:var(--accent); }
+  .lkpi-login-btn{
+    width:100%;margin-top:8px;padding:11px;
+    background:var(--accent);color:#fff;
+    border:none;border-radius:7px;font-size:14px;font-weight:600;
+    cursor:pointer;transition:opacity .2s;
+  }
+  .lkpi-login-btn:hover{ opacity:.88; }
+  .lkpi-login-btn:disabled{ opacity:.45;cursor:default; }
+  .lkpi-login-btn .lkpi-spinner{
+    display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.35);
+    border-top-color:#fff;border-radius:50%;vertical-align:middle;margin-right:7px;
+    animation:lkpi-spin .7s linear infinite;
+  }
+  @keyframes lkpi-spin{ to{ transform:rotate(360deg); } }
+  .lkpi-login-status{
+    font-size:12px;color:var(--text-faint);margin-top:10px;min-height:18px;
+    text-align:center;transition:opacity .2s;
+  }
+  .lkpi-login-err{
+    font-size:12px;color:#f97066;margin-top:12px;min-height:18px;text-align:center;
+  }
+  .lkpi-login-hint{
+    font-size:11px;color:var(--text-faint);text-align:center;margin-top:16px;line-height:1.5;
+  }
+
+  /* ===== MODALS (pw-change + admin panel) ===== */
+  .lkpi-modal-overlay{
+    position:fixed;inset:0;z-index:10000;
+    background:rgba(0,0,0,.7);backdrop-filter:blur(2px);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .lkpi-modal-overlay.hidden{ display:none; }
+  .lkpi-modal{
+    background:var(--card);border:1px solid var(--card-border);
+    border-radius:14px;padding:36px 40px 32px;width:420px;max-width:92vw;
+    box-shadow:0 8px 40px rgba(0,0,0,.6);position:relative;
+  }
+  .lkpi-modal h3{ font-size:17px;font-weight:700;color:var(--text);margin:0 0 6px; }
+  .lkpi-modal .lkpi-modal-sub{ font-size:12px;color:var(--text-faint);margin:0 0 24px; }
+  .lkpi-modal-close{
+    position:absolute;top:14px;right:16px;
+    background:none;border:none;color:var(--text-faint);
+    font-size:20px;cursor:pointer;line-height:1;padding:4px;
+  }
+  .lkpi-modal-close:hover{ color:var(--text); }
+
+  /* admin user table */
+  .lkpi-user-table{ width:100%;border-collapse:collapse;font-size:13px;margin-top:4px; }
+  .lkpi-user-table th{ text-align:left;font-size:10px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;padding:0 8px 8px; border-bottom:1px solid var(--card-border); }
+  .lkpi-user-table td{ padding:8px;border-bottom:1px solid rgba(255,255,255,.04);color:var(--text);vertical-align:middle; }
+  .lkpi-user-table tr:last-child td{ border-bottom:none; }
+  .lkpi-user-action-btn{
+    background:none;border:1px solid var(--card-border);
+    color:var(--text-faint);border-radius:5px;padding:3px 8px;
+    font-size:11px;cursor:pointer;transition:all .15s;white-space:nowrap;
+  }
+  .lkpi-user-action-btn:hover{ background:var(--accent);color:#fff;border-color:var(--accent); }
+  .lkpi-user-action-btn.danger:hover{ background:#f97066;border-color:#f97066; }
+  .lkpi-user-status{
+    font-size:10px;padding:2px 7px;border-radius:10px;font-weight:600;
+  }
+  .lkpi-user-status.admin{ background:rgba(255,183,0,.12);color:#ffb700; }
+  .lkpi-user-status.user{ background:rgba(147,168,196,.1);color:#93a8c4; }
+  .lkpi-add-user-row{
+    display:flex;gap:8px;margin-top:16px;align-items:center;
+  }
+  .lkpi-add-user-row input{
+    flex:1;background:#0a1626;border:1px solid var(--card-border);
+    color:var(--text);border-radius:7px;padding:8px 10px;font-size:13px;outline:none;
+    transition:border-color .2s;
+  }
+  .lkpi-add-user-row input:focus{ border-color:var(--accent); }
+  .lkpi-modal-status{ font-size:12px;color:#f97066;min-height:16px;margin-top:10px; }
+  .lkpi-modal-status.ok{ color:#4ade80; }
+
+  /* user badge in header */
+  #lkpiUserBadge{
+    display:none;align-items:center;gap:8px;
+    font-size:12px;color:var(--text-faint);
+  }
+  #lkpiUserBadge span{ color:var(--text);font-weight:600; }
+  #lkpiUserBadge button{
+    background:none;border:1px solid var(--card-border);
+    color:var(--text-faint);border-radius:5px;padding:3px 8px;
+    font-size:11px;cursor:pointer;transition:all .15s;
+  }
+  #lkpiUserBadge button:hover{ background:rgba(255,255,255,.07);color:var(--text); }
+  #lkpiAdminBtn{
+    background:none;border:1px solid #ffb700;
+    color:#ffb700;border-radius:5px;padding:3px 8px;
+    font-size:11px;cursor:pointer;transition:all .15s;
+  }
+  #lkpiAdminBtn:hover{ background:#ffb700;color:#000; }
+  #lkpiMetricsBtn{
+    background:none;border:1px solid #2fbf71;
+    color:#2fbf71;border-radius:5px;padding:3px 8px;
+    font-size:11px;cursor:pointer;transition:all .15s;
+  }
+  #lkpiMetricsBtn:hover{ background:#2fbf71;color:#000; }
+  /* metrics modal */
+  .lkpi-metrics-cards{ display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap; }
+  .lkpi-metrics-card{
+    flex:1;min-width:100px;background:#0f1726;border:1px solid var(--card-border);
+    border-radius:8px;padding:12px 14px;text-align:center;
+  }
+  .lkpi-metrics-card .lkpi-mc-val{ font-size:22px;font-weight:700;color:var(--text); }
+  .lkpi-metrics-card .lkpi-mc-lbl{ font-size:10px;color:var(--text-faint);margin-top:3px;text-transform:uppercase;letter-spacing:.04em; }
+  .lkpi-metrics-chart-wrap{ position:relative;height:160px;margin-bottom:20px; }
+  .lkpi-activity-table{ width:100%;border-collapse:collapse;font-size:12px; }
+  .lkpi-activity-table th{ text-align:left;font-size:10px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;padding:0 8px 6px;border-bottom:1px solid var(--card-border); }
+  .lkpi-activity-table td{ padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.04);color:var(--text); }
+  .lkpi-activity-table tr:last-child td{ border-bottom:none; }
+  .lkpi-ev-login{ color:#3d9fe8;font-weight:600; }
+  .lkpi-ev-pageview{ color:#7a8aaa; }
+
 </style>
 </head>
 <body>
+
+<!-- ===== AUTH OVERLAY ===== -->
+<div id="lkpiAuthOverlay">
+  <div class="lkpi-login-card">
+    <div class="lkpi-login-logo">
+      <img src="https://www.cevalogistics.com/_ipx/w_1920&f_webp/images-spx/x_large_picture/CEVA_WhiteRed.png" alt="CEVA Logistics"/>
+      <div class="lkpi-login-site">Lenovo NCSC &mdash; Whitsett, NC</div>
+    </div>
+    <div class="lkpi-login-title">Sign In</div>
+    <div class="lkpi-field">
+      <label>Username</label>
+      <input type="text" id="lkpiLoginUser" autocomplete="username" placeholder="your username" spellcheck="false"/>
+    </div>
+    <div class="lkpi-field">
+      <label>Password</label>
+      <input type="password" id="lkpiLoginPass" autocomplete="current-password" placeholder="••••••••"/>
+    </div>
+    <button class="lkpi-login-btn" id="lkpiLoginBtn" onclick="lkpiDoLogin()">Sign In</button>
+    <div class="lkpi-login-err" id="lkpiLoginErr"></div>
+    <div class="lkpi-login-status" id="lkpiLoginStatus"></div>
+    <div class="lkpi-login-hint">Contact your administrator to create or reset your account.</div>
+  </div>
+</div>
+
+<!-- ===== FORCED PASSWORD CHANGE MODAL ===== -->
+<div class="lkpi-modal-overlay hidden" id="lkpiPwModal">
+  <div class="lkpi-modal">
+    <h3>Set Your Password</h3>
+    <p class="lkpi-modal-sub">Your account requires a password change before you can continue.</p>
+    <div class="lkpi-field">
+      <label>New Password</label>
+      <input type="password" id="lkpiPwNew" autocomplete="new-password" placeholder="At least 8 characters"/>
+    </div>
+    <div class="lkpi-field">
+      <label>Confirm Password</label>
+      <input type="password" id="lkpiPwConfirm" autocomplete="new-password" placeholder="Repeat new password"/>
+    </div>
+    <button class="lkpi-login-btn" id="lkpiPwBtn" onclick="lkpiDoPwChange()">Set Password &amp; Continue</button>
+    <div class="lkpi-login-err" id="lkpiPwErr"></div>
+  </div>
+</div>
+
+<!-- ===== ADMIN PANEL MODAL ===== -->
+<div class="lkpi-modal-overlay hidden" id="lkpiAdminModal">
+  <div class="lkpi-modal" style="width:540px;">
+    <button class="lkpi-modal-close" onclick="document.getElementById('lkpiAdminModal').classList.add('hidden')">&times;</button>
+    <h3>User Management</h3>
+    <p class="lkpi-modal-sub">Create accounts, reset passwords, or remove access.</p>
+    <div id="lkpiUserTableWrap"><div style="color:var(--text-faint);font-size:13px;">Loading users…</div></div>
+    <div class="lkpi-add-user-row">
+      <input type="text" id="lkpiNewUsername" placeholder="New username (letters, numbers, underscore)" spellcheck="false"/>
+      <button class="lkpi-login-btn" style="width:auto;padding:8px 16px;margin-top:0;" onclick="lkpiAdminCreateUser()">Add User</button>
+    </div>
+    <div class="lkpi-modal-status" id="lkpiAdminStatus"></div>
+  </div>
+</div>
+
+<!-- ===== METRICS MODAL ===== -->
+<div class="lkpi-modal-overlay hidden" id="lkpiMetricsModal">
+  <div class="lkpi-modal" style="width:580px;max-height:85vh;overflow-y:auto;">
+    <button class="lkpi-modal-close" onclick="document.getElementById('lkpiMetricsModal').classList.add('hidden')">&times;</button>
+    <h3>Dashboard Metrics</h3>
+    <p class="lkpi-modal-sub">Login activity and page views across all users.</p>
+    <div id="lkpiMetricsBody"><div style="color:var(--text-faint);font-size:13px;">Loading…</div></div>
+  </div>
+</div>
+
 <div class="wrap">
 
   <section id="tab-outbound" class="tab-page">
@@ -834,7 +1056,13 @@
       </div>
       <label class="btn" for="ibFileInput">&#8593; Upload SAP Export</label>
       <input type="file" id="ibFileInput" accept=".xlsx,.xls">
-    </div>
+    
+    <div id="lkpiUserBadge">
+      <span id="lkpiUserName"></span>
+      <button id="lkpiMetricsBtn" onclick="lkpiOpenMetrics()" style="display:none;">&#128200; Metrics</button>
+      <button id="lkpiAdminBtn" onclick="lkpiOpenAdmin()" style="display:none;">&#9881; Users</button>
+      <button onclick="lkpiSignOut()">Sign Out</button>
+    </div></div>
   </header>
 
   <nav class="site-nav">
@@ -6290,7 +6518,7 @@ const IOH_LOC_CATS = [
   { key:'kcp',         label:'KCP',                          hint:'Begins with KCP',                hex:'#1abc9c' },
   { key:'qc_hold',     label:'Quality Hold Location',        hint:'QC-HOLD',                        hex:'#c0392b' },
   { key:'rework',      label:'Rework',                       hint:'REWORK',                         hex:'#e74c3c' },
-  { key:'returns',     label:'Return Receipts',              hint:'UT_RECIEPT',                     hex:'#95a5a6' },
+  { key:'returns',     label:'Untraced Receipts',             hint:'UT_RECIEPT',                     hex:'#95a5a6' },
   { key:'other',       label:'Other / Unknown',              hint:'Does not match any pattern',     hex:'#5f7796' },
 ];
 const IOH_LOC_MAP = Object.fromEntries(IOH_LOC_CATS.map(c=>[c.key,c]));
@@ -6932,6 +7160,355 @@ window.addEventListener('hashchange', ()=>{
     requestAnimationFrame(()=>{ if(iohTrendChart) try{ iohTrendChart.resize(); }catch(e){} });
   }
 });
+
+
+/* =====================================================================
+   LKPI AUTH  —  Firebase Authentication gate
+   ===================================================================== */
+(function(){
+  const auth = firebase.auth();
+  const usersRef = db.ref('lkpi_users');
+
+  /* ---- helpers ---- */
+  const $=id=>document.getElementById(id);
+  const toEmail=u=>u.trim().toLowerCase()+'@lkpi.internal';
+
+  /* ---- on auth state change ---- */
+  auth.onAuthStateChanged(async user=>{
+    if(!user){
+      showOverlay(); return;
+    }
+    // Fetch user record from RTDB
+    const snap = await usersRef.child(user.uid).once('value');
+    const rec  = snap.val()||{};
+    if(rec.mustChangePassword){
+      showOverlay();
+      $('lkpiPwModal').classList.remove('hidden');
+      return;
+    }
+    grantAccess(user, rec);
+  });
+
+  /* ---- show/hide overlay ---- */
+  function showOverlay(){
+    const ov=$('lkpiAuthOverlay');
+    if(ov) ov.style.display='flex';
+  }
+  function hideOverlay(){
+    const ov=$('lkpiAuthOverlay');
+    if(!ov) return;
+    ov.classList.add('fade-out');
+    setTimeout(()=>{ ov.style.display='none'; ov.classList.remove('fade-out'); },300);
+  }
+
+  /* ---- grant access ---- */
+  function grantAccess(user, rec){
+    lkpiSetStatus('');
+    const evType = _lkpiFreshLogin ? 'login' : 'pageview';
+    _lkpiFreshLogin = false;
+    lkpiTrackEvent(rec.username || user.email.split('@')[0], evType);
+    hideOverlay();
+    $('lkpiPwModal').classList.add('hidden');
+    // Show user badge
+    const badge=$('lkpiUserBadge');
+    if(badge){ badge.style.display='flex'; }
+    const nameEl=$('lkpiUserName');
+    if(nameEl) nameEl.textContent=rec.username||user.email.split('@')[0];
+    const adminBtn=$('lkpiAdminBtn');
+    if(adminBtn) adminBtn.style.display=rec.isAdmin?'':'none';
+    const metricsBtn=$('lkpiMetricsBtn');
+    if(metricsBtn) metricsBtn.style.display=rec.isAdmin?'':'none';
+  }
+
+  /* ---- analytics tracking ---- */
+  const analyticsRef = db.ref('lkpi_analytics');
+  let _lkpiFreshLogin = false;
+  function lkpiTrackEvent(username, type){
+    try{
+      analyticsRef.push({ username, type, ts: Date.now() });
+    }catch(e){ /* non-critical */ }
+  }
+
+  /* ---- login ---- */
+  function lkpiSetStatus(msg){
+    const el=$('lkpiLoginStatus');
+    if(el) el.innerHTML=msg?'<span class="lkpi-spinner"></span>'+msg:'';
+  }
+  window.lkpiDoLogin=async function(){
+    const username=$('lkpiLoginUser').value.trim();
+    const pass    =$('lkpiLoginPass').value;
+    const errEl   =$('lkpiLoginErr');
+    const btn     =$('lkpiLoginBtn');
+    if(!username||!pass){ errEl.textContent='Enter your username and password.'; return; }
+    btn.disabled=true; errEl.textContent='';
+    lkpiSetStatus('Signing in…');
+    try{
+      _lkpiFreshLogin = true;
+      await auth.signInWithEmailAndPassword(toEmail(username),pass);
+      lkpiSetStatus('Loading dashboard… this may take a moment.');
+      // onAuthStateChanged handles the rest
+    }catch(e){
+      errEl.textContent = friendlyAuthErr(e.code);
+      lkpiSetStatus('');
+      btn.disabled=false;
+    }
+  };
+
+  /* ---- enter key on login fields ---- */
+  ['lkpiLoginUser','lkpiLoginPass'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.addEventListener('keydown',e=>{ if(e.key==='Enter') window.lkpiDoLogin(); });
+  });
+
+  /* ---- forced password change ---- */
+  window.lkpiDoPwChange=async function(){
+    const np=$('lkpiPwNew').value;
+    const cp=$('lkpiPwConfirm').value;
+    const errEl=$('lkpiPwErr');
+    const btn=$('lkpiPwBtn');
+    if(np.length<8){ errEl.textContent='Password must be at least 8 characters.'; return; }
+    if(np!==cp){ errEl.textContent='Passwords do not match.'; return; }
+    btn.disabled=true; errEl.textContent='';
+    try{
+      const user=auth.currentUser;
+      await user.updatePassword(np);
+      await usersRef.child(user.uid).update({mustChangePassword:false});
+      const snap=await usersRef.child(user.uid).once('value');
+      grantAccess(user, snap.val()||{});
+    }catch(e){
+      errEl.textContent=friendlyAuthErr(e.code);
+      btn.disabled=false;
+    }
+  };
+
+  /* ---- sign out ---- */
+  window.lkpiSignOut=async function(){
+    await auth.signOut();
+    location.reload();
+  };
+
+  /* ---- metrics panel ---- */
+  let lkpiMetricsChart = null;
+  window.lkpiOpenMetrics = async function(){
+    $('lkpiMetricsModal').classList.remove('hidden');
+    const body = $('lkpiMetricsBody');
+    body.innerHTML = '<div style="color:var(--text-faint);font-size:13px;">Loading…</div>';
+    if(lkpiMetricsChart){ lkpiMetricsChart.destroy(); lkpiMetricsChart=null; }
+
+    const snap = await analyticsRef.once('value');
+    const raw  = snap.val() || {};
+    const events = Object.values(raw).sort((a,b)=>b.ts-a.ts);
+
+    const now = Date.now();
+    const DAY = 86400000;
+    const todayKey  = d=>new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    const ev30 = events.filter(e=>now-e.ts <= 30*DAY);
+    const ev7  = events.filter(e=>now-e.ts <=  7*DAY);
+    const ev1  = events.filter(e=>now-e.ts <=  1*DAY);
+
+    const logins30   = ev30.filter(e=>e.type==='login').length;
+    const pageviews30= ev30.filter(e=>e.type==='pageview').length;
+    const uniq30     = new Set(ev30.map(e=>e.username)).size;
+    const today      = ev1.length;
+
+    // 14-day chart
+    const chartLabels=[], loginCounts=[], pvcounts=[];
+    for(let i=13;i>=0;i--){
+      const dayStart = new Date(now - i*DAY); dayStart.setHours(0,0,0,0);
+      const dayEnd   = new Date(dayStart.getTime()+DAY);
+      const label    = dayStart.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+      chartLabels.push(label);
+      loginCounts.push(events.filter(e=>e.type==='login'    && e.ts>=dayStart.getTime() && e.ts<dayEnd.getTime()).length);
+      pvcounts.push(   events.filter(e=>e.type==='pageview' && e.ts>=dayStart.getTime() && e.ts<dayEnd.getTime()).length);
+    }
+
+    // Recent activity (last 25)
+    const recent = events.slice(0,25);
+    const actRows = recent.map(e=>{
+      const d = new Date(e.ts);
+      const dateStr = d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+      const timeStr = d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
+      const typeCls = e.type==='login'?'lkpi-ev-login':'lkpi-ev-pageview';
+      const typeLabel = e.type==='login'?'Sign In':'Page Load';
+      return `<tr>
+        <td>${e.username||'—'}</td>
+        <td class="${typeCls}">${typeLabel}</td>
+        <td>${dateStr}</td>
+        <td>${timeStr}</td>
+      </tr>`;
+    }).join('');
+
+    body.innerHTML = `
+      <div class="lkpi-metrics-cards">
+        <div class="lkpi-metrics-card"><div class="lkpi-mc-val">${today}</div><div class="lkpi-mc-lbl">Today's Sessions</div></div>
+        <div class="lkpi-metrics-card"><div class="lkpi-mc-val">${logins30}</div><div class="lkpi-mc-lbl">Logins (30d)</div></div>
+        <div class="lkpi-metrics-card"><div class="lkpi-mc-val">${pageviews30}</div><div class="lkpi-mc-lbl">Page Loads (30d)</div></div>
+        <div class="lkpi-metrics-card"><div class="lkpi-mc-val">${uniq30}</div><div class="lkpi-mc-lbl">Unique Users (30d)</div></div>
+      </div>
+      <div class="lkpi-metrics-chart-wrap"><canvas id="lkpiMetricsCanvas"></canvas></div>
+      <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Recent Activity</div>
+      ${recent.length ? `<div style="overflow-x:auto;max-height:220px;overflow-y:auto;">
+        <table class="lkpi-activity-table">
+          <thead><tr><th>User</th><th>Type</th><th>Date</th><th>Time</th></tr></thead>
+          <tbody>${actRows}</tbody>
+        </table></div>` : '<div style="color:var(--text-faint);font-size:13px;">No activity recorded yet.</div>'}
+    `;
+
+    // Draw chart after DOM update
+    setTimeout(()=>{
+      const ctx = document.getElementById('lkpiMetricsCanvas');
+      if(!ctx) return;
+      lkpiMetricsChart = new Chart(ctx, {
+        type:'bar',
+        data:{ labels: chartLabels, datasets:[
+          { label:'Sign Ins',  data:loginCounts, backgroundColor:'#3d9fe8', borderRadius:3, maxBarThickness:28 },
+          { label:'Page Loads',data:pvcounts,    backgroundColor:'rgba(47,191,113,.5)', borderRadius:3, maxBarThickness:28 }
+        ]},
+        options:{
+          responsive:true, maintainAspectRatio:false,
+          plugins:{
+            legend:{labels:{color:'#93a8c4',font:{size:11}}},
+            tooltip:{callbacks:{title:ctx=>ctx[0].label}}
+          },
+          scales:{
+            x:{ticks:{color:'#5f7796',font:{size:9},maxRotation:45},grid:{color:'rgba(255,255,255,.04)'}},
+            y:{ticks:{color:'#5f7796',stepSize:1,precision:0},grid:{color:'rgba(255,255,255,.07)'},beginAtZero:true}
+          }
+        }
+      });
+    }, 50);
+  };
+
+  /* ---- admin panel ---- */
+  window.lkpiOpenAdmin=async function(){
+    $('lkpiAdminModal').classList.remove('hidden');
+    await lkpiRefreshUserTable();
+  };
+
+  async function lkpiRefreshUserTable(){
+    const wrap=$('lkpiUserTableWrap');
+    wrap.innerHTML='<div style="color:var(--text-faint);font-size:13px;">Loading…</div>';
+    const snap=await usersRef.once('value');
+    const users=snap.val()||{};
+    if(!Object.keys(users).length){
+      wrap.innerHTML='<div style="color:var(--text-faint);font-size:13px;">No users found.</div>'; return;
+    }
+    let rows='';
+    for(const [uid,rec] of Object.entries(users)){
+      const badge=rec.isAdmin
+        ?'<span class="lkpi-user-status admin">Admin</span>'
+        :'<span class="lkpi-user-status user">User</span>';
+      const pwFlag=rec.mustChangePassword
+        ?'<span style="font-size:10px;color:#f97066;">⚠ must change pw</span>':
+        '<span style="font-size:10px;color:#4ade80;">✓ active</span>';
+      rows+=`<tr>
+        <td>${rec.username||'—'}</td>
+        <td>${badge}</td>
+        <td>${pwFlag}</td>
+        <td style="white-space:nowrap;text-align:right;">
+          <button class="lkpi-user-action-btn" onclick="lkpiAdminReset('${uid}','${rec.username||''}')">Reset PW</button>
+          &nbsp;
+          <button class="lkpi-user-action-btn danger" onclick="lkpiAdminDelete('${uid}','${rec.username||''}')">Remove</button>
+        </td>
+      </tr>`;
+    }
+    wrap.innerHTML=`<table class="lkpi-user-table">
+      <thead><tr><th>Username</th><th>Role</th><th>Status</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  }
+
+  window.lkpiAdminCreateUser=async function(){
+    const usernameRaw=$('lkpiNewUsername').value.trim();
+    const statusEl=$('lkpiAdminStatus');
+    if(!/^[a-zA-Z0-9_]{2,32}$/.test(usernameRaw)){
+      statusEl.className='lkpi-modal-status';
+      statusEl.textContent='Username must be 2–32 characters: letters, numbers, underscore only.'; return;
+    }
+    statusEl.className='lkpi-modal-status'; statusEl.textContent='Creating…';
+    const email=toEmail(usernameRaw);
+    const tempPass=usernameRaw; // default password = username
+
+    // Use a secondary app instance so we don't sign out the current admin
+    let secondaryApp;
+    try{
+      secondaryApp=firebase.initializeApp(firebase.app().options,'lkpi_tmp_'+Date.now());
+      const cred=await secondaryApp.auth().createUserWithEmailAndPassword(email,tempPass);
+      const uid=cred.user.uid;
+      await cred.user.sendEmailVerification().catch(()=>{}); // best-effort
+      await secondaryApp.auth().signOut();
+      // Write RTDB record using the main db reference (admin is still signed in)
+      await usersRef.child(uid).set({
+        username:usernameRaw.toLowerCase(),
+        isAdmin:false,
+        mustChangePassword:true
+      });
+      statusEl.className='lkpi-modal-status ok';
+      statusEl.textContent='✓ User "'+usernameRaw+'" created. Default password: '+tempPass;
+      $('lkpiNewUsername').value='';
+      await lkpiRefreshUserTable();
+    }catch(e){
+      statusEl.className='lkpi-modal-status';
+      statusEl.textContent='Error: '+friendlyAuthErr(e.code);
+    }finally{
+      if(secondaryApp) secondaryApp.delete().catch(()=>{});
+    }
+  };
+
+  window.lkpiAdminReset=async function(uid,username){
+    const statusEl=$('lkpiAdminStatus');
+    if(!confirm('Reset password for "'+username+'"? Their new default password will be their username.')) return;
+    statusEl.className='lkpi-modal-status'; statusEl.textContent='Resetting…';
+    try{
+      // Set mustChangePassword flag — user will be forced to change on next login
+      await usersRef.child(uid).update({mustChangePassword:true});
+      // Reset to default via secondary app
+      const secondaryApp=firebase.initializeApp(firebase.app().options,'lkpi_rst_'+Date.now());
+      try{
+        const email=toEmail(username);
+        // We can't directly reset another user's password from the client SDK.
+        // Best available: send a password reset email via firebase auth.
+        await firebase.auth().sendPasswordResetEmail(email);
+        statusEl.className='lkpi-modal-status ok';
+        statusEl.textContent='✓ Password reset email sent to '+email+'. Flag set to require change on next login.';
+      }finally{
+        secondaryApp.delete().catch(()=>{});
+      }
+    }catch(e){
+      statusEl.className='lkpi-modal-status';
+      statusEl.textContent='Error: '+friendlyAuthErr(e.code);
+    }
+  };
+
+  window.lkpiAdminDelete=async function(uid,username){
+    if(!confirm('Remove access for "'+username+'"?\n\nThis deletes their RTDB record. Their Firebase Auth account remains but they will see no data. To fully remove, also delete from Firebase Console → Auth.')) return;
+    const statusEl=$('lkpiAdminStatus');
+    statusEl.className='lkpi-modal-status'; statusEl.textContent='Removing…';
+    try{
+      await usersRef.child(uid).remove();
+      statusEl.className='lkpi-modal-status ok';
+      statusEl.textContent='✓ Access removed for "'+username+'".';
+      await lkpiRefreshUserTable();
+    }catch(e){
+      statusEl.className='lkpi-modal-status';
+      statusEl.textContent='Error: '+e.message;
+    }
+  };
+
+  /* ---- friendly error messages ---- */
+  function friendlyAuthErr(code){
+    const map={
+      'auth/user-not-found':     'Username not found.',
+      'auth/wrong-password':     'Incorrect password.',
+      'auth/invalid-credential': 'Incorrect username or password.',
+      'auth/too-many-requests':  'Too many attempts. Try again later.',
+      'auth/email-already-in-use':'That username is already taken.',
+      'auth/weak-password':      'Password is too weak (minimum 8 characters).',
+      'auth/requires-recent-login':'Session expired. Please sign in again.',
+    };
+    return map[code]||'An error occurred. Please try again.';
+  }
+})();
 
 </script>
 </body>

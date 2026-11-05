@@ -6571,6 +6571,15 @@ function iohFmtCompact(n){
   return '$'+n.toFixed(0);
 }
 function iohFmtQty(n){ return (n||0).toLocaleString('en-US'); }
+function iohFmtDeltaVal(n){
+  if(n===null||n===undefined||isNaN(n)) return '';
+  const sign=n>=0?'+':'−';
+  return sign+'$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function iohFmtDeltaQty(n){
+  if(n===null||n===undefined||isNaN(n)) return '';
+  return (n>=0?'+':'−')+Math.abs(n).toLocaleString('en-US');
+}
 
 const IOH_TYPE = {
   A1:{name:'Pickable',     color:'var(--good)', hex:'#2fbf71'},
@@ -6892,12 +6901,13 @@ function iohRenderTrend(){
   const seriesData=IOH_LOC_CATS.map(cat=>({cat,values:[]}));
   // trendMeta[dateLabel][locCatKey] = {value, qty} — used by tooltip to show both metrics
   const trendMeta={};
+  let prevDateLabel=null;
   for(const k of keys){
     const snap=iohAllSnapshots[k];
     const items=iohBuildItems(snap.items).filter(i=>iohActiveTypes.has(i.stockType));
     const dateLabel=snap.date||k;
     labels.push(dateLabel);
-    trendMeta[dateLabel]={};
+    trendMeta[dateLabel]={_prev:prevDateLabel};
     for(const s of seriesData){
       const ci=items.filter(i=>i.locCat===s.cat.key);
       const qty=ci.reduce((a,i)=>a+i.qty,0);
@@ -6905,6 +6915,7 @@ function iohRenderTrend(){
       trendMeta[dateLabel][s.cat.key]={qty,value};
       s.values.push(mode==='value'?value:qty);
     }
+    prevDateLabel=dateLabel;
   }
   // Only draw categories with at least one non-zero value
   const active=seriesData.filter(s=>s.values.some(v=>v>0));
@@ -6939,18 +6950,36 @@ function iohRenderTrend(){
             label:ctx=>{
               const dateLabel=ctx.label;
               const catKey=active[ctx.datasetIndex]?.cat.key;
-              const d=(trendMeta[dateLabel]||{})[catKey]||{qty:0,value:0};
-              return '  '+ctx.dataset.label+':  '+iohFmtCurrency(d.value)+'  ·  '+iohFmtQty(d.qty)+' units';
+              const snap=trendMeta[dateLabel]||{};
+              const d=snap[catKey]||{qty:0,value:0};
+              const prevLabel=snap._prev;
+              const pd=prevLabel?(trendMeta[prevLabel]||{})[catKey]||{qty:0,value:0}:null;
+              let line='  '+ctx.dataset.label+':  '+iohFmtCurrency(d.value)+'  ·  '+iohFmtQty(d.qty)+' units';
+              if(pd!==null){
+                const dv=d.value-pd.value, dq=d.qty-pd.qty;
+                const col=dv>=0?'#4ade80':'#f97066';
+                line+='   ['+iohFmtDeltaVal(dv)+'  /  '+iohFmtDeltaQty(dq)+']';
+              }
+              return line;
             },
             footer:ctx=>{
               const dateLabel=ctx[0]?.label;
               const snap=trendMeta[dateLabel]||{};
-              let totVal=0,totQty=0;
+              const prevLabel=snap._prev;
+              const prevSnap=prevLabel?trendMeta[prevLabel]||{}:{};
+              let totVal=0,totQty=0,prevVal=0,prevQty=0;
               for(const s of active){
                 const d=snap[s.cat.key]||{};
+                const pd=prevSnap[s.cat.key]||{};
                 totVal+=(d.value||0); totQty+=(d.qty||0);
+                prevVal+=(pd.value||0); prevQty+=(pd.qty||0);
               }
-              return ['','  Total:  '+iohFmtCurrency(totVal)+'  ·  '+iohFmtQty(totQty)+' units'];
+              const lines=['','  Total:  '+iohFmtCurrency(totVal)+'  ·  '+iohFmtQty(totQty)+' units'];
+              if(prevLabel){
+                const dv=totVal-prevVal, dq=totQty-prevQty;
+                lines.push('  vs prior day:  '+iohFmtDeltaVal(dv)+'  ·  '+iohFmtDeltaQty(dq)+' units');
+              }
+              return lines;
             }
           },
           footerFont:{weight:'bold'},

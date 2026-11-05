@@ -517,6 +517,133 @@
   .ioh-trend-head h3{margin:0;font-size:14px;font-weight:700;}
   .ioh-trend-head .note{font-size:11px;color:var(--text-faint);margin-top:2px;}
 
+  /* ----- Daily Variance sub-tab ----- */
+  .var-date-bar{
+    display:inline-flex;align-items:center;gap:8px;
+    background:var(--bg-alt);border:1px solid var(--card-border-light);
+    border-radius:6px;padding:6px 14px;font-size:12px;color:var(--text-dim);
+  }
+  .var-date-bar b{color:var(--text);}
+  .var-kpi-row{display:flex;gap:12px;margin-bottom:22px;flex-wrap:wrap;}
+  .var-kpi-card{
+    background:var(--card);border:1px solid var(--card-border);
+    border-radius:var(--radius);padding:16px 20px;flex:1;min-width:140px;
+    display:flex;flex-direction:column;gap:4px;
+  }
+  .var-kpi-card.urgent{border-color:var(--bad);}
+  .var-kpi-card .vkn{font-size:28px;font-weight:800;line-height:1;}
+  .var-kpi-card .vkn.red{color:var(--bad);}
+  .var-kpi-card .vkn.green{color:var(--good);}
+  .var-kpi-card .vkn.blue{color:var(--info);}
+  .var-kpi-card .vkl{font-size:11px;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.5px;margin-top:4px;}
+  .var-kpi-card .vks{font-size:11px;color:var(--text-faint);}
+  .var-section{
+    background:var(--card);border:1px solid var(--card-border);
+    border-radius:var(--radius);margin-bottom:14px;overflow:hidden;
+  }
+  .var-section-head{
+    display:flex;align-items:center;gap:10px;padding:14px 18px;
+    cursor:pointer;user-select:none;font-size:14px;font-weight:700;
+    border-bottom:1px solid var(--card-border);
+  }
+  .var-section-head:hover{background:rgba(255,255,255,0.03);}
+  .var-section-head.vsh-alert{border-left:3px solid var(--bad);}
+  .var-section-head.vsh-accounted{border-left:3px solid var(--good);}
+  .var-section-head.vsh-increase{border-left:3px solid var(--info);}
+  .var-sec-count{
+    font-size:12px;font-weight:700;padding:2px 10px;border-radius:12px;
+  }
+  .var-sec-count.red{background:rgba(226,35,26,0.15);color:var(--bad);}
+  .var-sec-count.green{background:rgba(47,191,113,0.15);color:var(--good);}
+  .var-sec-count.blue{background:rgba(74,144,226,0.15);color:var(--info);}
+  .var-sec-caret{margin-left:auto;font-size:11px;color:var(--text-faint);}
+  .var-table{width:100%;border-collapse:collapse;}
+  .var-table th{
+    font-size:11px;font-weight:700;color:var(--text-faint);text-transform:uppercase;
+    letter-spacing:0.4px;padding:9px 14px;text-align:left;
+    border-bottom:1px solid var(--card-border-light);background:var(--bg-alt);
+    white-space:nowrap;
+  }
+  .var-table th.r,.var-table td.r{text-align:right;}
+  .var-table td{
+    padding:10px 14px;font-size:13px;border-bottom:1px solid var(--card-border-light);
+    vertical-align:middle;
+  }
+  .var-table tr:last-child td{border-bottom:none;}
+  .var-table tr:hover td{background:rgba(255,255,255,0.025);}
+  .var-pull-tag{
+    display:inline-block;background:var(--bg-alt);border:1px solid var(--card-border-light);
+    border-radius:4px;padding:1px 6px;font-size:11px;color:var(--text-dim);
+    font-family:monospace;margin:1px 2px;
+  }
+  .var-badge{
+    display:inline-block;border-radius:12px;padding:3px 10px;
+    font-size:11px;font-weight:700;white-space:nowrap;
+  }
+  .var-badge.unexplained{background:rgba(226,35,26,0.15);color:var(--bad);}
+  .var-badge.partial{background:rgba(232,163,61,0.15);color:var(--warn);}
+  .var-badge.accounted{background:rgba(47,191,113,0.15);color:var(--good);}
+  .var-badge.increase{background:rgba(74,144,226,0.15);color:var(--info);}
+  .var-no-data{text-align:center;padding:36px 20px;color:var(--text-faint);font-size:13px;}
+  .var-refresh-btn{
+    background:transparent;border:1px solid var(--card-border-light);
+    color:var(--text-dim);border-radius:6px;padding:5px 12px;font-size:12px;
+    cursor:pointer;transition:all .15s;
+  }
+  .var-refresh-btn:hover{border-color:var(--accent);color:var(--text);}
+
+  /* ---- Variance detail modal ---- */
+  .var-modal-overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9000;
+    display:flex;align-items:center;justify-content:center;padding:20px;
+  }
+  .var-modal-card{
+    background:var(--card);border:1px solid var(--card-border);
+    border-radius:var(--radius);width:100%;max-width:860px;
+    max-height:88vh;display:flex;flex-direction:column;overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,.55);
+  }
+  .var-modal-head{
+    display:flex;align-items:flex-start;gap:14px;
+    padding:18px 22px;border-bottom:1px solid var(--card-border);flex-shrink:0;
+  }
+  .var-modal-sku{font-family:monospace;font-size:16px;font-weight:800;color:var(--text);}
+  .var-modal-desc{font-size:12px;color:var(--text-dim);margin-top:4px;max-width:500px;}
+  .var-modal-close{
+    margin-left:auto;background:transparent;border:none;
+    color:var(--text-dim);font-size:22px;cursor:pointer;padding:0 4px;line-height:1;flex-shrink:0;
+  }
+  .var-modal-close:hover{color:var(--text);}
+  .var-modal-body{overflow-y:auto;padding:18px 22px;display:flex;flex-direction:column;gap:22px;}
+  .var-modal-sec-title{
+    font-size:11px;font-weight:700;color:var(--text-faint);text-transform:uppercase;
+    letter-spacing:0.5px;margin-bottom:10px;
+  }
+  .var-modal-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+  .var-modal-stat{
+    background:var(--bg-alt);border:1px solid var(--card-border-light);
+    border-radius:6px;padding:12px 14px;
+  }
+  .var-modal-stat .msn{font-size:17px;font-weight:800;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .var-modal-stat .msl{font-size:10px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.4px;margin-top:4px;white-space:nowrap;}
+  .var-dtable{width:100%;border-collapse:collapse;}
+  .var-dtable th{
+    font-size:11px;font-weight:700;color:var(--text-faint);text-transform:uppercase;
+    letter-spacing:0.4px;padding:7px 12px;border-bottom:1px solid var(--card-border-light);
+    background:var(--bg-alt);text-align:left;white-space:nowrap;
+  }
+  .var-dtable th.r,.var-dtable td.r{text-align:right;}
+  .var-dtable td{
+    padding:9px 12px;font-size:13px;border-bottom:1px solid var(--card-border-light);
+    vertical-align:middle;
+  }
+  .var-dtable tr:last-child td{border-bottom:none;}
+  .var-dtable tr.loc-changed  td{background:rgba(226,35,26,.05);}
+  .var-dtable tr.loc-increased td{background:rgba(74,144,226,.05);}
+  .var-clickable-row{cursor:pointer;transition:background .1s;}
+  .var-clickable-row:hover td{background:rgba(255,255,255,.04)!important;}
+  .var-row-hint{font-size:10px;color:var(--text-faint);opacity:.65;margin-left:4px;}
+
   /* ===== LOGIN GATE ===== */
   #lkpiAuthOverlay{
     position:fixed;inset:0;z-index:9999;
@@ -1285,6 +1412,7 @@
   <div class="inv-subnav">
     <button type="button" class="inv-subnav-btn active" data-subtab="cycle" onclick="showInvSubTab('cycle')">Cycle Counts</button>
     <button type="button" class="inv-subnav-btn" data-subtab="stock" onclick="showInvSubTab('stock')">Stock Status</button>
+    <button type="button" class="inv-subnav-btn" data-subtab="variance" onclick="showInvSubTab('variance')">Daily Variance</button>
   </div>
 
   <!-- Cycle Counts content wrapper -->
@@ -1480,6 +1608,126 @@
     </section>
 
   </div><!-- end invSubStockStatus -->
+
+  <!-- ============================================================
+       DAILY VARIANCE SUB-TAB
+  ============================================================ -->
+  <div id="invSubVariance" style="display:none;">
+
+    <!-- Top bar: comparison dates + refresh -->
+    <div id="varTopBar" style="display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap;">
+      <div class="var-date-bar">
+        <span>&#128197;</span>
+        <span id="varDateBarText">Loading&hellip;</span>
+      </div>
+      <button type="button" class="var-refresh-btn" onclick="iohVarRender()">&#8635;&nbsp;Refresh</button>
+    </div>
+
+    <!-- KPI summary row -->
+    <div class="var-kpi-row" id="varKpiRow"></div>
+
+    <!-- Requires Attention section (expanded by default) -->
+    <div class="var-section">
+      <div class="var-section-head vsh-alert" onclick="varToggle('alert')">
+        <span>&#x1F6A8; Requires Attention</span>
+        <span class="var-sec-count red" id="varAlertCount">0 SKUs</span>
+        <span class="var-sec-caret" id="varCaretAlert">&#9660;</span>
+      </div>
+      <div id="varBodyAlert">
+        <table class="var-table" id="varTableAlert">
+          <thead><tr>
+            <th>SKU</th><th>Description</th>
+            <th class="r">Prev&nbsp;Qty</th><th class="r">Today&nbsp;Qty</th><th class="r">Change</th>
+            <th>Outbound Pulls (Today)</th>
+            <th class="r">Unexplained&nbsp;Qty</th><th class="r">Value&nbsp;Impact</th>
+            <th>Status</th>
+          </tr></thead>
+          <tbody id="varTbodyAlert"></tbody>
+        </table>
+        <div class="var-no-data" id="varEmptyAlert" style="display:none;">
+          &#10003;&nbsp; No unexplained variances &mdash; all decreases are accounted for!
+        </div>
+      </div>
+    </div>
+
+    <!-- Accounted For section (collapsed by default) -->
+    <div class="var-section">
+      <div class="var-section-head vsh-accounted" onclick="varToggle('accounted')">
+        <span>&#9989; Accounted For by Outbound Pulls</span>
+        <span class="var-sec-count green" id="varAccountedCount">0 SKUs</span>
+        <span class="var-sec-caret" id="varCaretAccounted">&#9654;</span>
+      </div>
+      <div id="varBodyAccounted" style="display:none;">
+        <table class="var-table" id="varTableAccounted">
+          <thead><tr>
+            <th>SKU</th><th>Description</th>
+            <th class="r">Prev&nbsp;Qty</th><th class="r">Today&nbsp;Qty</th><th class="r">Change</th>
+            <th>Outbound Pulls (Today)</th>
+            <th class="r">Qty&nbsp;Explained</th><th class="r">Value&nbsp;Impact</th>
+            <th>Status</th>
+          </tr></thead>
+          <tbody id="varTbodyAccounted"></tbody>
+        </table>
+        <div class="var-no-data" id="varEmptyAccounted" style="display:none;">No fully-accounted decreases yet.</div>
+      </div>
+    </div>
+
+    <!-- Increases section (collapsed by default) -->
+    <div class="var-section">
+      <div class="var-section-head vsh-increase" onclick="varToggle('increase')">
+        <span>&#128200; Inventory Increases</span>
+        <span class="var-sec-count blue" id="varIncreaseCount">0 SKUs</span>
+        <span class="var-sec-caret" id="varCaretIncrease">&#9654;</span>
+      </div>
+      <div id="varBodyIncrease" style="display:none;">
+        <table class="var-table" id="varTableIncrease">
+          <thead><tr>
+            <th>SKU</th><th>Description</th>
+            <th class="r">Prev&nbsp;Qty</th><th class="r">Today&nbsp;Qty</th><th class="r">Change</th>
+            <th class="r">Value&nbsp;Impact</th><th>Status</th>
+          </tr></thead>
+          <tbody id="varTbodyIncrease"></tbody>
+        </table>
+        <div class="var-no-data" id="varEmptyIncrease" style="display:none;">No increases.</div>
+      </div>
+    </div>
+
+    <!-- Not-enough-snapshots state -->
+    <div class="empty-state" id="varNoSnaps" style="display:none;">
+      <div class="big">Not enough data</div>
+      <div>Upload at least 2 IOH snapshots on separate dates to enable day-over-day comparison.</div>
+    </div>
+
+    <!-- SKU detail modal -->
+    <div id="varDetailModal" class="var-modal-overlay" style="display:none;"
+         onclick="if(event.target===this)varCloseModal()">
+      <div class="var-modal-card">
+        <div class="var-modal-head">
+          <div style="min-width:0;">
+            <div class="var-modal-sku" id="varMsku"></div>
+            <div class="var-modal-desc" id="varMdesc"></div>
+          </div>
+          <span id="varMbadge" style="flex-shrink:0;"></span>
+          <button class="var-modal-close" onclick="varCloseModal()">&#10005;</button>
+        </div>
+        <div class="var-modal-body">
+          <div>
+            <div class="var-modal-sec-title">Summary</div>
+            <div class="var-modal-stats" id="varMstats"></div>
+          </div>
+          <div>
+            <div class="var-modal-sec-title">Storage Location Breakdown</div>
+            <div id="varMlocs"></div>
+          </div>
+          <div id="varMpullsSection">
+            <div class="var-modal-sec-title">Outbound Pull Activity</div>
+            <div id="varMpulls"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end invSubVariance -->
 
     </section>
 
@@ -6731,6 +6979,9 @@ iohSnapshotsRef.on('value', snap=>{
     document.getElementById('iohLastUpload').textContent='';
   }
   iohRenderAll();
+  // Also refresh variance tab if it's currently visible
+  const varDiv=document.getElementById('invSubVariance');
+  if(varDiv&&varDiv.style.display!=='none') iohVarRender();
 });
 
 iohPricingRef.on('value', snap=>{
@@ -7176,14 +7427,462 @@ function iohExportUnpriced(){
   XLSX.writeFile(wb,'Unpriced_SKUs_'+new Date().toISOString().slice(0,10)+'.xlsx');
 }
 
+/* ============================================================
+   DAILY INVENTORY VARIANCE
+============================================================ */
+let varOpenSections={alert:true,accounted:false,increase:false};
+
+function varToggle(id){
+  varOpenSections[id]=!varOpenSections[id];
+  const cap=id.charAt(0).toUpperCase()+id.slice(1);
+  const body=document.getElementById('varBody'+cap);
+  const caret=document.getElementById('varCaret'+cap);
+  if(body)  body.style.display=varOpenSections[id]?'':'none';
+  if(caret) caret.innerHTML=varOpenSections[id]?'&#9660;':'&#9654;';
+}
+
+function iohVarBuildRecords(){
+  const keys=Object.keys(iohAllSnapshots).sort();
+  if(keys.length<2) return null;
+  const curKey=keys[keys.length-1];
+  const prevKey=keys[keys.length-2];
+  const curSnap=iohAllSnapshots[curKey];
+  const prevSnap=iohAllSnapshots[prevKey];
+  const curDate=curSnap.date||curKey.replace(/_/g,'-').slice(0,10);
+  const prevDate=prevSnap.date||prevKey.replace(/_/g,'-').slice(0,10);
+
+  // Aggregate by normalised SKU — also track per-location breakdown
+  function aggBySku(snapItems){
+    const m={};
+    for(const it of iohBuildItems(snapItems)){
+      const k=it.skuNorm||iohNorm(it.sku);
+      if(!m[k]) m[k]={sku:it.sku,norm:k,desc:it.desc||'',qty:0,locs:{}};
+      m[k].qty+=it.qty;
+      if(!m[k].desc&&it.desc) m[k].desc=it.desc;
+      // Per-location: key by stockType+bin so each row is unique
+      const lk=(it.stockType||'')+'||'+(it.loc||'');
+      if(!m[k].locs[lk]) m[k].locs[lk]={loc:it.loc||'',stockType:it.stockType||'',qty:0};
+      m[k].locs[lk].qty+=it.qty;
+    }
+    return m;
+  }
+  const curMap=aggBySku(curSnap.items);
+  const prevMap=aggBySku(prevSnap.items);
+
+  // Build outbound pull totals AND individual pull details by SKU for curDate
+  // allLineItems[].confirmedAt is a Date object (set by the outbound listener)
+  const pullsBySku={};
+  const lineItems=typeof allLineItems!=='undefined'?allLineItems:[];
+  for(const r of lineItems){
+    if(!r.product||!r.confirmedAt) continue;
+    const pDate=r.confirmedAt instanceof Date
+      ? r.confirmedAt.toISOString().slice(0,10)
+      : String(r.confirmedAt).slice(0,10);
+    // Include pulls confirmed on either snapshot date — catches evening/night-shift
+    // picks that were confirmed after the prev snapshot but before midnight
+    if(pDate!==curDate && pDate!==prevDate) continue;
+    const norm=iohNorm(r.product);
+    if(!norm) continue;
+    if(!pullsBySku[norm]) pullsBySku[norm]={totalQty:0,totalQtyToday:0,totalQtyPrev:0,pullIds:[],pulls:[]};
+    // Use actualQty when available, else targetQty
+    const lineQty=(r.actualQty!==undefined&&r.actualQty!==null&&r.actualQty!==0)
+      ?(r.actualQty||0):(r.targetQty||0);
+    pullsBySku[norm].totalQty+=lineQty;
+    if(pDate===curDate) pullsBySku[norm].totalQtyToday+=lineQty;
+    else                pullsBySku[norm].totalQtyPrev +=lineQty;
+    const pid=r.pullId?String(r.pullId).trim():'';
+    if(pid&&!pullsBySku[norm].pullIds.includes(pid)) pullsBySku[norm].pullIds.push(pid);
+    // Store the individual pull line for the detail modal
+    pullsBySku[norm].pulls.push({
+      pullId:pid,
+      sourceBin:r.sourceBin||'',
+      destBin:r.destBin||'',
+      qty:lineQty,
+      confirmedBy:r.confirmedBy||'',
+      confirmedAt:r.confirmedAt instanceof Date
+        ?r.confirmedAt.toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true})
+        :'',
+      pullDate:pDate  // which day this pull was confirmed on
+    });
+  }
+
+  // Build variance records
+  const allNorms=new Set([...Object.keys(curMap),...Object.keys(prevMap)]);
+  const records=[];
+  for(const norm of allNorms){
+    const cur=curMap[norm]||{qty:0,sku:norm,desc:'',locs:{}};
+    const prev=prevMap[norm]||{qty:0,sku:norm,desc:'',locs:{}};
+    const delta=cur.qty-prev.qty;
+    if(delta===0) continue;
+    const sku=cur.sku||prev.sku||norm;
+    const desc=cur.desc||prev.desc||'';
+    const pulls=pullsBySku[norm]||{totalQty:0,totalQtyToday:0,totalQtyPrev:0,pullIds:[],pulls:[]};
+    const pricing=iohPricingMap[norm];
+    const unitPrice=pricing?(pricing.price||null):null;
+    let status,unexplainedQty;
+    if(delta<0){
+      const decrease=Math.abs(delta);
+      unexplainedQty=Math.max(0,decrease-pulls.totalQty);
+      if(unexplainedQty===0)             status='accounted';
+      else if(unexplainedQty<decrease)   status='partial';
+      else                               status='unexplained';
+    } else {
+      status='increase'; unexplainedQty=0;
+    }
+
+    // Build per-location delta for the detail modal
+    const curLocs=cur.locs||{};
+    const prevLocs=prev.locs||{};
+    const allLocKeys=new Set([...Object.keys(curLocs),...Object.keys(prevLocs)]);
+    const locDetails=[];
+    for(const lk of allLocKeys){
+      const cl=curLocs[lk]||{qty:0,loc:'',stockType:''};
+      const pl=prevLocs[lk]||{qty:0,loc:'',stockType:''};
+      locDetails.push({
+        loc:cl.loc||pl.loc||'',
+        stockType:cl.stockType||pl.stockType||'',
+        prevQty:pl.qty, curQty:cl.qty, delta:cl.qty-pl.qty
+      });
+    }
+    // Sort: biggest absolute delta first, then by total qty descending
+    locDetails.sort((a,b)=>{
+      const ad=Math.abs(a.delta),bd=Math.abs(b.delta);
+      if(ad!==bd) return bd-ad;
+      return (b.curQty+b.prevQty)-(a.curQty+a.prevQty);
+    });
+
+    // Sort individual pulls: largest qty first
+    const pullDetails=(pulls.pulls||[]).slice().sort((a,b)=>(b.qty||0)-(a.qty||0));
+
+    records.push({
+      norm,sku,desc,curDate,prevDate,
+      prevQty:prev.qty, curQty:cur.qty, delta,
+      pulledQty:pulls.totalQty,
+      pulledQtyToday:pulls.totalQtyToday,
+      pulledQtyPrev:pulls.totalQtyPrev,
+      pullIds:pulls.pullIds.sort(),
+      pullDetails,
+      locDetails,
+      unexplainedQty,
+      unexplainedValue:unitPrice!==null?unexplainedQty*unitPrice:null,
+      deltaValue:unitPrice!==null?delta*unitPrice:null,
+      status, unitPrice
+    });
+  }
+
+  // Sort: unexplained → partial → accounted → increase; within each by abs unexplained value desc
+  const statusOrder={unexplained:0,partial:1,accounted:2,increase:3};
+  records.sort((a,b)=>{
+    const so=statusOrder[a.status]-statusOrder[b.status];
+    if(so!==0) return so;
+    const av=a.unexplainedValue!==null?a.unexplainedValue:Math.abs(a.deltaValue||0)||Math.abs(a.delta);
+    const bv=b.unexplainedValue!==null?b.unexplainedValue:Math.abs(b.deltaValue||0)||Math.abs(b.delta);
+    return bv-av;
+  });
+
+  return {records,curDate,prevDate};
+}
+
+function varBuildRow(r){
+  const badgeLabel={unexplained:'Unexplained',partial:'Partial',accounted:'Accounted',increase:'Increase'}[r.status]||r.status;
+  const negColor='color:var(--bad);font-weight:700;';
+  const posColor='color:var(--good);font-weight:700;';
+  const deltaStyle=r.delta<0?negColor:posColor;
+  const normAttr=(r.norm||'').replace(/"/g,'&quot;');
+
+  if(r.status==='increase'){
+    return `<tr class="var-clickable-row" data-norm="${normAttr}" onclick="varShowDetail(this.dataset.norm)">
+      <td style="font-family:monospace;font-size:12px;">${r.sku||'&mdash;'}<span class="var-row-hint" title="Click for location details">&#9432;</span></td>
+      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(r.desc||'').replace(/"/g,'&quot;')}">${r.desc||'&mdash;'}</td>
+      <td class="r">${iohFmtQty(r.prevQty)}</td>
+      <td class="r">${iohFmtQty(r.curQty)}</td>
+      <td class="r" style="${deltaStyle}">${iohFmtDeltaQty(r.delta)}</td>
+      <td class="r" style="${deltaStyle}">${r.deltaValue!==null?iohFmtDeltaVal(r.deltaValue):'&mdash;'}</td>
+      <td><span class="var-badge ${r.status}">${badgeLabel}</span></td>
+    </tr>`;
+  }
+
+  // Decrease row
+  const pullHtml=r.pullIds.length
+    ? r.pullIds.map(p=>`<span class="var-pull-tag">${p}</span>`).join('')+
+      (r.pulledQty?`<div style="font-size:11px;color:var(--text-faint);margin-top:3px;">${iohFmtQty(r.pulledQty)}&nbsp;units pulled</div>`:'')
+    : '<span style="color:var(--text-faint);font-size:12px;">None found for this date</span>';
+  const unexStyle=r.unexplainedQty>0?negColor:'color:var(--text-faint);';
+
+  return `<tr class="var-clickable-row" data-norm="${normAttr}" onclick="varShowDetail(this.dataset.norm)">
+    <td style="font-family:monospace;font-size:12px;">${r.sku||'&mdash;'}<span class="var-row-hint" title="Click for location &amp; pull details">&#9432;</span></td>
+    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(r.desc||'').replace(/"/g,'&quot;')}">${r.desc||'&mdash;'}</td>
+    <td class="r">${iohFmtQty(r.prevQty)}</td>
+    <td class="r">${iohFmtQty(r.curQty)}</td>
+    <td class="r" style="${deltaStyle}">${iohFmtDeltaQty(r.delta)}</td>
+    <td>${pullHtml}</td>
+    <td class="r" style="${unexStyle}">${r.unexplainedQty>0?iohFmtQty(r.unexplainedQty):'&mdash;'}</td>
+    <td class="r" style="${unexStyle}">${r.unexplainedValue!==null&&r.unexplainedQty>0?iohFmtCurrency(r.unexplainedValue):'&mdash;'}</td>
+    <td><span class="var-badge ${r.status}">${badgeLabel}</span></td>
+  </tr>`;
+}
+
+function iohVarRender(){
+  const noSnaps=document.getElementById('varNoSnaps');
+  const topBar=document.getElementById('varTopBar');
+  const kpiRow=document.getElementById('varKpiRow');
+  const keys=Object.keys(iohAllSnapshots).sort();
+
+  if(keys.length<2){
+    if(noSnaps) noSnaps.style.display='';
+    if(topBar) topBar.style.display='none';
+    if(kpiRow) kpiRow.style.display='none';
+    ['alert','accounted','increase'].forEach(s=>{
+      // hide each section's parent div
+      const h=document.getElementById('varBody'+s.charAt(0).toUpperCase()+s.slice(1));
+      const sec=h&&h.parentElement;
+      if(sec) sec.style.display='none';
+    });
+    // special message if exactly 1 snapshot exists
+    if(keys.length===1){
+      const snap=iohAllSnapshots[keys[0]];
+      const dbt=document.getElementById('varDateBarText');
+      if(dbt) dbt.innerHTML='Only 1 snapshot on file (<b>'+(snap.date||keys[0])+'</b>)&nbsp;&mdash;&nbsp;upload a second day to enable comparison.';
+      if(topBar) topBar.style.display='';
+      if(noSnaps) noSnaps.style.display='none';
+    }
+    return;
+  }
+
+  // Restore section visibility if previously hidden
+  ['alert','accounted','increase'].forEach(s=>{
+    const h=document.getElementById('varBody'+s.charAt(0).toUpperCase()+s.slice(1));
+    const sec=h&&h.parentElement;
+    if(sec) sec.style.display='';
+  });
+  if(noSnaps) noSnaps.style.display='none';
+  if(topBar)  topBar.style.display='';
+
+  const result=iohVarBuildRecords();
+  if(!result) return;
+  const {records,curDate,prevDate}=result;
+  varCurrentRecords=records; // expose for drill-down modal
+
+  // Date bar
+  const dbt=document.getElementById('varDateBarText');
+  if(dbt) dbt.innerHTML='Comparing&nbsp;<b>'+prevDate+'</b>&nbsp;&#8594;&nbsp;<b>'+curDate+'</b>';
+
+  // Partition records
+  const alertRecs    =records.filter(r=>r.status==='unexplained'||r.status==='partial');
+  const accountedRecs=records.filter(r=>r.status==='accounted');
+  const increaseRecs =records.filter(r=>r.status==='increase');
+
+  // KPI cards
+  const totalUnexQty=alertRecs.reduce((s,r)=>s+r.unexplainedQty,0);
+  const totalUnexVal=alertRecs.filter(r=>r.unexplainedValue!==null).reduce((s,r)=>s+r.unexplainedValue,0);
+  const hasVal=alertRecs.some(r=>r.unexplainedValue!==null);
+  if(kpiRow) kpiRow.innerHTML=`
+    <div class="var-kpi-card ${alertRecs.length?'urgent':''}">
+      <div class="vkn ${alertRecs.length?'red':'green'}">${alertRecs.length}</div>
+      <div class="vkl">Requires Attention</div>
+      <div class="vks">SKUs with unexplained loss</div>
+    </div>
+    <div class="var-kpi-card">
+      <div class="vkn ${totalUnexQty?'red':'green'}">${iohFmtQty(totalUnexQty)}</div>
+      <div class="vkl">Unexplained Units</div>
+      <div class="vks">${hasVal?iohFmtCurrency(totalUnexVal)+' in value':''}</div>
+    </div>
+    <div class="var-kpi-card">
+      <div class="vkn green">${accountedRecs.length}</div>
+      <div class="vkl">Fully Accounted</div>
+      <div class="vks">Decreases matched to pulls</div>
+    </div>
+    <div class="var-kpi-card">
+      <div class="vkn blue">${increaseRecs.length}</div>
+      <div class="vkl">Increases</div>
+      <div class="vks">SKUs with more units today</div>
+    </div>`;
+
+  // Section counts
+  ['alert','accounted','increase'].forEach((sec,i)=>{
+    const counts=[alertRecs.length,accountedRecs.length,increaseRecs.length];
+    const el=document.getElementById('var'+sec.charAt(0).toUpperCase()+sec.slice(1)+'Count');
+    if(el) el.textContent=counts[i]+' SKU'+(counts[i]!==1?'s':'');
+  });
+
+  // Helper: render a section's table
+  function fillSection(tbodyId,emptyId,tableId,rows){
+    const tb=document.getElementById(tbodyId);
+    const em=document.getElementById(emptyId);
+    const tbl=document.getElementById(tableId);
+    if(!tb) return;
+    tb.innerHTML=rows.map(varBuildRow).join('');
+    if(em)  em.style.display=rows.length?'none':'';
+    if(tbl) tbl.style.display=rows.length?'':'none';
+  }
+
+  fillSection('varTbodyAlert',    'varEmptyAlert',    'varTableAlert',    alertRecs);
+  fillSection('varTbodyAccounted','varEmptyAccounted','varTableAccounted',accountedRecs);
+  fillSection('varTbodyIncrease', 'varEmptyIncrease', 'varTableIncrease', increaseRecs);
+}
+
+/* ---- Variance drill-down modal ---- */
+let varCurrentRecords=[];
+
+function varShowDetail(norm){
+  const r=varCurrentRecords.find(x=>x.norm===norm);
+  if(!r) return;
+
+  // Header
+  document.getElementById('varMsku').textContent=r.sku||norm;
+  document.getElementById('varMdesc').textContent=r.desc||'';
+
+  // Status badge
+  const badgeEl=document.getElementById('varMbadge');
+  if(badgeEl){
+    const lbl={unexplained:'Unexplained',partial:'Partial',accounted:'Accounted',increase:'Increase'}[r.status]||r.status;
+    badgeEl.innerHTML=`<span class="var-badge ${r.status}">${lbl}</span>`;
+  }
+
+  // Summary stat tiles
+  const stats=document.getElementById('varMstats');
+  if(stats){
+    const negC=r.delta<0?'color:var(--bad);':'color:var(--good);';
+    // Compute positive / negative bin-level totals from locDetails
+    const locIncrease=(r.locDetails||[]).filter(l=>l.delta>0).reduce((s,l)=>s+l.delta,0);
+    const locDecrease=(r.locDetails||[]).filter(l=>l.delta<0).reduce((s,l)=>s+Math.abs(l.delta),0);
+    const totalUnexValue=r.unitPrice!==null&&r.unexplainedQty>0?r.unexplainedQty*r.unitPrice:null;
+    stats.innerHTML=`
+      <div class="var-modal-stat">
+        <div class="msn">${iohFmtQty(r.prevQty)}</div>
+        <div class="msl">Yesterday</div>
+      </div>
+      <div class="var-modal-stat">
+        <div class="msn">${iohFmtQty(r.curQty)}</div>
+        <div class="msl">Today</div>
+      </div>
+      ${locDecrease>0?`<div class="var-modal-stat">
+        <div class="msn" style="color:var(--bad);">-${iohFmtQty(locDecrease)}</div>
+        <div class="msl">Qty Decreased</div>
+      </div>`:''}
+      ${locIncrease>0?`<div class="var-modal-stat">
+        <div class="msn" style="color:var(--good);">+${iohFmtQty(locIncrease)}</div>
+        <div class="msl">Qty Increased</div>
+      </div>`:''}
+      <div class="var-modal-stat">
+        <div class="msn" style="${negC}">${iohFmtDeltaQty(r.delta)}</div>
+        <div class="msl">Net Change</div>
+      </div>
+      ${r.delta<0&&r.pulledQtyToday>0?`<div class="var-modal-stat">
+        <div class="msn">${iohFmtQty(r.pulledQtyToday)}</div>
+        <div class="msl">Pulled Today</div>
+      </div>`:''}
+      ${r.delta<0&&r.pulledQtyPrev>0?`<div class="var-modal-stat">
+        <div class="msn">${iohFmtQty(r.pulledQtyPrev)}</div>
+        <div class="msl">Pulled Yesterday</div>
+      </div>`:''}
+      ${r.unexplainedQty>0?`<div class="var-modal-stat" style="border-color:var(--bad);">
+        <div class="msn" style="color:var(--bad);">${iohFmtQty(r.unexplainedQty)}</div>
+        <div class="msl">Unexplained</div>
+      </div>`:''}
+      ${totalUnexValue!==null?`<div class="var-modal-stat" style="border-color:var(--bad);">
+        <div class="msn" style="color:var(--bad);">${iohFmtCurrency(totalUnexValue)}</div>
+        <div class="msl">Unexplained Value</div>
+      </div>`:''}
+      ${r.unitPrice!==null?`<div class="var-modal-stat">
+        <div class="msn">${iohFmtCurrency(r.unitPrice)}</div>
+        <div class="msl">Unit Price</div>
+      </div>`:''}`;
+  }
+
+  // Location breakdown table
+  const locsEl=document.getElementById('varMlocs');
+  if(locsEl){
+    if(r.locDetails&&r.locDetails.length){
+      const rows=r.locDetails.map(l=>{
+        const rowClass=l.delta<0?'loc-changed':l.delta>0?'loc-increased':'';
+        const dStyle=l.delta<0?'color:var(--bad);font-weight:700;':l.delta>0?'color:var(--good);font-weight:700;':'color:var(--text-faint);';
+        return `<tr class="${rowClass}">
+          <td style="font-family:monospace;font-size:12px;">${l.loc||'(no bin)'}</td>
+          <td style="font-size:12px;">${l.stockType||'&mdash;'}</td>
+          <td class="r">${iohFmtQty(l.prevQty)}</td>
+          <td class="r">${iohFmtQty(l.curQty)}</td>
+          <td class="r" style="${dStyle}">${l.delta!==0?iohFmtDeltaQty(l.delta):'&mdash;'}</td>
+        </tr>`;
+      }).join('');
+      locsEl.innerHTML=`<table class="var-dtable">
+        <thead><tr>
+          <th>Storage Bin</th><th>Stock Type</th>
+          <th class="r">Yesterday</th><th class="r">Today</th><th class="r">Change</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+    } else {
+      locsEl.innerHTML='<div style="color:var(--text-faint);font-size:13px;padding:10px 0;">No bin-level data available for this SKU.</div>';
+    }
+  }
+
+  // Pull activity section (hide for pure increases)
+  const pullsSection=document.getElementById('varMpullsSection');
+  const pullsEl=document.getElementById('varMpulls');
+  if(r.status==='increase'){
+    if(pullsSection) pullsSection.style.display='none';
+  } else {
+    if(pullsSection) pullsSection.style.display='';
+    if(pullsEl){
+      const allPulls=r.pullDetails||[];
+      const pullsToday=allPulls.filter(p=>p.pullDate===r.curDate);
+      const pullsYest =allPulls.filter(p=>p.pullDate===r.prevDate);
+      function buildPullTable(pulls){
+        const rows=pulls.map(p=>`<tr>
+          <td style="font-family:monospace;font-size:12px;">${p.pullId||'&mdash;'}</td>
+          <td style="font-family:monospace;font-size:12px;">${p.sourceBin||'&mdash;'}</td>
+          <td style="font-family:monospace;font-size:12px;">${p.destBin||'&mdash;'}</td>
+          <td class="r" style="font-weight:700;">${iohFmtQty(p.qty)}</td>
+          <td style="font-size:12px;">${p.confirmedAt||'&mdash;'}</td>
+          <td style="font-size:12px;">${p.confirmedBy||'&mdash;'}</td>
+        </tr>`).join('');
+        return `<table class="var-dtable">
+          <thead><tr>
+            <th>Pull ID</th><th>Source Bin</th><th>Dest Bin</th>
+            <th class="r">Qty Pulled</th><th>Confirmed At</th><th>Confirmed By</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+      }
+      if(!allPulls.length){
+        pullsEl.innerHTML=`<div style="color:var(--text-faint);font-size:13px;padding:10px 0;">No outbound pull activity found for this SKU between ${r.prevDate||'previous date'} and ${r.curDate||'current date'}.</div>`;
+      } else {
+        let html='';
+        if(pullsToday.length){
+          html+=`<div style="font-size:11px;font-weight:700;color:var(--text-dim);letter-spacing:0.3px;text-transform:uppercase;margin-bottom:6px;">Today &mdash; ${r.curDate||''}</div>${buildPullTable(pullsToday)}`;
+        }
+        if(pullsYest.length){
+          html+=`<div style="font-size:11px;font-weight:700;color:var(--text-dim);letter-spacing:0.3px;text-transform:uppercase;margin-top:14px;margin-bottom:6px;">Yesterday &mdash; ${r.prevDate||''}</div>${buildPullTable(pullsYest)}`;
+        }
+        pullsEl.innerHTML=html;
+      }
+    }
+  }
+
+  document.getElementById('varDetailModal').style.display='flex';
+  // Prevent body scroll while modal open
+  document.body.style.overflow='hidden';
+}
+
+function varCloseModal(){
+  const m=document.getElementById('varDetailModal');
+  if(m) m.style.display='none';
+  document.body.style.overflow='';
+}
+
 /* ---- Inventory sub-tab switching ---- */
 function showInvSubTab(tab){
   document.getElementById('invSubCycleCounts').style.display=tab==='cycle'?'':'none';
   document.getElementById('invSubStockStatus').style.display=tab==='stock'?'':'none';
+  document.getElementById('invSubVariance').style.display=tab==='variance'?'':'none';
   document.querySelectorAll('.inv-subnav-btn').forEach(b=>
     b.classList.toggle('active',b.dataset.subtab===tab));
   if(tab==='stock'){
     requestAnimationFrame(()=>{ if(iohTrendChart) iohTrendChart.resize(); });
+  }
+  if(tab==='variance'){
+    iohVarRender();
   }
 }
 

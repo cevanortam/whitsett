@@ -6667,7 +6667,7 @@ document.getElementById('iohFileInput').addEventListener('change', async functio
       const locCat   =iohCatLoc(rawLoc);
       if(!rawSku||!stockType) continue;
       const norm=iohNorm(rawSku);
-      const key=norm+'||'+stockType+'||'+locCat;
+      const key=norm+'||'+stockType+'||'+rawLoc;
       if(!agg[key]) agg[key]={sku:rawSku,skuNorm:norm,desc,stockType,loc:rawLoc,locCat,qty:0};
       agg[key].qty+=qty;
     }
@@ -6845,6 +6845,7 @@ function iohRenderTable(items){
       (i.sku||'').toLowerCase().includes(search)||
       (i.desc||'').toLowerCase().includes(search)||
       (i.stockType||'').toLowerCase().includes(search)||
+      (i.loc||'').toLowerCase().includes(search)||
       (IOH_LOC_MAP[i.locCat]||{}).label.toLowerCase().includes(search)
     );
   }
@@ -7085,6 +7086,7 @@ document.getElementById('iohExportBtn').addEventListener('click',()=>{
     Description: i.desc||'',
     'Stock Type': i.stockType,
     'Location Type': (IOH_LOC_MAP[i.locCat]||{label:i.locCat}).label,
+    'Storage Bin': i.loc||'',
     Quantity: i.qty,
     'Unit Price ($)': i.unitPrice??'',
     'Total Value ($)': i.totalValue??''

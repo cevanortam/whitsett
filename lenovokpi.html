@@ -1723,6 +1723,10 @@
             <div class="var-modal-sec-title">Outbound Pull Activity</div>
             <div id="varMpulls"></div>
           </div>
+          <div id="varMmovsSection">
+            <div class="var-modal-sec-title">Other Inventory Movements</div>
+            <div id="varMmovs"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -6752,8 +6756,23 @@ showSiteTab(currentSiteTab());
    Firebase nodes: /ioh_snapshots  /ioh_pricing
    All identifiers prefixed "ioh".
 ===================================================================== */
-const iohSnapshotsRef = db.ref('ioh_snapshots');
-const iohPricingRef   = db.ref('ioh_pricing');
+const iohSnapshotsRef  = db.ref('ioh_snapshots');
+const iohPricingRef    = db.ref('ioh_pricing');
+const iohMovementsRef  = db.ref('wh_movements');
+
+/* ---- Warehouse movements state ---- */
+let allMovements = []; // non-outbound, non-inbound warehouse tasks
+iohMovementsRef.on('value', snap => {
+  const val = snap.val() || {};
+  allMovements = Object.keys(val).map(k => {
+    const r = val[k];
+    return { ...r, _key:k,
+      confirmedAt: r.confirmedAt ? new Date(r.confirmedAt) : null };
+  });
+  // Refresh variance tab if currently visible
+  const vt = document.getElementById('invSubVariance');
+  if(vt && vt.style.display !== 'none' && typeof iohVarRender === 'function') iohVarRender();
+});
 
 /* ---- Location categories ---- */
 const IOH_LOC_CATS = [
@@ -7476,7 +7495,7 @@ function iohVarBuildRecords(){
   for(const r of lineItems){
     if(!r.product||!r.confirmedAt) continue;
     const pDate=r.confirmedAt instanceof Date
-      ? r.confirmedAt.toISOString().slice(0,10)
+      ? r.confirmedAt.toLocaleDateString('en-CA')  // en-CA gives YYYY-MM-DD in local time (not UTC)
       : String(r.confirmedAt).slice(0,10);
     // Include pulls confirmed on either snapshot date — catches evening/night-shift
     // picks that were confirmed after the prev snapshot but before midnight
@@ -7503,6 +7522,33 @@ function iohVarBuildRecords(){
         ?r.confirmedAt.toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true})
         :'',
       pullDate:pDate  // which day this pull was confirmed on
+    });
+  }
+
+  // Build other-movements totals AND details by SKU (curDate + prevDate window)
+  const movsBySku={};
+  const movItems=typeof allMovements!=='undefined'?allMovements:[];
+  for(const r of movItems){
+    if(!r.sku||!r.confirmedAt) continue;
+    const mDate=r.confirmedAt instanceof Date
+      ? r.confirmedAt.toLocaleDateString('en-CA')  // en-CA gives YYYY-MM-DD in local time (not UTC)
+      : String(r.confirmedAt).slice(0,10);
+    if(mDate!==curDate && mDate!==prevDate) continue;
+    const norm=r.skuNorm||iohNorm(r.sku);
+    if(!norm) continue;
+    if(!movsBySku[norm]) movsBySku[norm]={totalQty:0,movs:[]};
+    movsBySku[norm].totalQty+=r.qty||0;
+    movsBySku[norm].movs.push({
+      warehouseTask:r.warehouseTask||'',
+      movTypeCode:r.movTypeCode||'',
+      movTypeDesc:r.movTypeDesc||'',
+      sourceBin:r.sourceBin||'',
+      destBin:r.destBin||'',
+      qty:r.qty||0,
+      confirmedBy:r.confirmedBy||'',
+      confirmedAt:r.confirmedAt instanceof Date
+        ?r.confirmedAt.toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true}):'',
+      movDate:mDate
     });
   }
 
@@ -7554,6 +7600,10 @@ function iohVarBuildRecords(){
     // Sort individual pulls: largest qty first
     const pullDetails=(pulls.pulls||[]).slice().sort((a,b)=>(b.qty||0)-(a.qty||0));
 
+    // Other movements for this SKU in the date window
+    const movs=movsBySku[norm]||{totalQty:0,movs:[]};
+    const movDetails=movs.movs.slice().sort((a,b)=>(b.qty||0)-(a.qty||0));
+
     records.push({
       norm,sku,desc,curDate,prevDate,
       prevQty:prev.qty, curQty:cur.qty, delta,
@@ -7563,6 +7613,7 @@ function iohVarBuildRecords(){
       pullIds:pulls.pullIds.sort(),
       pullDetails,
       locDetails,
+      movDetails,
       unexplainedQty,
       unexplainedValue:unitPrice!==null?unexplainedQty*unitPrice:null,
       deltaValue:unitPrice!==null?delta*unitPrice:null,
@@ -7860,6 +7911,51 @@ function varShowDetail(norm){
     }
   }
 
+  // Other inventory movements section
+  const movsSection=document.getElementById('varMmovsSection');
+  const movsEl=document.getElementById('varMmovs');
+  if(movsSection && movsEl){
+    const allMovs=r.movDetails||[];
+    if(!allMovs.length){
+      movsSection.style.display='none';
+    } else {
+      movsSection.style.display='';
+      const movsToday=allMovs.filter(m=>m.movDate===r.curDate);
+      const movsYest =allMovs.filter(m=>m.movDate===r.prevDate);
+
+      function buildMovTable(movs){
+        const rows=movs.map(m=>{
+          const typeLabel=m.movTypeDesc||(m.movTypeCode||'&mdash;');
+          return `<tr>
+            <td style="font-family:monospace;font-size:12px;">${m.warehouseTask||'&mdash;'}</td>
+            <td style="font-size:12px;">${typeLabel}</td>
+            <td style="font-family:monospace;font-size:12px;">${m.sourceBin||'&mdash;'}</td>
+            <td style="font-family:monospace;font-size:12px;">${m.destBin||'&mdash;'}</td>
+            <td class="r" style="font-weight:700;">${iohFmtQty(m.qty)}</td>
+            <td style="font-size:12px;">${m.confirmedAt||'&mdash;'}</td>
+            <td style="font-size:12px;">${m.confirmedBy||'&mdash;'}</td>
+          </tr>`;
+        }).join('');
+        return `<table class="var-dtable">
+          <thead><tr>
+            <th>WH Task</th><th>Movement Type</th><th>Source Bin</th><th>Dest Bin</th>
+            <th class="r">Qty</th><th>Confirmed At</th><th>Confirmed By</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+      }
+
+      let html='';
+      if(movsToday.length){
+        html+=`<div style="font-size:11px;font-weight:700;color:var(--text-dim);letter-spacing:0.3px;text-transform:uppercase;margin-bottom:6px;">Today &mdash; ${r.curDate||''}</div>${buildMovTable(movsToday)}`;
+      }
+      if(movsYest.length){
+        html+=`<div style="font-size:11px;font-weight:700;color:var(--text-dim);letter-spacing:0.3px;text-transform:uppercase;margin-top:14px;margin-bottom:6px;">Yesterday &mdash; ${r.prevDate||''}</div>${buildMovTable(movsYest)}`;
+      }
+      movsEl.innerHTML=html;
+    }
+  }
+
   document.getElementById('varDetailModal').style.display='flex';
   // Prevent body scroll while modal open
   document.body.style.overflow='hidden';
@@ -7892,6 +7988,133 @@ window.addEventListener('hashchange', ()=>{
     requestAnimationFrame(()=>{ if(iohTrendChart) try{ iohTrendChart.resize(); }catch(e){} });
   }
 });
+
+/* =====================================================================
+   WAREHOUSE MOVEMENTS PARSER
+   Parses the same SAP export used by Outbound/Inbound tabs, capturing
+   rows that are neither outbound pulls nor inbound receipts. Stored in
+   Firebase /wh_movements, keyed by Warehouse Task for deduplication.
+
+   Column mapping (confirmed from SAP export):
+     movTypeCode : column E — "Activity"  (e.g. PICK, PTWY, TRAN, INTL)
+     movTypeDesc : column F — "Whse Process Category Desc"
+===================================================================== */
+const MV_COLUMN_HEADERS = {
+  warehouseTask: ['Warehouse Task'],
+  product:       ['Product'],
+  productDesc:   ['Product Short Description'],
+  targetQty:     ['Src Trgt Qty BUoM'],
+  actualQty:     ['Act. Qty Dest. BUoM'],
+  sourceBin:     ['Source Storage Bin'],
+  destBin:       ['Destination Bin'],
+  confirmDate:   ['Confirmation Date'],
+  confirmTime:   ['Confirmation Time'],
+  confirmedBy:   ['Confirmed By'],
+  pullId:        ['Pull header ID'],
+  activity:      ['Activity'],
+  whseProcessType:['Whse Process Type'],
+  movTypeDesc:   ['Whse Process Category Desc']
+};
+const MV_REQUIRED = ['warehouseTask','product'];
+
+function mvResolveColumns(headerRow){
+  const lookup={};
+  (headerRow||[]).forEach((h,i)=>{ const n=normalizeHeader(h); if(n&&!(n in lookup)) lookup[n]=i; });
+  const col={},missing=[];
+  for(const field of Object.keys(MV_COLUMN_HEADERS)){
+    const found=MV_COLUMN_HEADERS[field].map(normalizeHeader).find(c=>c in lookup);
+    if(found!==undefined) col[field]=lookup[found]; else missing.push(field);
+  }
+  return {col,missing};
+}
+
+async function mvParseSapExport(file){
+  const buf=await readFileAsArrayBuffer(file);
+  const wb=XLSX.read(buf,{type:'array',cellDates:true});
+  const sheet=wb.Sheets[wb.SheetNames[0]];
+  const rows=XLSX.utils.sheet_to_json(sheet,{header:1,defval:null,raw:true});
+  if(!rows.length) return null;
+
+  const {col:COL,missing}=mvResolveColumns(rows[0]);
+  const missingRequired=missing.filter(f=>MV_REQUIRED.includes(f));
+  if(missingRequired.length) return null; // Not an error — just skip
+
+  const IB_SKIP_TYPES=new Set([3040,1010,1012]);
+  const IB_SKIP_ACTS=new Set(['intl','ptwy']);
+
+  const updates={};
+  let imported=0;
+
+  for(let i=1;i<rows.length;i++){
+    const row=rows[i];
+    if(!row||!row.length) continue;
+
+    // Skip outbound rows (have a Pull ID)
+    if(COL.pullId!==undefined && row[COL.pullId]) continue;
+
+    // Skip inbound rows (Activity INTL/PTWY + relevant process type)
+    if(COL.activity!==undefined && COL.whseProcessType!==undefined){
+      const act=String(row[COL.activity]||'').trim().toLowerCase();
+      const ptype=Number(row[COL.whseProcessType])||0;
+      if(IB_SKIP_ACTS.has(act)&&IB_SKIP_TYPES.has(ptype)) continue;
+    }
+
+    const warehouseTask=row[COL.warehouseTask];
+    if(!warehouseTask) continue;
+
+    const sku=COL.product!==undefined?(row[COL.product]??null):null;
+    if(!sku) continue;
+
+    const targetQty=COL.targetQty!==undefined?(Number(row[COL.targetQty])||0):0;
+    const actualQty=COL.actualQty!==undefined?(Number(row[COL.actualQty])||0):0;
+    const qty=actualQty!==0?actualQty:targetQty;
+    if(qty===0) continue;
+
+    const confirmDate=COL.confirmDate!==undefined?row[COL.confirmDate]:null;
+    const confirmTime=COL.confirmTime!==undefined?row[COL.confirmTime]:null;
+    const confirmedAt=combineDateAndTime(confirmDate,confirmTime);
+
+    const record={
+      warehouseTask:String(warehouseTask).trim(),
+      sku:String(sku).trim(),
+      skuNorm:iohNorm(String(sku).trim()),
+      movTypeCode:COL.activity!==undefined?String(row[COL.activity]||'').trim()||null:null,
+      movTypeDesc:COL.movTypeDesc!==undefined?String(row[COL.movTypeDesc]||'').trim()||null:null,
+      qty,
+      sourceBin:COL.sourceBin!==undefined?(row[COL.sourceBin]??null):null,
+      destBin:COL.destBin!==undefined?(row[COL.destBin]??null):null,
+      confirmedAt:confirmedAt?confirmedAt.toISOString():null,
+      confirmedBy:COL.confirmedBy!==undefined?(row[COL.confirmedBy]??null):null,
+      uploadedAt:new Date().toISOString()
+    };
+
+    const key=sanitizeKey(record.warehouseTask);
+    updates[key]=record;
+    imported++;
+  }
+
+  return {updates,imported};
+}
+
+/* Extend the existing combinedUploadFromFile to also parse movements.
+   We monkey-patch it here because the function lives in the base HTML
+   (read-only source) and this module loads after it. */
+(function(){
+  const _orig=window.combinedUploadFromFile;
+  if(typeof _orig!=='function'){ console.warn('[IOH] combinedUploadFromFile not found — movements upload skipped'); return; }
+  window.combinedUploadFromFile=async function(file){
+    await _orig(file);
+    try{
+      const mv=await mvParseSapExport(file);
+      if(mv&&Object.keys(mv.updates).length){
+        await iohMovementsRef.update(mv.updates);
+        console.log('[IOH] Movements imported:',mv.imported,'records');
+      }
+    }catch(e){
+      console.warn('[IOH] Movements parse skipped:',e.message);
+    }
+  };
+})();
 
 
 /* =====================================================================

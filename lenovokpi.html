@@ -1767,6 +1767,22 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
+
+// Bandwidth saver: pause all Firebase listeners while the tab is hidden
+// (minimized, backgrounded, or in another browser tab). Firebase automatically
+// re-syncs any missed updates the moment the tab becomes visible again.
+// Guard: only act after a user is signed in — some browsers briefly toggle
+// visibility during page load, and calling goOffline() before auth completes
+// will hang any .once('value') calls the login flow depends on.
+document.addEventListener('visibilitychange', () => {
+  if (!firebase.auth().currentUser) return;
+  if (document.hidden) {
+    db.goOffline();
+  } else {
+    db.goOnline();
+  }
+});
+
 const lineItemsRef = db.ref('outbound_pulls');
 const uploadsRef = db.ref('outbound_pull_uploads');
 const slaOverridesRef = db.ref('outbound_sla_overrides');

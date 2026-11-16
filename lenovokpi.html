@@ -2706,17 +2706,46 @@ const LABEL_COLOR = '#e7eef7';
     return dataUrl;
   }
 
+  function snapshotCanvas(canvas){
+    try{
+      if(!canvas.width || !canvas.height) return null;
+      const bg = getComputedStyle(document.documentElement).getPropertyValue('--card').trim() || '#122A47';
+      const out = document.createElement('canvas');
+      out.width  = canvas.width;
+      out.height = canvas.height;
+      const ctx = out.getContext('2d');
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, out.width, out.height);
+      ctx.drawImage(canvas, 0, 0);
+      return out.toDataURL('image/png');
+    }catch(e){ return null; }
+  }
+
   function openModalForCard(card){
     const canvas = card.querySelector('canvas');
     if(!canvas) return;
-    const chart = (typeof Chart !== 'undefined' && Chart.getChart) ? Chart.getChart(canvas) : null;
-    if(!chart) return; // no data rendered yet on this chart
     currentTitle = card.querySelector('h3')?.textContent?.trim() || 'chart';
     modalTitle.textContent = currentTitle;
     modalImg.alt = currentTitle;
-    modalImg.src = exportChartPNG(chart);
+    modalImg.src = '';
     setStatus('');
-    overlay.classList.add('open');
+    overlay.classList.add('open'); // open immediately; image is filled below
+
+    const chart = (typeof Chart !== 'undefined' && Chart.getChart) ? Chart.getChart(canvas) : null;
+    if(chart){
+      try{
+        modalImg.src = exportChartPNG(chart);
+        setStatus('');
+      }catch(err){
+        const snap = snapshotCanvas(canvas);
+        if(snap){ modalImg.src = snap; setStatus(''); }
+        else { setStatus('Could not render chart image — try again after data loads.'); }
+      }
+    }else{
+      const snap = snapshotCanvas(canvas);
+      if(snap){ modalImg.src = snap; setStatus(''); }
+      else { setStatus('No chart data loaded yet — upload data first.'); }
+    }
   }
 
   document.addEventListener('click', (e)=>{
@@ -2728,6 +2757,7 @@ const LABEL_COLOR = '#e7eef7';
   closeBtn.addEventListener('click', closeModal);
 
   downloadBtn.addEventListener('click', ()=>{
+    if(!modalImg.src || modalImg.src === window.location.href){ setStatus('No image to download yet.'); return; }
     const a = document.createElement('a');
     a.href = modalImg.src;
     a.download = currentTitle.replace(/[^\w\-]+/g,'_').replace(/^_+|_+$/g,'') + '.png';
@@ -2736,6 +2766,7 @@ const LABEL_COLOR = '#e7eef7';
   });
 
   copyBtn.addEventListener('click', async ()=>{
+    if(!modalImg.src || modalImg.src === window.location.href){ setStatus('No image to copy yet.'); return; }
     try{
       if(!navigator.clipboard || !window.ClipboardItem) throw new Error('unsupported');
       const res = await fetch(modalImg.src);

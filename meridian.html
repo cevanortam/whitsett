@@ -565,9 +565,24 @@
     display:flex;flex-direction:column;
   }
   .lt-toprow{display:flex;justify-content:space-between;align-items:baseline;font-size:8.5pt;color:#333;margin-bottom:5px;}
+  .lt-titlerow{
+    display:flex;justify-content:space-between;align-items:flex-end;gap:10px;
+    border-bottom:2.4pt solid #0b0b0b;padding-bottom:6px;margin-bottom:9px;
+  }
   .lt-title{
     font-family:var(--sans);font-weight:700;font-size:14.5pt;letter-spacing:0.3px;
-    text-transform:uppercase;border-bottom:2.4pt solid #0b0b0b;padding-bottom:6px;margin-bottom:9px;
+    text-transform:uppercase;white-space:nowrap;
+  }
+  /* Zone color name (from the Zone map upload), top right of the label */
+  .lt-zone{
+    flex:1 1 auto;min-width:0;max-width:52%;
+    border:1.8pt solid #0b0b0b;border-radius:2px;padding:1px 8px;
+    display:flex;align-items:baseline;justify-content:center;gap:6px;overflow:hidden;
+  }
+  .lt-zone-k{font-size:6.5pt;letter-spacing:0.8px;font-weight:700;text-transform:uppercase;color:#444;flex:none;}
+  .lt-zone-v{
+    font-family:var(--sans);font-size:15pt;font-weight:800;letter-spacing:1px;line-height:1.15;
+    text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   }
   .lt-barcode-box{
     border:1.4pt solid #0b0b0b;border-radius:2px;padding:7px 9px 8px;margin-bottom:8px;
@@ -948,6 +963,11 @@
       <span id="mspnUploadTileText">Upload MSPN map</span>
     </button>
     <input type="file" id="mspnFileInput" accept=".xlsx,.xls" style="display:none;">
+    <button class="mspn-upload-tile" id="zoneUploadTile" type="button" title="Upload the part → color zone mapping (.xlsx). Prints the zone color name in the top right of each label.">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 15V3m0 0L7 8m5-5l5 5"/><path d="M3 15v3a3 3 0 003 3h12a3 3 0 003-3v-3"/></svg>
+      <span id="zoneUploadTileText">Upload Zone map</span>
+    </button>
+    <input type="file" id="zoneFileInput" accept=".xlsx,.xls,.csv" style="display:none;">
     <span class="pill" id="dataSourcePillPT">No data loaded</span>
   </div>
 </div>
@@ -1437,7 +1457,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   function friendlyName(key){
     var names = {
       "ds3_odoi_v1": "outbound lines", "ds3_meta_v1": "outbound file info",
-      "pickTicketStation:mspnMap": "parts mapping", "pickTicketStation:rows": "pick-ticket list",
+      "pickTicketStation:mspnMap": "parts mapping", "pickTicketStation:zoneMap": "zone mapping",
+      "pickTicketStation:rows": "pick-ticket list",
       "pickTicketStation:printedRegistry": "printed-ticket log", "ds3_plan_v1": "slotting plan",
       "ds3_boms_v1": "BOM groups", "ds3_settings_v1": "putaway settings"
     };
@@ -2909,6 +2930,17 @@ document.addEventListener('input', e=>{
           }
         }catch(e){}
       }
+      if(data[LS_ZONE_KEY] != null){
+        try{
+          const remoteZone = JSON.parse(data[LS_ZONE_KEY]);
+          if(remoteZone && typeof remoteZone === "object"){
+            zoneMap = remoteZone;
+            localStorage.setItem(LS_ZONE_KEY, data[LS_ZONE_KEY]);
+            if(typeof refreshZoneTile === "function") refreshZoneTile();
+            changed = true;
+          }
+        }catch(e){}
+      }
       if(data[LS_ROWS_KEY] != null && !rows.length){
         try{
           const remoteRows = JSON.parse(data[LS_ROWS_KEY]).map(hydrateRow);
@@ -3187,6 +3219,129 @@ document.addEventListener('input', e=>{
           mspnUploadTile.title = "Upload the Lenovo → Microsoft part number mapping (.xlsx). Adds the Microsoft part number barcode to printed labels.";
           refreshMspnTile();
         }, 4000);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  /* ============== Part → color zone mapping ==============
+     Second upload tile next to the MSPN map. The client color-codes parts
+     into zones; the workbook has a part identifier column (UPC, SKU or
+     part number — any or all of them) and the zone it belongs to. Every
+     identifier column on a row is indexed, so a label matches whichever
+     one the pick ticket carries. If the sheet has a separate Color column
+     that is printed; otherwise the Zone value itself is printed (so a Zone
+     column holding BLUE / GREEN / … prints as-is). Persists to localStorage
+     and the Sheets backend the same way as the MSPN map. */
+  const LS_ZONE_KEY = "pickTicketStation:zoneMap";
+  const ZONE_ID_ALIASES = [
+    "upc","upccode","upcnumber","sku","skunumber","skuno","part","partnumber","partnbr","partno","pn",
+    "item","itemnumber","itemno","material","materialnumber","product",
+    "lenovopartnbr","lenovopartnumber","lenovopn","ppn",
+    "mspn","microsoftpartnbr","microsoftpartnumber","microsoftpn"
+  ];
+  const ZONE_COLOR_ALIASES = ["color","colour","zonecolor","zonecolour","colorzone","colourzone"];
+  const ZONE_ZONE_ALIASES = ["zone","pickzone","zonename","zonenumber"];
+
+  function zoneHeaderKey(h){ return String(h==null?"":h).toLowerCase().replace(/[^a-z0-9]/g,""); }
+
+  function loadZoneMap(){
+    try{
+      const raw = localStorage.getItem(LS_ZONE_KEY);
+      return raw ? JSON.parse(raw) : {};
+    }catch(e){ return {}; }
+  }
+  function saveZoneMap(){
+    let serialized;
+    try{ serialized = JSON.stringify(zoneMap); }catch(e){ return; }
+    try{ localStorage.setItem(LS_ZONE_KEY, serialized); }
+    catch(e){ /* storage unavailable — continue without local persistence */ }
+    if(window.MeridianSync) window.MeridianSync.save(LS_ZONE_KEY, serialized);
+  }
+  /* Looks up by the label's part number first, then by its Microsoft part
+     number (in case the zone sheet was built from MSPNs). */
+  function lookupZone(sku){
+    const key = normalizePN(sku);
+    if(!key) return "";
+    if(zoneMap[key]) return zoneMap[key];
+    const ms = normalizePN(lookupMSPN(sku));
+    return ms && zoneMap[ms] ? zoneMap[ms] : "";
+  }
+
+  let zoneMap = loadZoneMap();
+
+  const zoneUploadTile = document.getElementById("zoneUploadTile");
+  const zoneUploadTileText = document.getElementById("zoneUploadTileText");
+  const zoneFileInput = document.getElementById("zoneFileInput");
+  const ZONE_TILE_TITLE = "Upload the part → color zone mapping (.xlsx). Prints the zone color name in the top right of each label.";
+
+  function refreshZoneTile(){
+    const n = Object.keys(zoneMap).length;
+    zoneUploadTile.classList.remove("ok","warn");
+    if(n>0){
+      const colors = Array.from(new Set(Object.values(zoneMap))).sort();
+      zoneUploadTileText.textContent = n.toLocaleString() + " P/N zoned";
+      zoneUploadTile.title = ZONE_TILE_TITLE + "\nZones loaded: " + colors.join(", ");
+      zoneUploadTile.classList.add("ok");
+    }else{
+      zoneUploadTileText.textContent = "Upload Zone map";
+      zoneUploadTile.title = ZONE_TILE_TITLE;
+    }
+  }
+  refreshZoneTile();
+
+  zoneUploadTile.addEventListener("click", ()=>zoneFileInput.click());
+  zoneFileInput.addEventListener("change", e=>{
+    if(e.target.files.length) handleZoneFile(e.target.files[0]);
+  });
+
+  function handleZoneFile(file){
+    const reader = new FileReader();
+    reader.onload = function(e){
+      try{
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, {type:"array"});
+        let map = {};
+        for(const sheetName of wb.SheetNames){
+          const ws = wb.Sheets[sheetName];
+          const json = XLSX.utils.sheet_to_json(ws, {header:1, defval:""});
+          if(!json.length) continue;
+          // Header may not be on row 1 (title rows above it) — check the first 10 rows.
+          let hdrRow = -1, idIdxs = [], valIdx = -1;
+          for(let h=0; h<Math.min(10, json.length); h++){
+            const headers = (json[h]||[]).map(zoneHeaderKey);
+            const ids = [];
+            headers.forEach((k,i)=>{ if(ZONE_ID_ALIASES.includes(k)) ids.push(i); });
+            let v = headers.findIndex(k=>ZONE_COLOR_ALIASES.includes(k));
+            if(v === -1) v = headers.findIndex(k=>ZONE_ZONE_ALIASES.includes(k));
+            if(ids.length && v !== -1){ hdrRow = h; idIdxs = ids; valIdx = v; break; }
+          }
+          if(hdrRow === -1) continue;
+          for(let i=hdrRow+1;i<json.length;i++){
+            const line = json[i];
+            if(!line || !line.length) continue;
+            const zone = String(line[valIdx]==null?"":line[valIdx]).trim().toUpperCase();
+            if(!zone) continue;
+            idIdxs.forEach(idx=>{
+              const id = normalizePN(line[idx]);
+              if(id) map[id] = zone;
+            });
+          }
+          if(Object.keys(map).length) break; // first sheet with a usable pair wins
+        }
+        if(!Object.keys(map).length) throw new Error("No sheet had a recognizable UPC/SKU/Part column and a Zone or Color column.");
+        zoneMap = map;
+        saveZoneMap();
+        refreshZoneTile();
+        zoneFileInput.value = "";
+        render();
+      }catch(err){
+        zoneUploadTile.classList.remove("ok");
+        zoneUploadTile.classList.add("warn");
+        zoneUploadTileText.textContent = "Upload failed";
+        zoneUploadTile.title = "Zone map upload failed: " + err.message;
+        zoneFileInput.value = "";
+        setTimeout(refreshZoneTile, 4000);
       }
     };
     reader.readAsArrayBuffer(file);
@@ -3543,13 +3698,17 @@ document.addEventListener('input', e=>{
   function labelHTML(r, uid){
     const created = r.createdOn ? fmtDate(r.createdOn) : "—";
     const time = r.createdAt ? fmtTime(r.createdAt) : "";
+    const zone = lookupZone(r.sku);
     return `
     <div class="label-template">
       <div class="lt-toprow">
         <span>${esc(created)} ${esc(time)}</span>
         <span>PAGE 1 OF 1</span>
       </div>
-      <div class="lt-title">Pick Task Label</div>
+      <div class="lt-titlerow">
+        <div class="lt-title">Pick Task Label</div>
+        ${zone ? `<div class="lt-zone"><span class="lt-zone-k">Zone</span><span class="lt-zone-v">${esc(zone)}</span></div>` : ""}
+      </div>
 
       <div class="lt-barcode-box">
         <div class="lt-eyebrow">Warehouse Order</div>
